@@ -95,11 +95,11 @@ tasks.register("allDependencies") {
     group = "Help"
     description = "Displays all dependencies declared in all projects."
 
-    val dependenciesTasks = getTasksByName("dependencies", /* recursive = */ true).sorted()
+    val dependenciesTasks = getTasksByName("dependencies", /* recursive = */ true)
     dependsOn(dependenciesTasks)
 
     // Ensure deterministic output by requiring to run tasks after each other in always the same order.
-    dependenciesTasks.zipWithNext().forEach { (a, b) ->
+    dependenciesTasks.sorted().zipWithNext().forEach { (a, b) ->
         b.mustRunAfter(a)
     }
 }
@@ -218,4 +218,15 @@ val checkGitAttributes by tasks.registering {
 
         if (hasErrors) throw GradleException("There were stale '.gitattribute' entries.")
     }
+}
+
+tasks.register<GeneratePluginDocsTask>("generatePluginDocs") {
+    val kspKotlinTasks = getTasksByName("kspKotlin", /* recursive = */ true)
+    val outputFiles = kspKotlinTasks.flatMap { it.outputs.files }
+    inputFiles = files(outputFiles).asFileTree.matching { include("**/META-INF/plugin/*.json") }
+
+    // TODO: This explicit dependency should not be necessary if tasks were following the best practice described at
+    //       https://docs.gradle.org/current/samples/sample_cross_project_output_sharing.html. However, this requires
+    //       larger refactorings.
+    dependsOn(kspKotlinTasks)
 }

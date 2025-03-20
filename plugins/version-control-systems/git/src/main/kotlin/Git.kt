@@ -80,8 +80,6 @@ object GitCommand : CommandLineTool {
             @Suppress("UnsafeCallOnNullableType")
             match.groups["version"]!!.value
         }.orEmpty()
-
-    override fun displayName(): String = "Git"
 }
 
 /**
@@ -99,7 +97,7 @@ object GitCommand : CommandLineTool {
     factory = VersionControlSystemFactory::class
 )
 class Git(
-    override val descriptor: PluginDescriptor,
+    override val descriptor: PluginDescriptor = GitFactory.descriptor,
     private val config: GitConfig
 ) : VersionControlSystem() {
     companion object {

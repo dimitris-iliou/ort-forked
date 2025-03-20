@@ -33,6 +33,7 @@ import WebAppScope from './WebAppScope';
 import WebAppScopeExclude from './WebAppScopeExclude';
 import WebAppTreeNode from './WebAppTreeNode';
 import WebAppVulnerability from './WebAppVulnerability';
+import WebAppVulnerabilityResolution from './WebAppVulnerabilityResolution';
 
 class WebAppOrtResult {
     #concludedLicensePackages = [];
@@ -74,6 +75,8 @@ class WebAppOrtResult {
     #metadata = {};
 
     #packages = [];
+
+    #packagesByKeyMap = new Map();
 
     #pathExcludes = [];
 
@@ -139,6 +142,7 @@ class WebAppOrtResult {
                 for (let i = 0, len = packages.length; i < len; i++) {
                     const webAppPackage = new WebAppPackage(packages[i], this);
                     this.#packages.push(webAppPackage);
+                    this.#packagesByKeyMap.set(webAppPackage.key, webAppPackage);
 
                     if (webAppPackage.isProject) {
                         this.#projects.push(webAppPackage);
@@ -325,7 +329,7 @@ class WebAppOrtResult {
                     || obj.vulnerabilitiesResolutions;
 
                 for (let i = 0, len = vulnerabilityResolutions.length; i < len; i++) {
-                    this.#vulnerabilityResolutions.push(new WebAppResolution(vulnerabilityResolutions[i]));
+                    this.#vulnerabilityResolutions.push(new WebAppVulnerabilityResolution(vulnerabilityResolutions[i]));
                 }
             }
 
@@ -427,6 +431,10 @@ class WebAppOrtResult {
         return this.#licenses;
     }
 
+    get licensesIndexesByNameMap() {
+        return this.#licensesIndexesByNameMap || null;
+    }
+
     get metadata() {
         return this.#metadata;
     }
@@ -507,8 +515,16 @@ class WebAppOrtResult {
         return this.#licenses[this.#licensesIndexesByNameMap.get(val)] || null;
     }
 
+    getLicenseIndexByName(val) {
+        return this.#licensesIndexesByNameMap.get(val) || null;
+    }
+
     getPackageByIndex(val) {
         return this.#packages[val] || null;
+    }
+
+    getPackageByKey(val) {
+        return this.#packagesByKeyMap.get(val) || [];
     }
 
     getPathByIndex(val) {
@@ -548,7 +564,7 @@ class WebAppOrtResult {
     }
 
     getTreeNodeByKey(val) {
-        return this.#treeNodesByKeyMap.get(val.toString()) || null;
+        return (val.toString() && this.#treeNodesByKeyMap.get(val.toString())) || null;
     }
 
     getTreeNodeParentKeysByIndex(val) {

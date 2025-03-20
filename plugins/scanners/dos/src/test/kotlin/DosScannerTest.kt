@@ -49,8 +49,8 @@ import org.ossreviewtoolkit.model.RepositoryProvenance
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
+import org.ossreviewtoolkit.plugins.api.Secret
 import org.ossreviewtoolkit.scanner.ScanContext
-import org.ossreviewtoolkit.scanner.ScannerWrapperConfig
 import org.ossreviewtoolkit.scanner.provenance.NestedProvenance
 
 class DosScannerTest : StringSpec({
@@ -65,16 +65,14 @@ class DosScannerTest : StringSpec({
     beforeTest {
         server.start()
 
-        val config = DosScannerConfig(
+        scanner = DosScannerFactory.create(
             url = "http://localhost:${server.port()}/api/",
-            token = "",
+            token = Secret(""),
             timeout = 60L,
             pollInterval = 5L,
             fetchConcluded = false,
             frontendUrl = "http://localhost:3000"
         )
-
-        scanner = DosScanner.Factory().create(config, ScannerWrapperConfig.EMPTY)
     }
 
     afterTest {

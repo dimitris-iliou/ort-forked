@@ -19,57 +19,67 @@
 
 package org.ossreviewtoolkit.plugins.packagemanagers.node.pnpm
 
-import io.kotest.core.spec.style.WordSpec
+import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.should
 
 import org.ossreviewtoolkit.analyzer.analyze
-import org.ossreviewtoolkit.analyzer.create
+import org.ossreviewtoolkit.analyzer.collateMultipleProjects
 import org.ossreviewtoolkit.analyzer.resolveSingleProject
+import org.ossreviewtoolkit.analyzer.withResolvedScopes
 import org.ossreviewtoolkit.model.toYaml
 import org.ossreviewtoolkit.utils.test.getAssetFile
 import org.ossreviewtoolkit.utils.test.matchExpectedResult
 import org.ossreviewtoolkit.utils.test.patchActualResult
 
-class PnpmFunTest : WordSpec({
-    "Pnpm" should {
-        "resolve dependencies for a project with lockfile correctly" {
-            val definitionFile = getAssetFile("projects/synthetic/pnpm/project-with-lockfile/package.json")
-            val expectedResultFile = getAssetFile("projects/synthetic/pnpm/project-with-lockfile-expected-output.yml")
+class PnpmFunTest : StringSpec({
+    "Resolve dependencies for a project with lockfile correctly" {
+        val definitionFile = getAssetFile("projects/synthetic/pnpm/project-with-lockfile/package.json")
+        val expectedResultFile = getAssetFile("projects/synthetic/pnpm/project-with-lockfile-expected-output.yml")
 
-            val result = create("PNPM").resolveSingleProject(definitionFile, resolveScopes = true)
+        val result = PnpmFactory.create().resolveSingleProject(definitionFile, resolveScopes = true)
 
-            result.toYaml() should matchExpectedResult(expectedResultFile, definitionFile)
-        }
+        result.toYaml() should matchExpectedResult(expectedResultFile, definitionFile)
+    }
 
-        "exclude scopes if configured" {
-            val definitionFile = getAssetFile("projects/synthetic/pnpm/project-with-lockfile/package.json")
-            val expectedResultFile = getAssetFile(
-                "projects/synthetic/pnpm/project-with-lockfile-skip-excluded-scopes-expected-output.yml"
-            )
+    "Exclude scopes if configured" {
+        val definitionFile = getAssetFile("projects/synthetic/pnpm/project-with-lockfile/package.json")
+        val expectedResultFile = getAssetFile(
+            "projects/synthetic/pnpm/project-with-lockfile-skip-excluded-scopes-expected-output.yml"
+        )
 
-            val result = create("PNPM", excludedScopes = setOf("devDependencies"))
-                .resolveSingleProject(definitionFile, resolveScopes = true)
+        val result = PnpmFactory.create()
+            .resolveSingleProject(definitionFile, excludedScopes = setOf("devDependencies"), resolveScopes = true)
 
-            patchActualResult(result.toYaml()) should matchExpectedResult(expectedResultFile, definitionFile)
-        }
+        patchActualResult(result.toYaml()) should matchExpectedResult(expectedResultFile, definitionFile)
+    }
 
-        "resolve dependencies for a project depending on Babel correctly" {
-            val definitionFile = getAssetFile("projects/synthetic/pnpm/babel/package.json")
-            val expectedResultFile = getAssetFile("projects/synthetic/pnpm/babel-expected-output.yml")
+    "Resolve dependencies for a project depending on Babel correctly" {
+        val definitionFile = getAssetFile("projects/synthetic/pnpm/babel/package.json")
+        val expectedResultFile = getAssetFile("projects/synthetic/pnpm/babel-expected-output.yml")
 
-            val result = create("PNPM").resolveSingleProject(definitionFile, resolveScopes = true)
+        val result = PnpmFactory.create().resolveSingleProject(definitionFile, resolveScopes = true)
 
-            result.toYaml() should matchExpectedResult(expectedResultFile, definitionFile)
-        }
+        result.toYaml() should matchExpectedResult(expectedResultFile, definitionFile)
+    }
 
-        "resolve dependencies correctly in a workspaces project" {
-            val definitionFile = getAssetFile("projects/synthetic/pnpm/workspaces/packages.json")
-            val expectedResultFile = getAssetFile("projects/synthetic/pnpm/workspaces-expected-output.yml")
+    "Resolve dependencies correctly in a workspaces project" {
+        val definitionFile = getAssetFile("projects/synthetic/pnpm/workspaces/packages.json")
+        val expectedResultFile = getAssetFile("projects/synthetic/pnpm/workspaces-expected-output.yml")
 
-            val result = analyze(definitionFile.parentFile, packageManagers = setOf(Pnpm.Factory()))
+        val result = analyze(definitionFile.parentFile, packageManagers = setOf(PnpmFactory()))
 
-            patchActualResult(result.toYaml(), patchStartAndEndTime = true) should
-                matchExpectedResult(expectedResultFile, definitionFile)
-        }
+        patchActualResult(result.toYaml(), patchStartAndEndTime = true) should
+            matchExpectedResult(expectedResultFile, definitionFile)
+    }
+
+    "Resolve dependencies correctly for a nested project" {
+        val definitionFile = getAssetFile("projects/synthetic/pnpm/nested-project/package.json")
+        val nestedDefinitionFile = definitionFile.parentFile.resolve("sub/package.json")
+        val expectedResultFile = getAssetFile("projects/synthetic/pnpm/nested-project-expected-output.yml")
+
+        val result = PnpmFactory.create()
+            .collateMultipleProjects(definitionFile, nestedDefinitionFile).withResolvedScopes()
+
+        result.toYaml() should matchExpectedResult(expectedResultFile, definitionFile)
     }
 })

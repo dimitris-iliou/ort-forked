@@ -25,7 +25,6 @@ import org.ossreviewtoolkit.analyzer.PackageManager
 import org.ossreviewtoolkit.downloader.VersionControlSystem
 import org.ossreviewtoolkit.model.Hash
 import org.ossreviewtoolkit.model.Identifier
-import org.ossreviewtoolkit.model.Issue
 import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.PackageReference
 import org.ossreviewtoolkit.model.Project
@@ -34,8 +33,10 @@ import org.ossreviewtoolkit.model.Scope
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
+import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.fromYaml
 import org.ossreviewtoolkit.model.utils.toPurl
+import org.ossreviewtoolkit.plugins.packagemanagers.nuget.NuGetFactory
 import org.ossreviewtoolkit.utils.ort.DeclaredLicenseProcessor
 
 private const val TYPE = "NuGet"
@@ -51,12 +52,12 @@ private fun List<NuGetInspector.Party>.toAuthors(): Set<String> =
     }
 
 internal fun NuGetInspector.Result.toOrtProject(
-    managerName: String,
+    projectType: String,
     analysisRoot: File,
     definitionFile: File
 ): Project {
     val id = Identifier(
-        type = managerName,
+        type = projectType,
         namespace = "",
         name = definitionFile.relativeTo(analysisRoot).invariantSeparatorsPath,
         version = ""
@@ -93,11 +94,19 @@ private fun NuGetInspector.PackageData.getIdentifierWithNamespace(): Identifier 
 private fun List<NuGetInspector.PackageData>.toPackageReferences(): Set<PackageReference> =
     mapTo(mutableSetOf()) { data ->
         val errors = data.errors.map {
-            Issue(source = TYPE, message = it.lineSequence().first(), severity = Severity.ERROR)
+            createAndLogIssue(
+                source = NuGetFactory.descriptor.displayName,
+                message = it.lineSequence().first(),
+                severity = Severity.ERROR
+            )
         }
 
         val warnings = data.warnings.map {
-            Issue(source = TYPE, message = it.lineSequence().first(), severity = Severity.WARNING)
+            createAndLogIssue(
+                source = NuGetFactory.descriptor.displayName,
+                message = it.lineSequence().first(),
+                severity = Severity.WARNING
+            )
         }
 
         PackageReference(

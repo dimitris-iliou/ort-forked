@@ -222,24 +222,19 @@ class DependencyGraphBuilder<D>(
     fun packages(): Set<Package> = resolvedPackages.values.toSet()
 
     /**
-     * Return a set of all the scope names known to this builder that start with the given [prefix]. If [unqualify] is
-     * *true*, remove this prefix from the returned scope names.
+     * Return a set of all the scope names known to this builder that start with the given [prefix].
      */
-    fun scopesFor(prefix: String, unqualify: Boolean = true): Set<String> {
+    fun scopesFor(prefix: String): Set<String> {
         val qualifiedScopes = scopeMapping.keys.filterTo(mutableSetOf()) { it.startsWith(prefix) }
-
-        return qualifiedScopes.takeUnless { unqualify }
-            ?: qualifiedScopes.mapTo(mutableSetOf()) { it.substring(prefix.length) }
+        return qualifiedScopes.mapTo(mutableSetOf()) { it.substring(prefix.length) }
     }
 
     /**
-     * Return a set of all the scope names known to this builder that are qualified with the given [projectId]. If
-     * [unqualify] is *true*, remove the project qualifier from the returned scope names. As dependency graphs are
-     * shared between multiple projects, scope names are given a project-specific prefix to make them unique. Using
-     * this function, the scope names of a specific project can be retrieved.
+     * Return a set of all the scope names known to this builder that are qualified with the given [projectId]. As
+     * dependency graphs are shared between multiple projects, scope names are given a project-specific prefix to make
+     * them unique. Using this function, the scope names of a specific project can be retrieved.
      */
-    fun scopesFor(projectId: Identifier, unqualify: Boolean = true): Set<String> =
-        scopesFor(DependencyGraph.qualifyScope(projectId, ""), unqualify)
+    fun scopesFor(projectId: Identifier): Set<String> = scopesFor(DependencyGraph.qualifyScope(projectId, ""))
 
     /**
      * Update the dependency graph by adding the given [dependency], which may be [transitive], for the scope with name
@@ -331,9 +326,9 @@ class DependencyGraphBuilder<D>(
         val dependencies = dependencyHandler.dependenciesFor(dependency)
         if (ref.dependencies.size != dependencies.size) return false
 
-        val dependencies1 = ref.dependencies.map { dependencyIds[it.pkg] }
+        val dependencies1 = ref.dependencies.mapTo(mutableSetOf()) { dependencyIds[it.pkg] }
         val dependencies2 = dependencies.associateBy { dependencyHandler.identifierFor(it) }
-        if (!dependencies2.keys.containsAll(dependencies1)) return false
+        if (dependencies1 != dependencies2.keys) return false
 
         return ref.dependencies.all { refDep ->
             dependencies2[dependencyIds[refDep.pkg]]?.let { dependencyTreeEquals(refDep, it) } == true

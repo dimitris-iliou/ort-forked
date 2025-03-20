@@ -23,15 +23,17 @@ import java.io.File
 
 import org.apache.logging.log4j.kotlin.logger
 
-import org.ossreviewtoolkit.analyzer.AbstractPackageManagerFactory
 import org.ossreviewtoolkit.analyzer.PackageManager
+import org.ossreviewtoolkit.analyzer.PackageManagerFactory
 import org.ossreviewtoolkit.downloader.VersionControlSystem
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.Scope
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
-import org.ossreviewtoolkit.model.config.RepositoryConfiguration
+import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.plugins.api.OrtPlugin
+import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.packagemanagers.python.utils.PythonInspector
 import org.ossreviewtoolkit.plugins.packagemanagers.python.utils.toOrtPackages
 import org.ossreviewtoolkit.plugins.packagemanagers.python.utils.toPackageReferences
@@ -53,12 +55,14 @@ internal object PoetryCommand : CommandLineTool {
 /**
  * [Poetry](https://python-poetry.org/) package manager for Python.
  */
+@OrtPlugin(
+    displayName = "Poetry",
+    description = "The Poetry package manager for Python.",
+    factory = PackageManagerFactory::class
+)
 class Poetry(
-    name: String,
-    analysisRoot: File,
-    analyzerConfig: AnalyzerConfiguration,
-    repoConfig: RepositoryConfiguration
-) : PackageManager(name, "Poetry", analysisRoot, analyzerConfig, repoConfig) {
+    override val descriptor: PluginDescriptor = PoetryFactory.descriptor, private val config: PipConfig
+) : PackageManager("Poetry") {
     companion object {
         /**
          * The name of the build system requirements and information file used by modern Python packages.
@@ -66,29 +70,28 @@ class Poetry(
         internal const val PYPROJECT_FILENAME = "pyproject.toml"
     }
 
-    class Factory : AbstractPackageManagerFactory<Poetry>("Poetry") {
-        override val globsForDefinitionFiles = listOf("poetry.lock")
+    // Usually, definition files should not contain (only) lockfiles, to also support the case when no lockfile is
+    // present. However, there currently is no way to distinguish a Poetry project from a vanilla Pip project without
+    // looking at the lockfile.
+    override val globsForDefinitionFiles = listOf("poetry.lock")
 
-        override fun create(
-            analysisRoot: File,
-            analyzerConfig: AnalyzerConfiguration,
-            repoConfig: RepositoryConfiguration
-        ) = Poetry(type, analysisRoot, analyzerConfig, repoConfig)
-    }
-
-    override fun resolveDependencies(definitionFile: File, labels: Map<String, String>): List<ProjectAnalyzerResult> {
+    override fun resolveDependencies(
+        analysisRoot: File,
+        definitionFile: File,
+        excludes: Excludes,
+        analyzerConfig: AnalyzerConfiguration,
+        labels: Map<String, String>
+    ): List<ProjectAnalyzerResult> {
         val scopeName = parseScopeNamesFromPyproject(definitionFile.resolveSibling(PYPROJECT_FILENAME))
         val resultsForScopeName = scopeName.associateWith { inspectLockfile(definitionFile, it) }
 
         val packages = resultsForScopeName
             .flatMap { (_, results) -> results.packages }
             .toOrtPackages()
-            .distinctBy { it.id }
-            .toSet()
 
         val project = Project.EMPTY.copy(
             id = Identifier(
-                type = managerName,
+                type = projectType,
                 namespace = "",
                 name = definitionFile.relativeTo(analysisRoot).path,
                 version = VersionControlSystem.getCloneInfo(definitionFile.parentFile).revision
@@ -123,10 +126,7 @@ class Poetry(
         val requirements = PoetryCommand.run(workingDir, *options.toTypedArray()).requireSuccess().stdout
         requirementsFile.writeText(requirements)
 
-        val poetryAnalyzerConfig = analyzerConfig
-            .withPackageManagerOption(managerName, "overrideProjectType", projectType)
-
-        return Pip(managerName, analysisRoot, poetryAnalyzerConfig, repoConfig).runPythonInspector(requirementsFile) {
+        return Pip(config = config, projectType = projectType).runPythonInspector(requirementsFile) {
             detectPythonVersion(workingDir)
         }.also {
             requirementsFile.parentFile.safeDeleteRecursively()

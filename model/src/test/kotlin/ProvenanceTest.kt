@@ -19,8 +19,6 @@
 
 package org.ossreviewtoolkit.model
 
-import com.fasterxml.jackson.module.kotlin.readValue
-
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.matchers.shouldBe
 
@@ -29,18 +27,18 @@ import org.ossreviewtoolkit.utils.common.normalizeLineBreaks
 class ProvenanceTest : WordSpec({
     "UnknownProvenance" should {
         val provenance = UnknownProvenance
-        val json = jsonMapper.writerWithDefaultPrettyPrinter().writeValueAsString(provenance)
+        val json = provenance.toJson()
 
         "be serializable" {
             json shouldBe "{ }"
         }
 
         "be deserializable as Provenance" {
-            jsonMapper.readValue<Provenance>(json) shouldBe UnknownProvenance
+            json.fromJson<Provenance>() shouldBe UnknownProvenance
         }
 
         "be deserializable as UnknownProvenance" {
-            jsonMapper.readValue<UnknownProvenance>(json) shouldBe UnknownProvenance
+            json.fromJson<UnknownProvenance>() shouldBe UnknownProvenance
         }
     }
 
@@ -52,7 +50,7 @@ class ProvenanceTest : WordSpec({
             )
         )
 
-        val json = jsonMapper.writerWithDefaultPrettyPrinter().writeValueAsString(provenance)
+        val json = provenance.toJson()
 
         "be serializable" {
             json.normalizeLineBreaks() shouldBe """
@@ -69,15 +67,15 @@ class ProvenanceTest : WordSpec({
         }
 
         "be deserializable as Provenance" {
-            jsonMapper.readValue<Provenance>(json) shouldBe provenance
+            json.fromJson<Provenance>() shouldBe provenance
         }
 
         "be deserializable as KnownProvenance" {
-            jsonMapper.readValue<KnownProvenance>(json) shouldBe provenance
+            json.fromJson<KnownProvenance>() shouldBe provenance
         }
 
         "be deserializable as ArtifactProvenance" {
-            jsonMapper.readValue<ArtifactProvenance>(json) shouldBe provenance
+            json.fromJson<ArtifactProvenance>() shouldBe provenance
         }
     }
 
@@ -92,7 +90,7 @@ class ProvenanceTest : WordSpec({
             resolvedRevision = "resolvedRevision"
         )
 
-        val json = jsonMapper.writerWithDefaultPrettyPrinter().writeValueAsString(provenance)
+        val json = provenance.toJson()
 
         "be serializable" {
             json.normalizeLineBreaks() shouldBe """
@@ -109,15 +107,15 @@ class ProvenanceTest : WordSpec({
         }
 
         "be serializable and deserializable as Provenance" {
-            jsonMapper.readValue<Provenance>(json) shouldBe provenance
+            json.fromJson<Provenance>() shouldBe provenance
         }
 
         "be serializable and deserializable as KnownProvenance" {
-            jsonMapper.readValue<KnownProvenance>(json) shouldBe provenance
+            json.fromJson<UnknownProvenance>() shouldBe provenance
         }
 
         "be serializable and deserializable as ArtifactProvenance" {
-            jsonMapper.readValue<RepositoryProvenance>(json) shouldBe provenance
+            json.fromJson<RepositoryProvenance>() shouldBe provenance
         }
     }
 })

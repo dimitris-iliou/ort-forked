@@ -20,140 +20,58 @@
 package org.ossreviewtoolkit.plugins.packagemanagers.maven.utils
 
 import io.kotest.core.spec.style.WordSpec
+import io.kotest.engine.spec.tempdir
 import io.kotest.matchers.shouldBe
 
-import io.mockk.every
-import io.mockk.just
-import io.mockk.mockk
-import io.mockk.runs
-import io.mockk.slot
-import io.mockk.verify
-
-import org.apache.maven.artifact.repository.Authentication
-import org.apache.maven.bridge.MavenRepositorySystem
-import org.apache.maven.repository.Proxy as MavenProxy
-
-import org.eclipse.aether.RepositorySystemSession
-import org.eclipse.aether.repository.Proxy
-import org.eclipse.aether.repository.RemoteRepository
-import org.eclipse.aether.util.repository.AuthenticationBuilder
+import org.ossreviewtoolkit.plugins.packagemanagers.maven.tycho.addTychoExtension
 
 class MavenSupportTest : WordSpec({
-    @Suppress("DEPRECATION") // For deprecated ArtifactRepository interface.
-    "toArtifactRepository()" should {
-        "create a plain artifact repository from a remote repository" {
-            val repositoryId = "aTestRepository"
-            val repositoryUrl = "https://example.com/repo"
-            val repository = RemoteRepository.Builder("ignoredId", null, repositoryUrl).build()
+    "isTychoProject()" should {
+        "return true if the Tycho extension is found" {
+            val projectDir = tempdir()
+            projectDir.addTychoExtension()
 
-            val session = mockk<RepositorySystemSession>()
-            val artifactRepository = mockk<org.apache.maven.artifact.repository.ArtifactRepository>()
-            val repositorySystem = mockk<MavenRepositorySystem> {
-                every {
-                    createRepository(repositoryUrl, repositoryId, true, null, true, null, null)
-                } returns artifactRepository
-            }
-
-            repository.toArtifactRepository(session, repositorySystem, repositoryId) shouldBe artifactRepository
+            isTychoProject(projectDir) shouldBe true
         }
 
-        "create an artifact repository with a configured proxy" {
-            val repository = RemoteRepository.Builder("someId", "someType", "https://example.com/repo")
-                .setProxy(Proxy("http", "proxy.example.com", 8080))
-                .build()
+        "return false if the extension file does not contain the Tycho extension" {
+            val projectDir = tempdir()
+            projectDir.addTychoExtension(
+                """
+                <extensions>
+                    <extension>
+                        <groupId>org.eclipse.tycho</groupId>
+                        <artifactId>tycho-foo</artifactId>
+                        <version>4.0.0</version>
+                    </extension>
+                </extensions>
+                """.trimIndent()
+            )
 
-            val session = mockk<RepositorySystemSession>()
-            val artifactRepository = mockk<org.apache.maven.artifact.repository.ArtifactRepository> {
-                every { proxy = any() } just runs
-            }
-
-            val repositorySystem = mockk<MavenRepositorySystem> {
-                every {
-                    createRepository(any(), any(), true, null, true, null, null)
-                } returns artifactRepository
-            }
-
-            repository.toArtifactRepository(session, repositorySystem, "id") shouldBe artifactRepository
-
-            val slotProxy = slot<MavenProxy>()
-            verify {
-                artifactRepository.proxy = capture(slotProxy)
-            }
-
-            with(slotProxy.captured) {
-                host shouldBe "proxy.example.com"
-                port shouldBe 8080
-                protocol shouldBe "http"
-            }
+            isTychoProject(projectDir) shouldBe false
         }
 
-        "create an artifact repository with authentication" {
-            val repository = RemoteRepository.Builder("someId", "someType", "https://example.com/repo")
-                .setAuthentication(
-                    AuthenticationBuilder()
-                        .addUsername("scott")
-                        .addPassword("tiger".toCharArray())
-                        .addPrivateKey("privateKeyPath", "passphrase")
-                        .build()
-                ).build()
+        "return false if there is no extension file" {
+            val projectDir = tempdir()
+            val mvnDir = projectDir.resolve(".mvn")
+            mvnDir.mkdirs()
 
-            val session = mockk<RepositorySystemSession>()
-            val artifactRepository = mockk<org.apache.maven.artifact.repository.ArtifactRepository> {
-                every { authentication = any() } just runs
-            }
-
-            val repositorySystem = mockk<MavenRepositorySystem> {
-                every {
-                    createRepository(any(), any(), true, null, true, null, null)
-                } returns artifactRepository
-            }
-
-            repository.toArtifactRepository(session, repositorySystem, "id") shouldBe artifactRepository
-
-            val slotAuth = slot<Authentication>()
-            verify {
-                artifactRepository.authentication = capture(slotAuth)
-            }
-
-            with(slotAuth.captured) {
-                username shouldBe "scott"
-                password shouldBe "tiger"
-                privateKey shouldBe "privateKeyPath"
-                passphrase shouldBe "passphrase"
-            }
+            isTychoProject(projectDir) shouldBe false
         }
 
-        "create an artifact repository with a configured proxy that requires authentication" {
-            val proxyAuth = AuthenticationBuilder()
-                .addUsername("proxyUser")
-                .addPassword("proxyPassword".toCharArray())
-                .build()
-            val repository = RemoteRepository.Builder("someId", "someType", "https://example.com/repo")
-                .setProxy(Proxy("http", "proxy.example.com", 8080, proxyAuth))
-                .build()
+        "return false if there is no .mvn directory" {
+            val projectDir = tempdir()
 
-            val session = mockk<RepositorySystemSession>()
-            val artifactRepository = mockk<org.apache.maven.artifact.repository.ArtifactRepository> {
-                every { proxy = any() } just runs
-            }
+            isTychoProject(projectDir) shouldBe false
+        }
 
-            val repositorySystem = mockk<MavenRepositorySystem> {
-                every {
-                    createRepository(any(), any(), true, null, true, null, null)
-                } returns artifactRepository
-            }
+        "return true for a pom file in a folder that has the Tycho extension" {
+            val projectDir = tempdir()
+            projectDir.addTychoExtension()
 
-            repository.toArtifactRepository(session, repositorySystem, "id") shouldBe artifactRepository
+            val pomFile = projectDir.resolve("pom.xml")
 
-            val slotProxy = slot<MavenProxy>()
-            verify {
-                artifactRepository.proxy = capture(slotProxy)
-            }
-
-            with(slotProxy.captured) {
-                userName shouldBe "proxyUser"
-                password shouldBe "proxyPassword"
-            }
+            isTychoProject(pomFile) shouldBe true
         }
     }
 })

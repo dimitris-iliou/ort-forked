@@ -22,7 +22,7 @@
 INCLUDE docker/versions.dockerfile
 
 # Use OpenJDK Eclipe Temurin Ubuntu LTS
-FROM eclipse-temurin:$JAVA_VERSION-jdk-$UBUNTU_VERSION as base
+FROM eclipse-temurin:$JAVA_VERSION-jdk-$UBUNTU_VERSION AS base
 
 ENV LANG=en_US.UTF-8
 ENV LANGUAGE=en_US:en
@@ -60,6 +60,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     openssh-client \
     openssl \
     procps \
+    rng-tools5 \
     rsync \
     sudo \
     tzdata \
@@ -144,8 +145,9 @@ ARG CONAN_VERSION
 ARG PYTHON_INSPECTOR_VERSION
 ARG PYTHON_PIPENV_VERSION
 ARG PYTHON_POETRY_VERSION
+ARG PYTHON_POETRY_PLUGIN_EXPORT_VERSION
 ARG PYTHON_SETUPTOOLS_VERSION
-ARG PIPTOOL_VERSION
+ARG PIP_VERSION
 ARG SCANCODE_VERSION
 
 RUN ARCH=$(arch | sed s/aarch64/arm64/) \
@@ -163,20 +165,21 @@ RUN scancode-license-data --path /opt/scancode-license-data \
     && rm -rf /opt/scancode-license-data/static
 
 RUN pip install --no-cache-dir -U \
-    pip=="$PIPTOOL_VERSION" \
+    pip=="$PIP_VERSION" \
     wheel \
     && pip install --no-cache-dir -U \
     Mercurial \
     conan=="$CONAN_VERSION" \
     pipenv=="$PYTHON_PIPENV_VERSION" \
     poetry=="$PYTHON_POETRY_VERSION" \
+    poetry-plugin-export=="$PYTHON_POETRY_PLUGIN_EXPORT_VERSION" \
     python-inspector=="$PYTHON_INSPECTOR_VERSION" \
     setuptools=="$PYTHON_SETUPTOOLS_VERSION"
 
 FROM scratch AS python
 COPY --from=pythonbuild /opt/python /opt/python
 
-FROM scratch as scancode-license-data
+FROM scratch AS scancode-license-data
 COPY --from=pythonbuild /opt/scancode-license-data /opt/scancode-license-data
 
 #------------------------------------------------------------------------
@@ -406,7 +409,7 @@ COPY --from=dotnetbuild /opt/dotnet /opt/dotnet
 
 #------------------------------------------------------------------------
 # BAZEL
-FROM base as bazelbuild
+FROM base AS bazelbuild
 
 ARG BAZELISK_VERSION
 
@@ -425,13 +428,13 @@ COPY --from=gobuild /opt/go /opt/go
 
 RUN $GOBIN/go install github.com/bazelbuild/buildtools/buildozer@latest && chmod a+x $GOBIN/buildozer
 
-FROM scratch as bazel
+FROM scratch AS bazel
 COPY --from=bazelbuild /opt/bazel /opt/bazel
 COPY --from=bazelbuild /opt/go/bin/buildozer /opt/go/bin/buildozer
 
 #------------------------------------------------------------------------
 # ORT
-FROM base as ortbuild
+FROM base AS ortbuild
 
 # Set this to the version ORT should report.
 ARG ORT_VERSION="DOCKER-SNAPSHOT"
@@ -459,7 +462,7 @@ COPY --from=ortbuild /opt/ort /opt/ort
 
 #------------------------------------------------------------------------
 # Container with minimal selection of supported package managers.
-FROM base as minimal-tools
+FROM base AS minimal-tools
 
 # Remove ort build scripts
 RUN [ -d /etc/scripts ] && sudo rm -rf /etc/scripts
@@ -505,7 +508,7 @@ COPY --from=scancode-license-data --chown=$USER:$USER /opt/scancode-license-data
 
 #------------------------------------------------------------------------
 # Container with all supported package managers.
-FROM minimal-tools as all-tools
+FROM minimal-tools AS all-tools
 
 # Repo and Android
 ENV ANDROID_HOME=/opt/android-sdk
@@ -570,7 +573,7 @@ COPY --from=bazel --chown=$USER:$USER /opt/go/bin/buildozer /opt/go/bin/buildoze
 
 #------------------------------------------------------------------------
 # Runtime container with minimal selection of supported package managers pre-installed.
-FROM minimal-tools as minimal
+FROM minimal-tools AS minimal
 
 # ORT
 COPY --from=ortbin --chown=$USER:$USER /opt/ort /opt/ort
@@ -579,14 +582,14 @@ ENV PATH=$PATH:/opt/ort/bin
 USER $USER
 WORKDIR $HOME
 
-# Ensure that the ORT data directory exists to be able to mount the config into it with correct permissions.
-RUN mkdir -p "$HOME/.ort"
+# Ensure that these directories exist in the container to be able to mount directories from the host into them with correct permissions.
+RUN mkdir -p "$HOME/.ort" "$HOME/.gradle"
 
 ENTRYPOINT ["/opt/ort/bin/ort"]
 
 #------------------------------------------------------------------------
 # Runtime container with all supported package managers pre-installed.
-FROM all-tools as run
+FROM all-tools AS run
 
 # ORT
 COPY --from=ortbin --chown=$USER:$USER /opt/ort /opt/ort
@@ -595,7 +598,7 @@ ENV PATH=$PATH:/opt/ort/bin
 USER $USER
 WORKDIR $HOME
 
-# Ensure that the ORT data directory exists to be able to mount the config into it with correct permissions.
-RUN mkdir -p "$HOME/.ort"
+# Ensure that these directories exist in the container to be able to mount directories from the host into them with correct permissions.
+RUN mkdir -p "$HOME/.ort" "$HOME/.gradle"
 
 ENTRYPOINT ["/opt/ort/bin/ort"]

@@ -2,7 +2,8 @@
 name: Bug Report 🐞
 about: I want to report a bug that I am facing.
 title: ''
-labels: ['bug', 'to triage']
+type: 'Bug'
+labels: ['to triage']
 
 ---
 ### Describe the bug
@@ -33,7 +34,7 @@ No screenshots of plain text please, to keep text searchable.
 
 ### Environment
 
-Output of the `ort requirements -l commands` command:
+Output of the `ort requirements` command:
 
 ```
 <copy & paste console output to here; no screenshots please>

@@ -29,9 +29,6 @@ import java.io.File
 
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.PackageLinkage
-import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
-import org.ossreviewtoolkit.model.config.RepositoryConfiguration
-import org.ossreviewtoolkit.utils.test.USER_DIR
 
 class YarnDependencyHandlerTest : StringSpec({
     "identifierFor extracts the correct identifier" {
@@ -88,18 +85,17 @@ private fun createIdentifier(name: String): Identifier =
     Identifier(type = "NPM", namespace = "test", name = name, version = "1.2.3")
 
 /**
- * Convenience function to create an [NpmModuleInfo] instance with default values based on the provided [id],
+ * Convenience function to create an [ModuleInfo] instance with default values based on the provided [id],
  * [packageFile], and [dependencies].
  */
 private fun createModuleInfo(
     id: Identifier,
     packageFile: File = File("project/package.json"),
-    dependencies: Set<NpmModuleInfo> = emptySet(),
+    dependencies: Set<ModuleInfo> = emptySet(),
     isProject: Boolean = false
-): NpmModuleInfo = NpmModuleInfo(id, packageFile.parentFile, packageFile, dependencies, isProject)
+): ModuleInfo = ModuleInfo(id, packageFile.parentFile, packageFile, dependencies, isProject)
 
 /**
  * Creates an [YarnDependencyHandler] instance to be used by test cases.
  */
-private fun createHandler() =
-    YarnDependencyHandler(Yarn("Yarn", USER_DIR, AnalyzerConfiguration(), RepositoryConfiguration()))
+private fun createHandler() = YarnDependencyHandler(YarnFactory.create())

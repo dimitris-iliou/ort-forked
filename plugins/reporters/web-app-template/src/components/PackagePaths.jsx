@@ -17,8 +17,11 @@
  * License-Filename: LICENSE
  */
 
-import { Descriptions, List, Steps } from 'antd';
-import PropTypes from 'prop-types';
+import {
+    Descriptions,
+    List,
+    Steps
+} from 'antd';
 
 const { Item } = Descriptions;
 
@@ -95,7 +98,7 @@ const PackagePaths = ({ paths }) => {
                         }
                     );
 
-                    stepItems.push({ title: webAppPath.packageName });
+                    stepItems.push({ title: webAppPath.packageId });
 
                     return (
                         <List.Item>
@@ -113,10 +116,6 @@ const PackagePaths = ({ paths }) => {
             }
         />
     );
-};
-
-PackagePaths.propTypes = {
-    paths: PropTypes.array.isRequired
 };
 
 export default PackagePaths;

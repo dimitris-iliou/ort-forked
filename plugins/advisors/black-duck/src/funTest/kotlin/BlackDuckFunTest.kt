@@ -31,6 +31,7 @@ import java.time.Instant
 import org.ossreviewtoolkit.advisor.normalizeVulnerabilityData
 import org.ossreviewtoolkit.model.AdvisorResult
 import org.ossreviewtoolkit.model.Identifier
+import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.readValue
 import org.ossreviewtoolkit.model.toYaml
 import org.ossreviewtoolkit.utils.common.Os
@@ -53,23 +54,48 @@ class BlackDuckFunTest : WordSpec({
         apiToken = apiToken
     )
 
-    val blackDuck = BlackDuck(BlackDuckFactory.descriptor, componentServiceClient)
+    val blackDuck = BlackDuck(blackDuckApi = componentServiceClient)
 
     afterEach { componentServiceClient.flush() }
 
     "retrievePackageFindings()" should {
-        "return the vulnerabilities for the supported ecosystems" {
+        "return the vulnerabilities for the supported ecosystems by purl" {
             val packages = setOf(
-                // TODO: Add hackage / pod
                 "Crate::sys-info:0.7.0",
                 "Gem::rack:2.0.4",
                 "Maven:com.jfinal:jfinal:1.4",
                 "NPM::rebber:1.0.0",
                 "NuGet::Bunkum:4.0.0",
+                "Pod::AFNetworking:0.10.0",
                 "Pub::http:0.13.1",
                 "PyPI::django:3.2"
             ).mapTo(mutableSetOf()) {
                 identifierToPackage(it)
+            }
+
+            val packageFindings = blackDuck.retrievePackageFindings(packages).mapKeys { it.key.id.toCoordinates() }
+
+            packageFindings.keys shouldContainExactlyInAnyOrder packages.map { it.id.toCoordinates() }
+            packageFindings.keys.forAll { id ->
+                packageFindings.getValue(id).vulnerabilities shouldNot beEmpty()
+            }
+        }
+
+        "return the vulnerabilities for some supported namespaces by origin-id" {
+            val packages = setOf(
+                "Conan::libtiff:4.6.0" to "conan:libtiff/4.6.0@_/_#44d09b1f75a7fd97d4f7daea5e7aed8e:" +
+                    "76d7c7f96feb2c0e80e06c3ce83fb313b77d8ef1#4e4eafa7fcd218e85d2fe31ee79c7552",
+                "Git::Qt:6.5.3" to "long_tail:git://code.qt.io/qt/qt5#v6.5.3",
+                "Github::behdad/harbuzz:2.2.0" to "github:behdad/harfbuzz:2.2.0",
+                "NuGet::Bunkum:4.0.0" to "nuget:Bunkum/4.0.0",
+                "PyPI::donfig:0.2.0" to "pypi:donfig/0.2.0"
+            ).mapTo(mutableSetOf()) { (coordinates, originId) ->
+                Package.EMPTY.copy(
+                    id = Identifier(coordinates),
+                    labels = mapOf(
+                        BlackDuck.PACKAGE_LABEL_BLACK_DUCK_ORIGIN_ID to originId
+                    )
+                )
             }
 
             val packageFindings = blackDuck.retrievePackageFindings(packages).mapKeys { it.key.id.toCoordinates() }
@@ -85,8 +111,9 @@ class BlackDuckFunTest : WordSpec({
                 .readValue<Map<Identifier, AdvisorResult>>()
             val packages = setOf(
                 // Package using CVSS 3.1 vector:
-                "Crate::sys-info:0.7.0"
-                // Todo: Add a package using CVSS 2 vector:
+                "Crate::sys-info:0.7.0",
+                // Package using CVSS 2 vector only:
+                "Pod::AFNetworking:0.10.0"
             ).mapTo(mutableSetOf()) {
                 identifierToPackage(it)
             }

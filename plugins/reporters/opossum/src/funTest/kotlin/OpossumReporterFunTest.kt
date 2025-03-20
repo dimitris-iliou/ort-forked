@@ -34,7 +34,7 @@ import org.ossreviewtoolkit.utils.test.readOrtResult
 
 class OpossumReporterFunTest : WordSpec({
     val replacements = mapOf(
-        "\"fileCreationDate\":\"[^\"]+\"" to "\"fileCreationDate\":\"${LocalDateTime.MIN}\"",
+        "(\"fileCreationDate\" ?: ?)\"[^\"]+\"" to "$1\"${LocalDateTime.MIN}\"",
         "\"[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\"" to "\"00000000-0000-0000-0000-000000000000\""
     )
 
@@ -48,8 +48,12 @@ class OpossumReporterFunTest : WordSpec({
 
             OpossumReporterFactory.create().generateReport(input, outputDir).single().getOrThrow().unpackZip(outputDir)
 
-            val actualResult = patchActualResult(outputDir.resolve("input.json").readText(), custom = replacements)
-            actualResult shouldEqualSpecifiedJsonIgnoringOrder patchExpectedResult(expectedFile)
+            val actualResult = outputDir.resolve("input.json").readText()
+            val patchedActualResult = patchActualResult(actualResult, custom = replacements)
+            patchedActualResult shouldEqualSpecifiedJsonIgnoringOrder patchExpectedResult(
+                expectedFile,
+                custom = replacements
+            )
         }
     }
 })

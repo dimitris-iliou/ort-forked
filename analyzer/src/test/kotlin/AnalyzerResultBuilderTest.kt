@@ -95,11 +95,11 @@ class AnalyzerResultBuilderTest : WordSpec() {
     private val depRef3 = DependencyReference(0, issues = listOf(issue5))
 
     private val scopeMapping1 = mapOf(
-        DependencyGraph.qualifyScope(project1, "scope-1") to listOf(RootDependencyIndex(0)),
-        DependencyGraph.qualifyScope(project3, "scope-2") to listOf(RootDependencyIndex(1))
+        DependencyGraph.qualifyScope(project1.id, "scope-1") to listOf(RootDependencyIndex(0)),
+        DependencyGraph.qualifyScope(project3.id, "scope-2") to listOf(RootDependencyIndex(1))
     )
     private val scopeMapping2 = mapOf(
-        DependencyGraph.qualifyScope(project2, "scope-3") to listOf(RootDependencyIndex(0))
+        DependencyGraph.qualifyScope(project2.id, "scope-3") to listOf(RootDependencyIndex(0))
     )
 
     private val graph1 =
@@ -274,9 +274,7 @@ class AnalyzerResultBuilderTest : WordSpec() {
                     .addResult(analyzerResult2)
                     .build()
 
-                mergedResults.projects.map {
-                    it.withResolvedScopes(mergedResults.dependencyGraphs[it.id.type])
-                } shouldBe setOf(
+                mergedResults.withResolvedScopes().projects shouldBe setOf(
                     project1,
                     project2
                 )

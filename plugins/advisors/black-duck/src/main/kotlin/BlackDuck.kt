@@ -19,6 +19,8 @@
 
 package org.ossreviewtoolkit.plugins.advisors.blackduck
 
+import com.blackduck.integration.blackduck.api.generated.component.VulnerabilityCvss2View
+import com.blackduck.integration.blackduck.api.generated.component.VulnerabilityCvss3View
 import com.blackduck.integration.blackduck.api.generated.view.OriginView
 import com.blackduck.integration.blackduck.api.generated.view.VulnerabilityView
 
@@ -39,8 +41,10 @@ import org.ossreviewtoolkit.model.AdvisorSummary
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.Issue
 import org.ossreviewtoolkit.model.Package
+import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.vulnerabilities.Cvss2Rating
+import org.ossreviewtoolkit.model.vulnerabilities.Cvss3Rating
 import org.ossreviewtoolkit.model.vulnerabilities.Vulnerability
 import org.ossreviewtoolkit.model.vulnerabilities.VulnerabilityReference
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
@@ -48,18 +52,31 @@ import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.utils.common.collectMessages
 import org.ossreviewtoolkit.utils.common.enumSetOf
 
+/**
+ * This advice provider by default retrieves vulnerabilities by the purl corresponding to the package. If a package has
+ * the label [BlackDuck.PACKAGE_LABEL_BLACK_DUCK_ORIGIN_ID] set, then the vulnerabilities are retrieved by that
+ * origin-id instead of by the purl.
+ */
 @OrtPlugin(
     displayName = "Black Duck",
     description = "An advisor that retrieves vulnerability information from a Black Duck instance.",
     factory = AdviceProviderFactory::class
 )
 class BlackDuck(
-    override val descriptor: PluginDescriptor,
+    override val descriptor: PluginDescriptor = BlackDuckFactory.descriptor,
     private val blackDuckApi: ComponentServiceClient
 ) : AdviceProvider {
+    companion object {
+        /**
+         * The key of the package label for specifying the Black Duck origin-id in the form
+         * "$externalNamespace:$externalId", see also [BlackDuckOriginId.parse].
+         */
+        const val PACKAGE_LABEL_BLACK_DUCK_ORIGIN_ID = "black-duck:origin-id"
+    }
+
     override val details = AdvisorDetails(descriptor.id, enumSetOf(AdvisorCapability.VULNERABILITIES))
 
-    constructor(descriptor: PluginDescriptor, config: BlackDuckConfiguration) : this(
+    constructor(descriptor: PluginDescriptor = BlackDuckFactory.descriptor, config: BlackDuckConfiguration) : this(
         descriptor, ExtendedComponentService.create(config.serverUrl, config.apiToken.value)
     )
 
@@ -99,34 +116,57 @@ class BlackDuck(
     }
 
     private fun getOrigins(pkg: Package, issues: MutableList<Issue>): List<OriginView> {
-        val searchResults = runCatching {
-            blackDuckApi.searchKbComponentsByPurl(pkg.purl)
+        val externalId = runCatching {
+            pkg.blackDuckOriginId?.let { BlackDuckOriginId.parse(it).toExternalId() }
         }.getOrElse {
             issues += createAndLogIssue(
-                source = descriptor.displayName,
-                message = "Requesting origins for purl ${pkg.purl} failed: ${it.collectMessages()}"
+                "Could not parse origin-id '${pkg.blackDuckOriginId}' for '${pkg.id.toCoordinates()}: " +
+                    it.collectMessages()
             )
             return emptyList()
+        }
+
+        val searchResults = if (externalId != null) {
+            runCatching {
+                blackDuckApi.searchKbComponentsByExternalId(externalId)
+            }.getOrElse {
+                issues += createAndLogIssue(
+                    "Requesting origins for externalId '$externalId' failed: ${it.collectMessages()}"
+                )
+                return emptyList()
+            }
+        } else {
+            runCatching {
+                blackDuckApi.searchKbComponentsByPurl(pkg.purl)
+            }.getOrElse {
+                issues += createAndLogIssue("Requesting origins for purl ${pkg.purl} failed: ${it.collectMessages()}")
+                return emptyList()
+            }
         }
 
         val origins = searchResults.mapNotNull { searchResult ->
             runCatching {
                 blackDuckApi.getOriginView(searchResult)
             }.onFailure {
-                issues += createAndLogIssue(
-                    source = descriptor.displayName,
-                    message = "Requesting origin details failed: ${it.collectMessages()}"
-                )
+                issues += createAndLogIssue("Requesting origin details failed: ${it.collectMessages()}")
             }.getOrNull()
         }
 
         if (origins.isEmpty()) {
-            logger.info { "No origin found for package '${pkg.id.toCoordinates()}'." }
+            logger.info { "No origin found for package '${pkg.id.toCoordinates()}' (${pkg.requestParam})." }
         } else {
             logger.info {
-                "Found ${origins.size} origin(s) for package '${pkg.id.toCoordinates()}': " +
+                "Found ${origins.size} origin(s) for package '${pkg.id.toCoordinates()}' (${pkg.requestParam}): " +
                     "${origins.joinToString { it.identifier }}."
             }
+        }
+
+        if (externalId != null && origins.isEmpty()) {
+            issues += createAndLogIssue(
+                "The origin-id '${pkg.blackDuckOriginId} of package ${pkg.id.toCoordinates()} does not match any " +
+                    "origin.",
+                Severity.WARNING
+            )
         }
 
         return origins
@@ -143,28 +183,26 @@ class BlackDuck(
                 logger.info { "Found ${it.size} vulnerabilities for origin ${origin.identifier}." }
             }.onFailure {
                 issues += createAndLogIssue(
-                    source = descriptor.displayName,
-                    message = "Requesting vulnerabilities for origin ${origin.identifier} failed: " +
-                        it.collectMessages()
+                    "Requesting vulnerabilities for origin ${origin.identifier} failed: ${it.collectMessages()}"
                 )
             }.getOrDefault(emptyList())
         }
 }
 
-private fun VulnerabilityView.toOrtVulnerability(): Vulnerability {
-    val referenceUris = listOf(meta.href.uri(), *meta.links.map { it.href.uri() }.toTypedArray())
+internal fun VulnerabilityView.toOrtVulnerability(): Vulnerability {
+    val referenceUris = setOf(meta.href.uri(), *meta.links.map { it.href.uri() }.toTypedArray())
+
+    val (scoringSystem, vector) = cvss3?.getScoringSystemAndVector()
+        ?: cvss2?.getScoringSystemAndVector()
+        ?: (null to null)
 
     val references = referenceUris.map { uri ->
-        val cvssVector = cvss3?.vector ?: cvss2?.vector
-        // Only CVSS version 2 vectors do not contain the "CVSS:" label and version prefix
-        val scoringSystem = cvssVector?.substringBefore('/', Cvss2Rating.PREFIXES.first())
-
         VulnerabilityReference(
             url = uri,
             scoringSystem = scoringSystem,
             severity = severity.toString(),
             score = overallScore.toFloat(),
-            vector = cvssVector
+            vector = vector
         )
     }
 
@@ -175,6 +213,17 @@ private fun VulnerabilityView.toOrtVulnerability(): Vulnerability {
     )
 }
 
+private fun VulnerabilityCvss3View.getScoringSystemAndVector(): Pair<String, String> {
+    val scoringSystem = vector.substringBefore('/', "").ifEmpty { Cvss3Rating.PREFIXES.first() }
+    return scoringSystem to vector
+}
+
+private fun VulnerabilityCvss2View.getScoringSystemAndVector(): Pair<String, String> {
+    val scoringSystem = Cvss2Rating.PREFIXES.first()
+    val parsedVector = vector.removeSurrounding("(", ")")
+    return scoringSystem to parsedVector
+}
+
 private val OriginView.identifier get() = "$externalNamespace:$externalId"
 
 private fun Map<Identifier, List<OriginView>>.getSummary(): String =
@@ -183,7 +232,7 @@ private fun Map<Identifier, List<OriginView>>.getSummary(): String =
         if (idsWithMultipleOrigins.isNotEmpty()) {
             appendLine("The following ${idsWithMultipleOrigins.size} packages have multiple matching origins:")
             idsWithMultipleOrigins.forEach { (id, origins) ->
-                appendLine("  $id -> ${origins.joinToString { it.identifier }}")
+                appendLine("  ${id.toCoordinates()} -> ${origins.joinToString { it.identifier }}")
             }
         }
 
@@ -195,3 +244,8 @@ private fun Map<Identifier, List<OriginView>>.getSummary(): String =
             }
         }
     }
+
+private val Package.blackDuckOriginId: String? get() = labels[BlackDuck.PACKAGE_LABEL_BLACK_DUCK_ORIGIN_ID]
+
+private val Package.requestParam: String get() =
+    blackDuckOriginId?.let { "origin-id: '$it'" } ?: "purl: '$purl'"

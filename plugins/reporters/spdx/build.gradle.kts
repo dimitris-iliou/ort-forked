@@ -30,6 +30,7 @@ dependencies {
     implementation(projects.model)
     implementation(projects.utils.commonUtils)
     implementation(projects.utils.ortUtils)
+    implementation(projects.utils.spdxDocument)
     implementation(projects.utils.spdxUtils)
 
     implementation(libs.jackson.databind)

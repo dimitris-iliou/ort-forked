@@ -1,46 +1,47 @@
 [versions]
-dependencyAnalysisPlugin = "2.7.0"
-detektPlugin = "1.23.7"
+dependencyAnalysisPlugin = "2.13.0"
+detektPlugin = "1.23.8"
 dokkatooPlugin = "2.4.0"
 downloadPlugin = "5.6.0"
-gitSemverPlugin = "0.14.0"
-graalVmNativeImagePlugin = "0.10.4"
-ideaExtPlugin = "1.1.9"
-kotlinPlugin = "2.1.0"
-ksp = "2.1.0-1.0.29"
-mavenPublishPlugin = "0.30.0"
+gitSemverPlugin = "0.16.0"
+graalVmNativeImagePlugin = "0.10.6"
+ideaExtPlugin = "1.1.10"
+jakartaMigrationPlugin = "0.24.0"
+kotlinPlugin = "2.1.10"
+ksp = "2.1.10-1.0.31"
+mavenPublishPlugin = "0.31.0"
 reproducibleBuildsPlugin = "1.0"
-versionsPlugin = "0.51.0"
+versionsPlugin = "0.52.0"
 
-aeSecurity = "0.134.0"
+aeSecurity = "0.135.8"
 asciidoctorj = "3.0.0"
 asciidoctorjPdf = "2.3.19"
-blackduckCommon = "67.0.3"
-blackduckCommonApi = "2023.10.0.6"
-clikt = "5.0.2"
+blackduckCommon = "67.0.5"
+blackduckCommonApi = "2023.10.0.7"
+clikt = "5.0.3"
 commonsCompress = "1.27.1"
-cyclonedx = "10.1.0"
+cyclonedx = "10.2.1"
 diffUtils = "4.15"
 discoClient = "21.0.1"
 diskLruCache = "2.0.2"
-exposed = "0.58.0"
+exposed = "0.60.0"
 flexmark = "0.64.8"
 freemarker = "2.3.34"
-greenmail = "2.1.2"
-gson = "2.11.0"
+greenmail = "2.1.3"
+gson = "2.12.1"
 hikari = "6.2.1"
 hoplite = "2.9.0"
-jackson = "2.18.2"
+jackson = "2.18.3"
 jakartaMail = "2.0.1"
-jakartaRestApi = "2.1.6"
+jerseyCommon = "3.1.10"
 jgit = "7.1.0.202411261347-r"
-jiraRestClient = "6.0.1"
-jruby = "9.4.9.0"
+jiraRestClient = "6.0.2"
+jruby = "9.4.12.0"
 jslt = "0.1.14"
-jsonSchemaValidator = "1.5.5"
-kaml = "0.67.0"
+jsonSchemaValidator = "1.5.6"
+kaml = "0.72.0"
 kotest = "5.9.1"
-kotlinPoet = "2.0.0"
+kotlinPoet = "2.1.0"
 kotlinxCoroutines = "1.10.1"
 kotlinxHtml = "0.12.0"
 kotlinxSerialization = "1.8.0"
@@ -48,25 +49,25 @@ ks3 = "1.0.0"
 tomlkt = "0.4.0"
 log4jApi = "2.24.3"
 log4jApiKotlin = "1.5.0"
-logback = "1.5.16"
+logback = "1.5.18"
 maven = "3.9.9"
 mavenResolver = "1.9.22"
-mockk = "1.13.14"
-mordant = "3.0.1"
+mockk = "1.13.17"
+mordant = "3.0.2"
 okhttp = "4.12.0"
 postgres = "42.7.5"
 postgresEmbedded = "1.1.0"
 reflections = "0.10.2"
 retrofit = "2.11.0"
-s3 = "2.30.1"
+s3 = "2.31.1"
 saxonHe = "12.5"
-scanoss = "0.7.1"
-semver4j = "5.5.0"
-slf4j = "2.0.16"
-springCore = "6.2.2"
+scanoss = "0.10.1"
+semver4j = "5.6.0"
+slf4j = "2.0.17"
+springCore = "6.2.5"
 svnkit = "1.10.11"
 sw360Client = "17.0.1-m2"
-wiremock = "3.10.0"
+wiremock = "3.12.1"
 xmlutil = "0.90.3"
 xz = "1.10"
 
@@ -74,6 +75,7 @@ xz = "1.10"
 download = { id = "de.undercouch.download", version.ref = "downloadPlugin" }
 gitSemver = { id = "com.github.jmongard.git-semver-plugin", version.ref = "gitSemverPlugin" }
 ideaExt = { id = "org.jetbrains.gradle.plugin.idea-ext", version.ref = "ideaExtPlugin" }
+jakartaMigration = { id = "com.netflix.nebula.jakartaee-migration", version.ref = "jakartaMigrationPlugin" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlinPlugin" }
 versions = { id = "com.github.ben-manes.versions", version.ref = "versionsPlugin" }
 
@@ -122,7 +124,7 @@ jackson-dataformat-yaml = { module = "com.fasterxml.jackson.dataformat:jackson-d
 jackson-datatype-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson" }
 jackson-module-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version.ref = "jackson" }
 jakartaMail = { module = "com.sun.mail:jakarta.mail", version.ref = "jakartaMail" }
-jakartaRestApi = { module = "jakarta.ws.rs:jakarta.ws.rs-api", version.ref = "jakartaRestApi" }
+jerseyCommon = { module = "org.glassfish.jersey.core:jersey-common", version.ref = "jerseyCommon" }
 jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version.ref = "jgit" }
 jgit-ssh-apache = { module = "org.eclipse.jgit:org.eclipse.jgit.ssh.apache", version.ref = "jgit" }
 jgit-ssh-apache-agent = { module = "org.eclipse.jgit:org.eclipse.jgit.ssh.apache.agent", version.ref = "jgit" }
@@ -156,6 +158,7 @@ log4j-api-slf4j = { module = "org.apache.logging.log4j:log4j-to-slf4j", version.
 logbackClassic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 maven-compat = { module = "org.apache.maven:maven-compat", version.ref = "maven" }
 maven-core = { module = "org.apache.maven:maven-core", version.ref = "maven" }
+maven-embedder = { module = "org.apache.maven:maven-embedder", version.ref = "maven" }
 maven-model = { module = "org.apache.maven:maven-model", version.ref = "maven" }
 maven-model-builder = { module = "org.apache.maven:maven-model-builder", version.ref = "maven" }
 maven-resolver-api = { module = "org.apache.maven.resolver:maven-resolver-api", version.ref = "mavenResolver" }

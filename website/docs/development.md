@@ -1,5 +1,5 @@
 ---
-sidebar_position: 6
+sidebar_position: 7
 ---
 
 # Development
@@ -13,7 +13,7 @@ The most important tasks for this project are:
 | Task        | Purpose                                                           |
 |-------------|-------------------------------------------------------------------|
 | assemble    | Build the JAR artifacts for all projects                          |
-| detekt      | Run static code analysis on all projects                          |
+| detekt(All) | Run static code analysis on all projects                          |
 | test        | Run unit tests for all projects                                   |
 | funTest     | Run functional tests for all projects                             |
 | installDist | Build all projects and install the start scripts for distribution |
@@ -94,6 +94,12 @@ To run only the subset of rules that do not require type resolution, use:
 
 ```shell
 ./gradlew detekt
+```
+
+To automatically fix some common style issues like the import order or the spacing around operators, use:
+
+```shell
+./gradlew detekt --auto-correct
 ```
 
 ### Markdownlint

@@ -107,11 +107,12 @@ sealed class SpdxExpression {
         }
 
     /**
-     * Normalize all license IDs using [SpdxSimpleLicenseMapping]. If [mapDeprecated] is `true`, also deprecated IDs are
-     * mapped to their current counterparts. The result of this function is not guaranteed to contain only valid IDs.
-     * Use [validate] or [isValid] to check the returned [SpdxExpression] for validity afterwards.
+     * Normalize all license IDs using [SpdxSimpleLicenseMapping]. If [mapDeprecated] is `true`, this involves mapping
+     * deprecated IDs to their current counterparts. If [mapSimple] is `true`, also commonly known abbreviations or
+     * aliases are mapped. The result of this function is not guaranteed to contain only valid IDs. Use [validate] or
+     * [isValid] to check the returned [SpdxExpression] for validity afterwards.
      */
-    abstract fun normalize(mapDeprecated: Boolean = true): SpdxExpression
+    abstract fun normalize(mapDeprecated: Boolean = true, mapSimple: Boolean = true): SpdxExpression
 
     /**
      * Return a simplified expression that has e.g. redundancies removed.
@@ -246,8 +247,8 @@ class SpdxCompoundExpression(
 
     override fun decompose(): Set<SpdxSingleLicenseExpression> = children.flatMapTo(mutableSetOf()) { it.decompose() }
 
-    override fun normalize(mapDeprecated: Boolean) =
-        SpdxCompoundExpression(operator, children.map { it.normalize(mapDeprecated) })
+    override fun normalize(mapDeprecated: Boolean, mapSimple: Boolean) =
+        SpdxCompoundExpression(operator, children.map { it.normalize(mapDeprecated, mapSimple) })
 
     private fun flatten(): SpdxExpression {
         val flattenedChildren = children.flatMapTo(mutableSetOf()) { child ->
@@ -291,12 +292,7 @@ class SpdxCompoundExpression(
             return children.sortedBy { it.toString() }
         }
 
-        return getSortedChildrenWithSameOperator(this).reduce(
-            when (operator) {
-                SpdxOperator.AND -> SpdxExpression::and
-                SpdxOperator.OR -> SpdxExpression::or
-            }
-        )
+        return getSortedChildrenWithSameOperator(this).concat(operator)
     }
 
     override fun validate(strictness: Strictness) {
@@ -465,10 +461,10 @@ class SpdxLicenseWithExceptionExpression(
 
     override fun exception() = exception
 
-    override fun normalize(mapDeprecated: Boolean) =
+    override fun normalize(mapDeprecated: Boolean, mapSimple: Boolean) =
         // Manually cast to SpdxSingleLicenseExpression as the type resolver does not recognize that in all subclasses
         // of SpdxSimpleExpression normalize() returns an SpdxSingleLicenseExpression.
-        when (val normalizedLicense = license.normalize(mapDeprecated) as SpdxSingleLicenseExpression) {
+        when (val normalizedLicense = license.normalize(mapDeprecated, mapSimple) as SpdxSingleLicenseExpression) {
             is SpdxSimpleExpression -> SpdxLicenseWithExceptionExpression(normalizedLicense, exception)
 
             // This case happens if a deprecated license identifier that contains an exception is used together with
@@ -559,7 +555,8 @@ class SpdxLicenseIdExpression(
 
     override fun exception(): String? = null
 
-    override fun normalize(mapDeprecated: Boolean) = SpdxSimpleLicenseMapping.map(toString(), mapDeprecated) ?: this
+    override fun normalize(mapDeprecated: Boolean, mapSimple: Boolean) =
+        SpdxSimpleLicenseMapping.map(toString(), mapDeprecated, mapSimple) ?: this
 
     override fun validate(strictness: Strictness) {
         val isValid = SpdxConstants.isNotPresent(id) || when (strictness) {
@@ -612,7 +609,7 @@ data class SpdxLicenseReferenceExpression(
 
     override fun exception(): String? = null
 
-    override fun normalize(mapDeprecated: Boolean) = this
+    override fun normalize(mapDeprecated: Boolean, mapSimple: Boolean) = this
 
     override fun validate(strictness: Strictness) {
         val isLicenseRef = id.startsWith(LICENSE_REF_PREFIX)
@@ -638,3 +635,42 @@ data class SpdxLicenseReferenceExpression(
 
     override fun getLicenseUrl(): String? = null
 }
+
+/**
+ * Shortcut for [concat]([SpdxOperator.AND]).
+ */
+fun Collection<SpdxExpression>.and(): SpdxExpression = concat(SpdxOperator.AND)
+
+/**
+ * Shortcut for [concatOrNull]([SpdxOperator.AND]).
+ */
+fun Collection<SpdxExpression>.andOrNull(): SpdxExpression? = concatOrNull(SpdxOperator.AND)
+
+/**
+ * Shortcut for [concat]([SpdxOperator.OR]).
+ */
+fun Collection<SpdxExpression>.or(): SpdxExpression = concat(SpdxOperator.OR)
+
+/**
+ * Shortcut for [concatOrNull]([SpdxOperator.OR]).
+ */
+fun Collection<SpdxExpression>.orOrNull(): SpdxExpression? = concatOrNull(SpdxOperator.OR)
+
+/**
+ * Return an n-ary compound expression if this collection contains multiple expression, or the single expression in
+ * case this collection contains just a single element. Throws if the collection is empty.
+ */
+fun Collection<SpdxExpression>.concat(operator: SpdxOperator): SpdxExpression {
+    require(isNotEmpty()) {
+        "Cannot create a concatenated SPDX expression from an empty collection."
+    }
+
+    val distinctExpressions = distinct()
+    return distinctExpressions.singleOrNull() ?: SpdxCompoundExpression(operator, distinctExpressions)
+}
+
+/**
+ * Return null if this collection is empty or else the result of [concat].
+ */
+fun Collection<SpdxExpression>.concatOrNull(operator: SpdxOperator): SpdxExpression? =
+    takeIf { it.isNotEmpty() }?.concat(operator)

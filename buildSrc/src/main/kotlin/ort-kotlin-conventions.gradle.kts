@@ -65,13 +65,7 @@ testing {
             }
         }
 
-        register<JvmTestSuite>("funTest") {
-            sources {
-                kotlin {
-                    testType = TestSuiteType.FUNCTIONAL_TEST
-                }
-            }
-        }
+        register<JvmTestSuite>("funTest")
     }
 }
 
@@ -111,6 +105,8 @@ detekt {
 
 java {
     toolchain {
+        // Note that Gradle currently matches the Java language version exactly and does not consider (backward)
+        // compatibility between versions, see https://github.com/gradle/gradle/issues/16256.
         languageVersion = JavaLanguageVersion.of(javaLanguageVersion)
     }
 }
@@ -142,7 +138,7 @@ tasks.withType<Detekt>().configureEach detekt@{
     if (this != detekt.get()) mustRunAfter(detekt)
 
     exclude {
-        "/build/generated/" in it.file.absolutePath
+        "/build/generated/" in it.file.absoluteFile.invariantSeparatorsPath
     }
 
     reports {

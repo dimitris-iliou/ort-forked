@@ -23,18 +23,21 @@ import java.io.File
 
 import org.apache.logging.log4j.kotlin.logger
 
-import org.ossreviewtoolkit.analyzer.AbstractPackageManagerFactory
+import org.ossreviewtoolkit.analyzer.PackageManagerFactory
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
-import org.ossreviewtoolkit.model.config.RepositoryConfiguration
+import org.ossreviewtoolkit.model.config.Excludes
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
+import org.ossreviewtoolkit.plugins.api.OrtPlugin
+import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.packagemanagers.node.NodePackageManager
 import org.ossreviewtoolkit.plugins.packagemanagers.node.NodePackageManagerType
 import org.ossreviewtoolkit.plugins.packagemanagers.node.PackageJson
 import org.ossreviewtoolkit.plugins.packagemanagers.node.parsePackageJson
 import org.ossreviewtoolkit.utils.common.CommandLineTool
+import org.ossreviewtoolkit.utils.common.DirectoryStash
 import org.ossreviewtoolkit.utils.common.Os
-import org.ossreviewtoolkit.utils.common.stashDirectories
+import org.ossreviewtoolkit.utils.common.nextOrNull
 
 import org.semver4j.RangesList
 import org.semver4j.RangesListFactory
@@ -48,33 +51,45 @@ internal object PnpmCommand : CommandLineTool {
 /**
  * The [fast, disk space efficient package manager](https://pnpm.io/).
  */
-class Pnpm(
-    name: String,
-    analysisRoot: File,
-    analyzerConfig: AnalyzerConfiguration,
-    repoConfig: RepositoryConfiguration
-) : NodePackageManager(name, NodePackageManagerType.PNPM, analysisRoot, analyzerConfig, repoConfig) {
-    class Factory : AbstractPackageManagerFactory<Pnpm>("PNPM") {
-        override val globsForDefinitionFiles = listOf(NodePackageManagerType.DEFINITION_FILE, "pnpm-lock.yaml")
+@OrtPlugin(
+    id = "PNPM",
+    displayName = "PNPM",
+    description = "The PNPM package manager for Node.js.",
+    factory = PackageManagerFactory::class
+)
+class Pnpm(override val descriptor: PluginDescriptor = PnpmFactory.descriptor) :
+    NodePackageManager(NodePackageManagerType.PNPM) {
+    override val globsForDefinitionFiles = listOf(NodePackageManagerType.DEFINITION_FILE)
 
-        override fun create(
-            analysisRoot: File,
-            analyzerConfig: AnalyzerConfiguration,
-            repoConfig: RepositoryConfiguration
-        ) = Pnpm(type, analysisRoot, analyzerConfig, repoConfig)
-    }
+    private lateinit var stash: DirectoryStash
 
     private val packageDetailsCache = mutableMapOf<String, PackageJson>()
     private val handler = PnpmDependencyHandler(projectType, this::getRemotePackageDetails)
 
     override val graphBuilder by lazy { DependencyGraphBuilder(handler) }
 
-    override fun resolveDependencies(definitionFile: File, labels: Map<String, String>): List<ProjectAnalyzerResult> =
-        stashDirectories(definitionFile.resolveSibling("node_modules")).use {
-            resolveDependencies(definitionFile)
-        }
+    override fun beforeResolution(
+        analysisRoot: File,
+        definitionFiles: List<File>,
+        analyzerConfig: AnalyzerConfiguration
+    ) {
+        PnpmCommand.checkVersion()
 
-    private fun resolveDependencies(definitionFile: File): List<ProjectAnalyzerResult> {
+        val directories = definitionFiles.mapTo(mutableSetOf()) { it.resolveSibling("node_modules") }
+        stash = DirectoryStash(directories)
+    }
+
+    override fun afterResolution(analysisRoot: File, definitionFiles: List<File>) {
+        stash.close()
+    }
+
+    override fun resolveDependencies(
+        analysisRoot: File,
+        definitionFile: File,
+        excludes: Excludes,
+        analyzerConfig: AnalyzerConfiguration,
+        labels: Map<String, String>
+    ): List<ProjectAnalyzerResult> {
         val workingDir = definitionFile.parentFile
         installDependencies(workingDir)
 
@@ -109,7 +124,8 @@ class Pnpm(
         val json = PnpmCommand.run(workingDir, "list", "--json", "--only-projects", "--recursive").requireSuccess()
             .stdout
 
-        return parsePnpmList(json).mapTo(mutableSetOf()) { File(it.path) }
+        val listResult = parsePnpmList(json)
+        return listResult.findModulesFor(workingDir).mapTo(mutableSetOf()) { File(it.path) }
     }
 
     private fun listModules(workingDir: File, scope: Scope): List<ModuleInfo> {
@@ -121,7 +137,7 @@ class Pnpm(
         val json = PnpmCommand.run(workingDir, "list", "--json", "--recursive", "--depth", "Infinity", scopeOption)
             .requireSuccess().stdout
 
-        return parsePnpmList(json)
+        return parsePnpmList(json).flatten().toList()
     }
 
     private fun installDependencies(workingDir: File) =
@@ -132,11 +148,6 @@ class Pnpm(
             "--frozen-lockfile", // Use the existing lockfile instead of updating an outdated one.
             workingDir = workingDir
         ).requireSuccess()
-
-    override fun beforeResolution(definitionFiles: List<File>) =
-        // We do not actually depend on any features specific to a PNPM version, but we still want to stick to a
-        // fixed major version to be sure to get consistent results.
-        PnpmCommand.checkVersion()
 
     internal fun getRemotePackageDetails(packageName: String): PackageJson? {
         packageDetailsCache[packageName]?.let { return it }
@@ -167,3 +178,21 @@ private fun ModuleInfo.getScopeDependencies(scope: Scope) =
 
         Scope.DEV_DEPENDENCIES -> devDependencies.values.toList()
     }
+
+/**
+ * Find the [List] of [ModuleInfo] objects for the project in the given [workingDir]. If there are nested projects,
+ * the `pnpm list` command yields multiple arrays with modules. In this case, only the top-level project should be
+ * analyzed. This function tries to detect the corresponding [ModuleInfo]s based on the [workingDir]. If this is not
+ * possible, as a fallback the first list of [ModuleInfo] objects is returned.
+ */
+private fun Sequence<List<ModuleInfo>>.findModulesFor(workingDir: File): List<ModuleInfo> {
+    val moduleInfoIterator = iterator()
+    val first = moduleInfoIterator.nextOrNull() ?: return emptyList()
+
+    fun List<ModuleInfo>.matchesWorkingDir() = any { File(it.path).absoluteFile == workingDir }
+
+    fun findMatchingModules(): List<ModuleInfo>? =
+        moduleInfoIterator.nextOrNull()?.takeIf { it.matchesWorkingDir() } ?: findMatchingModules()
+
+    return first.takeIf { it.matchesWorkingDir() } ?: findMatchingModules() ?: first
+}

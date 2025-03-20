@@ -45,21 +45,22 @@ class DependencyGraphNavigator(
     override fun scopeNames(project: Project): Set<String> = project.scopeNames.orEmpty()
 
     override fun directDependencies(project: Project, scopeName: String): Sequence<DependencyNode> {
-        // TODO: Relax this assumption that package manager names start with the name of the type of project
-        //       they manage, for example that "GradleInspector" manages "Gradle" projects.
-        val managers = graphs.keys.filter { it.startsWith(project.id.type) }
-
-        val manager = requireNotNull(managers.singleOrNull()) {
-            "All of the $managers managers are able to manage '${project.id.type}' projects. Please enable only one " +
-                "of them."
+        // Collect all root indices for all managers whose graphs have projects of the respective type.
+        val rootIndicesForGraphs = graphs.mapNotNull { (managerName, graph) ->
+            graph.scopes[DependencyGraph.qualifyScope(project.id, scopeName)]?.let { Triple(managerName, graph, it) }
         }
 
-        val graph = requireNotNull(graphs[manager]) {
-            "No DependencyGraph for package manager '$manager' available."
+        if (rootIndicesForGraphs.isEmpty()) return emptySequence()
+
+        // TODO: Consider extending the signature of this function to also take a manager name, so that the dependencies
+        //       for that manager could be obtained without "guessing" which of the managers created the project.
+        val (managerName, graph, rootIndices) = requireNotNull(rootIndicesForGraphs.singleOrNull()) {
+            val managerNames = rootIndicesForGraphs.map { (managerName, _, _) -> managerName }
+            "All of the $managerNames managers are able to manage '${project.id.type}' projects. Please enable only " +
+                "one of them."
         }
 
-        val rootIndices = graph.scopes[DependencyGraph.qualifyScope(project, scopeName)].orEmpty()
-        return dependenciesAccessor(manager, graph, rootIndices)
+        return dependenciesAccessor(managerName, graph, rootIndices)
     }
 
     fun dependenciesAccessor(

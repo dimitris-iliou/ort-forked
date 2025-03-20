@@ -17,11 +17,9 @@
  * License-Filename: LICENSE
  */
 
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-
 plugins {
     // Apply precompiled plugins.
-    id("ort-library-conventions")
+    id("ort-plugin-conventions")
 }
 
 dependencies {
@@ -32,22 +30,15 @@ dependencies {
     implementation(projects.utils.commonUtils)
     implementation(projects.utils.spdxUtils)
 
-    implementation(libs.kotlinx.coroutines)
     implementation(libs.scanoss) {
         exclude(group = "org.slf4j", module = "slf4j-simple")
             .because("the logging provider conflicts with ORT's")
     }
 
+    ksp(projects.scanner)
+
     funTestApi(testFixtures(projects.scanner))
 
-    testImplementation(libs.kotlinx.serialization.core)
-    testImplementation(libs.kotlinx.serialization.json)
     testImplementation(libs.mockk)
     testImplementation(libs.wiremock)
-}
-
-tasks.named<KotlinCompile>("compileTestKotlin") {
-    compilerOptions {
-        optIn = listOf("kotlinx.serialization.ExperimentalSerializationApi")
-    }
 }

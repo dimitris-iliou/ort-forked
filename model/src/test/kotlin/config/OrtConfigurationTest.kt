@@ -241,8 +241,8 @@ class OrtConfigurationTest : WordSpec({
                 config shouldNotBeNull {
                     get("ScanCode") shouldNotBeNull {
                         options shouldContainExactly mapOf(
-                            "commandLine" to "--copyright --license --info --strip-root --timeout 300",
-                            "commandLineNonConfig" to "--processes 4",
+                            "commandLine" to "--copyright,--license,--info,--strip-root,--timeout,300",
+                            "commandLineNonConfig" to "--processes,4",
                             "preferFileLicense" to "false",
                             "minVersion" to "3.2.1-rc2",
                             "maxVersion" to "32.0.0"
@@ -372,7 +372,7 @@ class OrtConfigurationTest : WordSpec({
 
             with(ortConfig.reporter) {
                 config shouldNotBeNull {
-                    keys shouldContainExactlyInAnyOrder setOf("CycloneDx", "FossId")
+                    keys shouldContainExactlyInAnyOrder setOf("CycloneDx", "FossId", "CtrlXAutomation")
 
                     get("CycloneDx") shouldNotBeNull {
                         options shouldContainExactly mapOf(
@@ -390,6 +390,13 @@ class OrtConfigurationTest : WordSpec({
                             "apiKey" to "XYZ"
                         )
                     }
+
+                    get("CtrlXAutomation") shouldNotBeNull {
+                        options shouldContainExactly mapOf(
+                            "licenseCategoriesToInclude" to "include-in-disclosure-document"
+                        )
+                        secrets should beEmpty()
+                    }
                 }
             }
 
@@ -404,7 +411,7 @@ class OrtConfigurationTest : WordSpec({
                 }
 
                 jira shouldNotBeNull {
-                    host shouldBe "localhost"
+                    host shouldBe "http://localhost"
                     username shouldBe "user"
                     password shouldBe "password"
                 }

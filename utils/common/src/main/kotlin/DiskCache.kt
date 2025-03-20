@@ -21,8 +21,10 @@ package org.ossreviewtoolkit.utils.common
 
 import com.jakewharton.disklrucache.DiskLruCache
 
+import java.io.Closeable
 import java.io.File
 import java.io.IOException
+import java.time.Instant
 
 import kotlin.math.pow
 
@@ -46,7 +48,7 @@ class DiskCache(
      * Duration in seconds that cache entries are valid.
      */
     private val maxCacheEntryAgeInSeconds: Long
-) {
+) : Closeable {
     companion object {
         const val INDEX_FULL_KEY = 0
         const val INDEX_TIMESTAMP = 1
@@ -114,7 +116,7 @@ class DiskCache(
         try {
             diskLruCache[diskKey]?.use { entry ->
                 val time = entry.getString(INDEX_TIMESTAMP).toLong()
-                if (time + maxCacheEntryAgeInSeconds >= currentTimeInSeconds()) {
+                if (time + maxCacheEntryAgeInSeconds >= Instant.now().epochSecond) {
                     return entry.getString(INDEX_DATA)
                 }
             }
@@ -133,7 +135,7 @@ class DiskCache(
         try {
             diskLruCache.edit(diskKey).apply {
                 set(INDEX_FULL_KEY, key)
-                set(INDEX_TIMESTAMP, currentTimeInSeconds().toString())
+                set(INDEX_TIMESTAMP, Instant.now().epochSecond.toString())
                 set(INDEX_DATA, data)
                 commit()
             }
@@ -146,5 +148,7 @@ class DiskCache(
         return false
     }
 
-    private fun currentTimeInSeconds() = System.currentTimeMillis() / 1000L
+    override fun close() {
+        diskLruCache.close()
+    }
 }

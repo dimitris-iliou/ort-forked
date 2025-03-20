@@ -18,9 +18,9 @@ It can be further processed or manually edited before passing it to one of the o
 Currently, the following package managers (grouped by the programming language they are most commonly used with) are supported:
 
 * C / C++
-  * [Bazel](https://bazel.build/) (**experimental**) (limitations: see [open tasks](https://github.com/oss-review-toolkit/ort/issues/264))
+  * [Bazel](https://bazel.build/) (limitations: see [open tasks](https://github.com/oss-review-toolkit/ort/issues/264))
   * [Conan 1.x](https://conan.io/)
-  * Also see: [SPDX documents](#analyzer-for-spdx-documents)
+  * Also see: [SPDX documents](#spdx-as-fallback-package-manager)
 * Dart / Flutter
   * [Pub](https://pub.dev/)
 * Go
@@ -29,28 +29,20 @@ Currently, the following package managers (grouped by the programming language t
   * [Stack](https://haskellstack.org/)
 * Java
   * [Gradle](https://gradle.org/)
-  * [Maven](https://maven.apache.org/) (limitations:
-    [default profile only](https://github.com/oss-review-toolkit/ort/issues/1774))
+  * [Maven](https://maven.apache.org/) (limitations: [default profile only](https://github.com/oss-review-toolkit/ort/issues/1774))
+    * Including the [Tycho](https://tycho.eclipseprojects.io/doc/main/index.html) extension for building OSGi bundles and Eclipse IDE plug-ins.
 * JavaScript / Node.js
   * [Bower](https://bower.io/)
-  * [NPM](https://www.npmjs.com/) (limitations:
-    [no peer dependencies](https://github.com/oss-review-toolkit/ort/issues/95))
-  * [PNPM](https://pnpm.io/) (limitations:
-    [no peer dependencies](https://github.com/oss-review-toolkit/ort/issues/95))
+  * [NPM](https://www.npmjs.com/)
+  * [PNPM](https://pnpm.io/)
   * [Yarn 1](https://classic.yarnpkg.com/)
   * [Yarn 2+](https://v2.yarnpkg.com/)
 * .NET
-  * [DotNet](https://docs.microsoft.com/en-us/dotnet/core/tools/) (limitations:
-    [no floating versions / ranges](https://github.com/oss-review-toolkit/ort/pull/1303#issue-253860146),
-    [no target framework](https://github.com/oss-review-toolkit/ort/issues/4083))
-  * [NuGet](https://www.nuget.org/) (limitations:
-    [no floating versions / ranges](https://github.com/oss-review-toolkit/ort/pull/1303#issue-253860146),
-    [no target framework](https://github.com/oss-review-toolkit/ort/issues/4083))
+  * [DotNet](https://docs.microsoft.com/en-us/dotnet/core/tools/) (limitations: [no floating versions / ranges](https://github.com/oss-review-toolkit/ort/pull/1303#issue-253860146), [no target framework](https://github.com/oss-review-toolkit/ort/issues/4083))
+  * [NuGet](https://www.nuget.org/) (limitations: [no floating versions / ranges](https://github.com/oss-review-toolkit/ort/pull/1303#issue-253860146), [no target framework](https://github.com/oss-review-toolkit/ort/issues/4083))
 * Objective-C / Swift
-  * [Carthage](https://github.com/Carthage/Carthage) (limitation:
-    [no `cartfile.private`](https://github.com/oss-review-toolkit/ort/issues/3774))
-  * [CocoaPods](https://github.com/CocoaPods/CocoaPods) (limitations:
-    [no custom source repositories](https://github.com/oss-review-toolkit/ort/issues/4188))
+  * [Carthage](https://github.com/Carthage/Carthage) (limitation: [no `cartfile.private`](https://github.com/oss-review-toolkit/ort/issues/3774))
+  * [CocoaPods](https://github.com/CocoaPods/CocoaPods) (limitations: [no custom source repositories](https://github.com/oss-review-toolkit/ort/issues/4188))
   * [SwiftPM](https://www.swift.org/package-manager)
 * PHP
   * [Composer](https://getcomposer.org/)
@@ -59,8 +51,7 @@ Currently, the following package managers (grouped by the programming language t
   * [Pipenv](https://pipenv.pypa.io/en/latest/)
   * [Poetry](https://python-poetry.org/)
 * Ruby
-  * [Bundler](https://bundler.io/) (limitations:
-    [restricted to the version available on the host](https://github.com/oss-review-toolkit/ort/issues/1308))
+  * [Bundler](https://bundler.io/) (limitations: [restricted to the version available on the host](https://github.com/oss-review-toolkit/ort/issues/1308))
 * Rust
   * [Cargo](https://doc.rust-lang.org/cargo/)
 * Scala
@@ -68,6 +59,6 @@ Currently, the following package managers (grouped by the programming language t
 * Unmanaged
   * This is a special "package manager" that manages all files that cannot be associated with any of the other package managers.
 
-<a name="analyzer-for-spdx-documents"></a>
+## SPDX as Fallback Package Manager
 
 If another package manager that is not part of the list above is used (or no package manager at all), the generic fallback to [SPDX documents](https://spdx.dev/specifications/) can be leveraged to describe [projects](https://github.com/oss-review-toolkit/ort/blob/main/plugins/package-managers/spdx/src/funTest/assets/projects/synthetic/inline-packages/project-xyz.spdx.yml) or [packages](https://github.com/oss-review-toolkit/ort/blob/main/plugins/package-managers/spdx/src/funTest/assets/projects/synthetic/libs/curl/package.spdx.yml).

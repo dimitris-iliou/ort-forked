@@ -35,22 +35,25 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.apache.logging.log4j.kotlin.logger
 import org.apache.logging.log4j.kotlin.loggerOf
 
-import org.ossreviewtoolkit.analyzer.AbstractPackageManagerFactory
+import org.ossreviewtoolkit.analyzer.PackageManagerFactory
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.Issue
 import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
-import org.ossreviewtoolkit.model.config.RepositoryConfiguration
+import org.ossreviewtoolkit.model.config.Excludes
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.readTree
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
+import org.ossreviewtoolkit.plugins.api.OrtPlugin
+import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.packagemanagers.node.NodePackageManager
 import org.ossreviewtoolkit.plugins.packagemanagers.node.NodePackageManagerType
 import org.ossreviewtoolkit.plugins.packagemanagers.node.PackageJson
 import org.ossreviewtoolkit.plugins.packagemanagers.node.parsePackageJson
 import org.ossreviewtoolkit.plugins.packagemanagers.node.splitNamespaceAndName
 import org.ossreviewtoolkit.utils.common.CommandLineTool
+import org.ossreviewtoolkit.utils.common.DirectoryStash
 import org.ossreviewtoolkit.utils.common.DiskCache
 import org.ossreviewtoolkit.utils.common.Os
 import org.ossreviewtoolkit.utils.common.alsoIfNull
@@ -59,7 +62,6 @@ import org.ossreviewtoolkit.utils.common.fieldNamesOrEmpty
 import org.ossreviewtoolkit.utils.common.isSymbolicLink
 import org.ossreviewtoolkit.utils.common.mebibytes
 import org.ossreviewtoolkit.utils.common.realFile
-import org.ossreviewtoolkit.utils.common.stashDirectories
 import org.ossreviewtoolkit.utils.common.textValueOrEmpty
 import org.ossreviewtoolkit.utils.ort.ortDataDirectory
 
@@ -90,21 +92,16 @@ internal object YarnCommand : CommandLineTool {
 /**
  * The [Yarn](https://classic.yarnpkg.com/) package manager for JavaScript.
  */
-open class Yarn(
-    name: String,
-    analysisRoot: File,
-    analyzerConfig: AnalyzerConfiguration,
-    repoConfig: RepositoryConfiguration
-) : NodePackageManager(name, NodePackageManagerType.YARN, analysisRoot, analyzerConfig, repoConfig) {
-    class Factory : AbstractPackageManagerFactory<Yarn>("Yarn") {
-        override val globsForDefinitionFiles = listOf(NodePackageManagerType.DEFINITION_FILE)
+@OrtPlugin(
+    displayName = "Yarn",
+    description = "The Yarn package manager for JavaScript.",
+    factory = PackageManagerFactory::class
+)
+open class Yarn(override val descriptor: PluginDescriptor = YarnFactory.descriptor) :
+    NodePackageManager(NodePackageManagerType.YARN) {
+    override val globsForDefinitionFiles = listOf(NodePackageManagerType.DEFINITION_FILE)
 
-        override fun create(
-            analysisRoot: File,
-            analyzerConfig: AnalyzerConfiguration,
-            repoConfig: RepositoryConfiguration
-        ) = Yarn(type, analysisRoot, analyzerConfig, repoConfig)
-    }
+    private lateinit var stash: DirectoryStash
 
     /** Cache for submodules identified by its moduleDir absolutePath */
     private val submodulesCache = ConcurrentHashMap<String, Set<File>>()
@@ -131,27 +128,38 @@ open class Yarn(
         }
     }
 
-    override fun beforeResolution(definitionFiles: List<File>) =
-        // We do not actually depend on any features specific to a Yarn version, but we still want to stick to a
-        // fixed minor version to be sure to get consistent results.
+    override fun beforeResolution(
+        analysisRoot: File,
+        definitionFiles: List<File>,
+        analyzerConfig: AnalyzerConfiguration
+    ) {
         YarnCommand.checkVersion()
 
-    override fun resolveDependencies(definitionFile: File, labels: Map<String, String>): List<ProjectAnalyzerResult> {
-        val workingDir = definitionFile.parentFile
+        val directories = definitionFiles.mapTo(mutableSetOf()) { it.resolveSibling("node_modules") }
+        stash = DirectoryStash(directories)
+    }
 
-        return try {
-            stashDirectories(workingDir.resolve("node_modules")).use {
-                resolveDependenciesInternal(definitionFile)
-            }
+    override fun afterResolution(analysisRoot: File, definitionFiles: List<File>) {
+        stash.close()
+    }
+
+    override fun resolveDependencies(
+        analysisRoot: File,
+        definitionFile: File,
+        excludes: Excludes,
+        analyzerConfig: AnalyzerConfiguration,
+        labels: Map<String, String>
+    ): List<ProjectAnalyzerResult> =
+        try {
+            resolveDependenciesInternal(analysisRoot, definitionFile, excludes, analyzerConfig.allowDynamicVersions)
         } finally {
             rawModuleInfoCache.clear()
         }
-    }
 
     /**
      * An internally used data class with information about a module retrieved from the module's package.json. This
-     * information is further processed and eventually converted to an [NpmModuleInfo] object containing everything
-     * required by the Npm package manager.
+     * information is further processed and eventually converted to an [ModuleInfo] object containing everything
+     * required by the Yarn package manager.
      */
     private data class RawModuleInfo(
         val name: String,
@@ -161,11 +169,16 @@ open class Yarn(
     )
 
     // TODO: Add support for bundledDependencies.
-    private fun resolveDependenciesInternal(definitionFile: File): List<ProjectAnalyzerResult> {
+    private fun resolveDependenciesInternal(
+        analysisRoot: File,
+        definitionFile: File,
+        excludes: Excludes,
+        allowDynamicVersions: Boolean
+    ): List<ProjectAnalyzerResult> {
         val workingDir = definitionFile.parentFile
-        installDependencies(workingDir)
+        installDependencies(analysisRoot, workingDir, allowDynamicVersions)
 
-        val projectDirs = findWorkspaceSubmodules(workingDir).toSet() + definitionFile.parentFile
+        val projectDirs = findWorkspaceSubmodules(workingDir) + definitionFile.parentFile
 
         return projectDirs.map { projectDir ->
             val issues = mutableListOf<Issue>()
@@ -174,25 +187,23 @@ open class Yarn(
                 val packageJsonFile = projectDir.resolve(NodePackageManagerType.DEFINITION_FILE)
                 parseProject(packageJsonFile, analysisRoot)
             }.getOrElse {
-                issues += createAndLogIssue(
-                    source = managerName,
-                    message = "Failed to parse project information: ${it.collectMessages()}"
-                )
+                issues += createAndLogIssue("Failed to parse project information: ${it.collectMessages()}")
 
                 Project.EMPTY
             }
 
             val scopeNames = setOfNotNull(
-                // Optional dependencies are just like regular dependencies except that NPM ignores failures when
-                // installing them (see https://docs.npmjs.com/files/package.json#optionaldependencies), i.e. they are
-                // not a separate scope in ORT semantics.
+                // Optional dependencies are just like regular dependencies except that Yarn ignores failures when
+                // installing them (see https://classic.yarnpkg.com/en/docs/package-json#toc-optionaldependencies), i.e.
+                // they are not a separate scope in ORT semantics.
                 buildDependencyGraphForScopes(
                     project,
                     projectDir,
                     setOf(DEPENDENCIES_SCOPE, OPTIONAL_DEPENDENCIES_SCOPE),
                     DEPENDENCIES_SCOPE,
                     projectDirs,
-                    workspaceDir = workingDir
+                    workspaceDir = workingDir,
+                    excludes = excludes
                 ),
 
                 buildDependencyGraphForScopes(
@@ -201,7 +212,8 @@ open class Yarn(
                     setOf(DEV_DEPENDENCIES_SCOPE),
                     DEV_DEPENDENCIES_SCOPE,
                     projectDirs,
-                    workspaceDir = workingDir
+                    workspaceDir = workingDir,
+                    excludes = excludes
                 )
             )
 
@@ -220,10 +232,12 @@ open class Yarn(
         projectDirs: Set<File>,
         ancestorModuleDirs: List<File> = emptyList(),
         ancestorModuleIds: List<Identifier> = emptyList()
-    ): NpmModuleInfo? {
+    ): ModuleInfo? {
         val moduleInfo = parsePackageJson(moduleDir, scopes)
-        val dependencies = mutableSetOf<NpmModuleInfo>()
-        val packageType = managerName.takeIf { moduleDir.realFile() in projectDirs } ?: "NPM"
+        val dependencies = mutableSetOf<ModuleInfo>()
+
+        val isProject = moduleDir.realFile() in projectDirs
+        val packageType = if (isProject) projectType else "NPM"
 
         val moduleId = splitNamespaceAndName(moduleInfo.name).let { (namespace, name) ->
             Identifier(packageType, namespace, name, moduleInfo.version)
@@ -246,11 +260,11 @@ open class Yarn(
 
                 getModuleInfo(
                     moduleDir = dependencyModuleDir,
-                    scopes = setOf("dependencies", "optionalDependencies"),
+                    scopes = setOf(DEPENDENCIES_SCOPE, OPTIONAL_DEPENDENCIES_SCOPE),
                     projectDirs,
                     ancestorModuleDirs = dependencyModuleDirPath.subList(1, dependencyModuleDirPath.size),
                     ancestorModuleIds = ancestorModuleIds + moduleId
-                )?.let { dependencies += it }
+                )?.also { dependencies += it }
 
                 return@forEach
             }
@@ -262,12 +276,12 @@ open class Yarn(
             }
         }
 
-        return NpmModuleInfo(
+        return ModuleInfo(
             id = moduleId,
             workingDir = moduleDir,
             packageFile = moduleInfo.packageJson,
             dependencies = dependencies,
-            isProject = moduleDir.realFile() in projectDirs
+            isProject = isProject
         )
     }
 
@@ -281,7 +295,8 @@ open class Yarn(
         scopes: Set<String>,
         targetScope: String,
         projectDirs: Set<File>,
-        workspaceDir: File? = null
+        workspaceDir: File? = null,
+        excludes: Excludes
     ): String? {
         if (excludes.isScopeExcluded(targetScope)) return null
 
@@ -333,14 +348,14 @@ open class Yarn(
             loadWorkspaceSubmodules(moduleDir)
         }
 
-    private fun installDependencies(workingDir: File) {
-        requireLockfile(workingDir) { managerType.hasLockfile(workingDir) }
+    private fun installDependencies(analysisRoot: File, workingDir: File, allowDynamicVersions: Boolean) {
+        requireLockfile(analysisRoot, workingDir, allowDynamicVersions) { managerType.hasLockfile(workingDir) }
 
         YarnCommand.run(workingDir, "install", "--ignore-scripts", "--ignore-engines", "--immutable").requireSuccess()
     }
 
     internal fun getRemotePackageDetails(packageName: String): PackageJson? {
-        yarnInfoCache.read(packageName)?.let { return parsePackageJson(it) }
+        yarnInfoCache.read(packageName)?.also { return parsePackageJson(it) }
 
         val process = YarnCommand.run("info", "--json", packageName).requireSuccess()
 

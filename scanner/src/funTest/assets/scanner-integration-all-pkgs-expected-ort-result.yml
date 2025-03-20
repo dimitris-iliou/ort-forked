@@ -25,6 +25,7 @@ analyzer:
     tool_versions: {}
   config:
     allow_dynamic_versions: false
+    enabled_package_managers: []
     skip_excluded: false
   result:
     projects:
@@ -197,6 +198,7 @@ scanner:
   config:
     skip_concluded: false
     skip_excluded: false
+    include_files_without_findings: false
     detected_license_mapping:
       LicenseRef-scancode-agpl-generic-additional-terms: "NOASSERTION"
       LicenseRef-scancode-free-unknown: "NOASSERTION"
@@ -289,7 +291,7 @@ scanner:
   - id: "Dummy::project:1.0.0"
     package_provenance_resolution_issue:
       timestamp: "1970-01-01T00:00:00Z"
-      source: "scanner"
+      source: "Scanner"
       message: "IOException: Could not resolve provenance for package 'Dummy::project:1.0.0'\
         \ for source code origins [VCS, ARTIFACT]."
       severity: "ERROR"

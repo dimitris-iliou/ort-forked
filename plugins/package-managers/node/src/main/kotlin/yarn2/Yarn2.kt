@@ -31,7 +31,7 @@ import kotlinx.coroutines.awaitAll
 
 import org.apache.logging.log4j.kotlin.logger
 
-import org.ossreviewtoolkit.analyzer.AbstractPackageManagerFactory
+import org.ossreviewtoolkit.analyzer.PackageManagerFactory
 import org.ossreviewtoolkit.analyzer.parseAuthorString
 import org.ossreviewtoolkit.downloader.VcsHost
 import org.ossreviewtoolkit.downloader.VersionControlSystem
@@ -46,11 +46,13 @@ import org.ossreviewtoolkit.model.RemoteArtifact
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
-import org.ossreviewtoolkit.model.config.PackageManagerConfiguration
-import org.ossreviewtoolkit.model.config.RepositoryConfiguration
+import org.ossreviewtoolkit.model.config.Excludes
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
 import org.ossreviewtoolkit.model.utils.DependencyHandler
+import org.ossreviewtoolkit.plugins.api.OrtPlugin
+import org.ossreviewtoolkit.plugins.api.OrtPluginOption
+import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.packagemanagers.node.NodePackageManager
 import org.ossreviewtoolkit.plugins.packagemanagers.node.NodePackageManagerType
 import org.ossreviewtoolkit.plugins.packagemanagers.node.PackageJson
@@ -89,45 +91,9 @@ private enum class YarnDependencyType(val type: String) {
     DEV_DEPENDENCIES("devDependencies")
 }
 
-/**
- * The [Yarn 2+](https://v2.yarnpkg.com/) package manager for JavaScript.
- *
- * This package manager supports the following [options][PackageManagerConfiguration.options]:
- * - *disableRegistryCertificateVerification*: If true, the `yarn npm info` commands called by this package manager will
- *   not verify the server certificate of the HTTPS connection to the NPM registry. This allows to replace the latter by
- *   a local one, e.g. for intercepting the requests or replaying them.
- * - *corepackOverride*: Per default, this class determines via auto-detection whether Yarn has been installed via
- *   [Corepack](https://yarnpkg.com/corepack), which impacts the name of the executable to use. With this option,
- *   auto-detection can be disabled, and the enabled status of Corepack can be explicitly specified. This is useful to
- *   force a specific behavior in some environments.
- */
-class Yarn2(
-    name: String,
-    analysisRoot: File,
-    analyzerConfig: AnalyzerConfiguration,
-    repoConfig: RepositoryConfiguration
-) : NodePackageManager(name, NodePackageManagerType.YARN2, analysisRoot, analyzerConfig, repoConfig), CommandLineTool {
-    companion object {
-        /**
-         * The name of the option to disable HTTPS server certificate verification.
-         */
-        const val OPTION_DISABLE_REGISTRY_CERTIFICATE_VERIFICATION = "disableRegistryCertificateVerification"
-
-        /**
-         * The name of the option that allows overriding the automatic detection of Corepack.
-         */
-        const val OPTION_COREPACK_OVERRIDE = "corepackOverride"
-    }
-
-    class Factory : AbstractPackageManagerFactory<Yarn2>("Yarn2") {
-        override val globsForDefinitionFiles = listOf(NodePackageManagerType.DEFINITION_FILE)
-
-        override fun create(
-            analysisRoot: File,
-            analyzerConfig: AnalyzerConfiguration,
-            repoConfig: RepositoryConfiguration
-        ) = Yarn2(type, analysisRoot, analyzerConfig, repoConfig)
-    }
+internal class Yarn2Command(private val enableCorepack: Boolean?) : CommandLineTool {
+    @Suppress("Unused") // The no-arg constructor is required by the requirements command.
+    constructor() : this(null)
 
     /**
      * The Yarn 2+ executable is not installed globally: The program shipped by the project in `.yarn/releases` is used
@@ -137,21 +103,6 @@ class Yarn2(
      * been installed via Corepack; then it is accessed under a default name.
      */
     private val yarn2ExecutablesByPath: MutableMap<File, File> = mutableMapOf()
-
-    private val disableRegistryCertificateVerification =
-        options[OPTION_DISABLE_REGISTRY_CERTIFICATE_VERIFICATION].toBoolean()
-
-    // All the packages parsed by this package manager, mapped by their ids.
-    private val allPackages = mutableMapOf<Identifier, Package>()
-
-    // All the projects parsed by this package manager, mapped by their ids.
-    private val allProjects = mutableMapOf<Identifier, Project>()
-
-    // The issues that have been found when resolving the dependencies.
-    private val issues = mutableListOf<Issue>()
-
-    // A builder to build the dependency graph of the project.
-    override val graphBuilder = DependencyGraphBuilder(Yarn2DependencyHandler())
 
     override fun command(workingDir: File?): String {
         if (workingDir == null) return ""
@@ -170,18 +121,66 @@ class Yarn2(
 
     override fun getVersionRequirement(): RangesList = RangesListFactory.create(">=2.0.0")
 
-    private fun isCorepackEnabled(workingDir: File): Boolean =
-        if (OPTION_COREPACK_OVERRIDE in options) {
-            options[OPTION_COREPACK_OVERRIDE].toBoolean()
-        } else {
-            isCorepackEnabledInManifest(workingDir)
-        }
+    private fun isCorepackEnabled(workingDir: File): Boolean = enableCorepack ?: isCorepackEnabledInManifest(workingDir)
+}
 
-    override fun beforeResolution(definitionFiles: List<File>) =
-        // We depend on a version >= 2, so we check the version for safety.
-        definitionFiles.forEach { checkVersion(it.parentFile) }
+data class Yarn2Config(
+    /**
+     * If true, the `yarn npm info` commands called by this package manager will not verify the server certificate of
+     * the HTTPS connection to the NPM registry. This allows replacing the latter by a local one, e.g., for intercepting
+     * the requests or replaying them.
+     */
+    @OrtPluginOption(defaultValue = "false")
+    val disableRegistryCertificateVerification: Boolean,
 
-    override fun resolveDependencies(definitionFile: File, labels: Map<String, String>): List<ProjectAnalyzerResult> {
+    /**
+     * Per default, this class determines via auto-detection whether Yarn has been installed via
+     * [Corepack](https://yarnpkg.com/corepack), which impacts the name of the executable to use. With this option,
+     * auto-detection can be disabled, and the enabled status of Corepack can be explicitly specified. This is useful to
+     * force a specific behavior in some environments.
+     */
+    val corepackOverride: Boolean?
+)
+
+/**
+ * The [Yarn 2+](https://v2.yarnpkg.com/) package manager for JavaScript.
+ */
+@OrtPlugin(
+    displayName = "Yarn 2+",
+    description = "The Yarn 2+ package manager for JavaScript.",
+    factory = PackageManagerFactory::class
+)
+class Yarn2(override val descriptor: PluginDescriptor = Yarn2Factory.descriptor, private val config: Yarn2Config) :
+    NodePackageManager(NodePackageManagerType.YARN2) {
+    override val globsForDefinitionFiles = listOf(NodePackageManagerType.DEFINITION_FILE)
+
+    // All the packages parsed by this package manager, mapped by their ids.
+    private val allPackages = mutableMapOf<Identifier, Package>()
+
+    // All the projects parsed by this package manager, mapped by their ids.
+    private val allProjects = mutableMapOf<Identifier, Project>()
+
+    internal val yarn2Command = Yarn2Command(config.corepackOverride)
+
+    // The issues that have been found when resolving the dependencies.
+    private val issues = mutableListOf<Issue>()
+
+    // A builder to build the dependency graph of the project.
+    override val graphBuilder = DependencyGraphBuilder(Yarn2DependencyHandler())
+
+    override fun beforeResolution(
+        analysisRoot: File,
+        definitionFiles: List<File>,
+        analyzerConfig: AnalyzerConfiguration
+    ) = definitionFiles.forEach { yarn2Command.checkVersion(it.parentFile) }
+
+    override fun resolveDependencies(
+        analysisRoot: File,
+        definitionFile: File,
+        excludes: Excludes,
+        analyzerConfig: AnalyzerConfiguration,
+        labels: Map<String, String>
+    ): List<ProjectAnalyzerResult> {
         val workingDir = definitionFile.parentFile
         installDependencies(workingDir)
 
@@ -192,7 +191,7 @@ class Yarn2(
             moduleIds = packageHeaders.values.filterNot { it.isProject }.mapTo(mutableSetOf()) { it.moduleId }
         )
 
-        val allProjects = parseAllPackages(packageInfos, definitionFile, packageHeaders, packageDetails)
+        val allProjects = parseAllPackages(packageInfos, definitionFile, packageHeaders, packageDetails, excludes)
         val scopeNames = YarnDependencyType.entries.mapTo(mutableSetOf()) { it.type }
 
         return allProjects.values.map { project ->
@@ -201,11 +200,11 @@ class Yarn2(
     }
 
     private fun installDependencies(workingDir: File) {
-        run("install", workingDir = workingDir).requireSuccess()
+        yarn2Command.run("install", workingDir = workingDir).requireSuccess()
     }
 
     private fun getPackageInfos(workingDir: File): List<PackageInfo> {
-        val process = run(
+        val process = yarn2Command.run(
             "info",
             "-A",
             "-R",
@@ -229,11 +228,7 @@ class Yarn2(
             val value = info.value
             val nameMatcher = EXTRACT_FROM_LOCATOR_PATTERN.matchEntire(value)
             if (nameMatcher == null) {
-                issues += createAndLogIssue(
-                    managerName,
-                    "Name of package $value cannot be parsed.",
-                    Severity.ERROR
-                )
+                issues += createAndLogIssue("Name of package $value cannot be parsed.", Severity.ERROR)
                 null
             } else {
                 val rawName = nameMatcher.groupValues[1]
@@ -260,14 +255,14 @@ class Yarn2(
                 async {
                     logger.info { "Fetching packages details chunk #$index." }
 
-                    val process = run(
+                    val process = yarn2Command.run(
                         "npm",
                         "info",
                         "--json",
                         *chunk.toTypedArray(),
                         workingDir = workingDir,
                         environment = mapOf("NODE_TLS_REJECT_UNAUTHORIZED" to "0")
-                            .takeIf { disableRegistryCertificateVerification }
+                            .takeIf { config.disableRegistryCertificateVerification }
                             .orEmpty()
                     ).requireSuccess()
 
@@ -294,7 +289,8 @@ class Yarn2(
         packageInfos: Collection<PackageInfo>,
         definitionFile: File,
         packagesHeaders: Map<String, PackageHeader>,
-        packagesDetails: Map<String, AdditionalData>
+        packagesDetails: Map<String, AdditionalData>,
+        excludes: Excludes
     ): Map<Identifier, Project> {
         val allDependencies = mutableMapOf<YarnDependencyType, MutableMap<Identifier, List<Identifier>>>()
         // Create packages for all modules found in the workspace and add them to the graph builder. They are reused
@@ -376,11 +372,7 @@ class Yarn2(
         val value = packageInfo.value
         val header = packagesHeaders[value]
         if (header == null) {
-            issues += createAndLogIssue(
-                managerName,
-                "No package header found for '$value'.",
-                Severity.ERROR
-            )
+            issues += createAndLogIssue("No package header found for '$value'.", Severity.ERROR)
             return emptyMap()
         }
 
@@ -400,7 +392,7 @@ class Yarn2(
 
             val id = Identifier("Yarn2", namespace, name, version)
             allProjects += id to Project(
-                id = id.copy(type = managerName),
+                id = id.copy(type = projectType),
                 definitionFilePath = VersionControlSystem.getPathInfo(projectFile).path,
                 declaredLicenses = declaredLicenses,
                 vcs = additionalData.vcsFromPackage,
@@ -416,7 +408,6 @@ class Yarn2(
 
             if (details == null) {
                 issues += createAndLogIssue(
-                    managerName,
                     "No package details found for '${header.rawName}' at version '$version'.",
                     Severity.ERROR
                 )
@@ -551,11 +542,7 @@ class Yarn2(
             val locator = dependency.locator
             val locatorMatcher = EXTRACT_FROM_LOCATOR_PATTERN.matchEntire(locator)
             if (locatorMatcher == null) {
-                issues += createAndLogIssue(
-                    managerName,
-                    "Locator '$locator' cannot be parsed.",
-                    Severity.ERROR
-                )
+                issues += createAndLogIssue("Locator '$locator' cannot be parsed.", Severity.ERROR)
                 return@mapNotNull null
             }
 
@@ -578,7 +565,6 @@ class Yarn2(
                     }.onFailure {
                         it.showStackTrace()
                         issues += createAndLogIssue(
-                            managerName,
                             "Cannot build identifier for dependency '$locator.'",
                             Severity.ERROR
                         )
@@ -591,7 +577,7 @@ class Yarn2(
 /**
  * A data class storing information about a specific Yarn 2+ module and its dependencies.
  */
-data class YarnModuleInfo(
+internal data class YarnModuleInfo(
     /** The identifier for the represented module. */
     val id: Identifier,
 
@@ -667,7 +653,7 @@ private fun PackageJson.getScopeDependencies(type: YarnDependencyType) =
         YarnDependencyType.DEV_DEPENDENCIES -> devDependencies
     }
 
-private fun getYarnExecutable(workingDir: File): File {
+private fun Yarn2Command.getYarnExecutable(workingDir: File): File {
     val yarnrcFile = workingDir.resolve(YARN2_RESOURCE_FILE)
     val yarnConfig = Yaml.default.parseToYamlNode(yarnrcFile.readText()).yamlMap
     val yarnPath = yarnConfig.get<YamlScalar>("yarnPath")?.content
@@ -683,7 +669,7 @@ private fun getYarnExecutable(workingDir: File): File {
     }
 
     if (!yarnExecutable.canExecute()) {
-        Yarn2.logger.warn {
+        logger.warn {
             "The Yarn 2+ program '${yarnExecutable.name}' should be executable. Changing its rights."
         }
 

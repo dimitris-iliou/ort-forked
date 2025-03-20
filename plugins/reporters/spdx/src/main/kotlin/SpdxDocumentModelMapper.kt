@@ -33,11 +33,11 @@ import org.ossreviewtoolkit.utils.ort.Environment
 import org.ossreviewtoolkit.utils.ort.ORT_NAME
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
 import org.ossreviewtoolkit.utils.spdx.SpdxLicense
-import org.ossreviewtoolkit.utils.spdx.model.SpdxCreationInfo
-import org.ossreviewtoolkit.utils.spdx.model.SpdxDocument
-import org.ossreviewtoolkit.utils.spdx.model.SpdxFile
-import org.ossreviewtoolkit.utils.spdx.model.SpdxPackage
-import org.ossreviewtoolkit.utils.spdx.model.SpdxRelationship
+import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxCreationInfo
+import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxDocument
+import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxFile
+import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxPackage
+import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxRelationship
 
 /**
  * A class for mapping [OrtResult]s to [SpdxDocument]s.
@@ -61,14 +61,21 @@ internal object SpdxDocumentModelMapper {
         val nextFileIndex = AtomicInteger(1)
         val packages = mutableListOf<SpdxPackage>()
         val relationships = mutableListOf<SpdxRelationship>()
+        val files = mutableListOf<SpdxFile>()
 
         val projects = ortResult.getProjects(omitExcluded = true, includeSubProjects = false).sortedBy { it.id }
         val projectPackages = projects.map { project ->
+            val filesForProject = if (params.fileInformationEnabled) {
+                ortResult.getSpdxFiles(project.id, licenseInfoResolver, VCS, nextFileIndex)
+            } else {
+                emptyList()
+            }
+
             val spdxProjectPackage = project.toPackage().toSpdxPackage(
                 SpdxPackageType.PROJECT,
                 licenseInfoResolver,
                 ortResult
-            )
+            ).copy(hasFiles = filesForProject.map { it.spdxId })
 
             ortResult.getDependencies(
                 id = project.id,
@@ -82,10 +89,9 @@ internal object SpdxDocumentModelMapper {
                 )
             }
 
+            files += filesForProject
             spdxProjectPackage
         }
-
-        val files = mutableListOf<SpdxFile>()
 
         ortResult.getPackages(omitExcluded = true).sortedBy { it.metadata.id }.forEach { curatedPackage ->
             val pkg = curatedPackage.metadata

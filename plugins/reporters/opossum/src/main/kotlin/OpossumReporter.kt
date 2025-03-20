@@ -47,6 +47,7 @@ import org.ossreviewtoolkit.reporter.ReporterInput
 import org.ossreviewtoolkit.utils.common.packZip
 import org.ossreviewtoolkit.utils.ort.createOrtTempDir
 import org.ossreviewtoolkit.utils.spdx.SpdxLicense
+import org.ossreviewtoolkit.utils.spdx.andOrNull
 
 private const val ISSUE_PRIORITY = 900
 
@@ -170,7 +171,7 @@ class OpossumReporter(
                 filesWithChildren = filesWithChildren,
                 baseUrlsForSources = baseUrlsForSources,
                 externalAttributionSources = externalAttributionSources,
-                frequentLicenses = frequentLicenses
+                frequentLicenses = frequentLicenses.toSortedSet(compareBy { it.shortName })
             )
         }
 
@@ -355,8 +356,7 @@ class OpossumReporter(
                     val license = licenseFindings
                         .filter { it.location.path == pathFromFinding }
                         .map { it.license }
-                        .distinct()
-                        .reduceRightOrNull { left, right -> left and right }
+                        .andOrNull()
 
                     val pathSignal = OpossumSignal.create(
                         source,

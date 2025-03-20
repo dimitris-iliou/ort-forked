@@ -21,6 +21,7 @@ package org.ossreviewtoolkit.plugins.scanners.scanoss
 
 import com.scanoss.dto.ScanFileDetails
 import com.scanoss.dto.ScanFileResult
+import com.scanoss.dto.enums.MatchType
 
 import java.time.Instant
 
@@ -35,6 +36,7 @@ import org.ossreviewtoolkit.model.TextLocation
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
 import org.ossreviewtoolkit.utils.spdx.SpdxExpression
 import org.ossreviewtoolkit.utils.spdx.SpdxLicenseIdExpression
+import org.ossreviewtoolkit.utils.spdx.andOrNull
 
 /**
  * Generate a summary from the given SCANOSS [result], using [startTime], [endTime] as metadata. This variant can be
@@ -47,13 +49,13 @@ internal fun generateSummary(startTime: Instant, endTime: Instant, results: List
 
     results.forEach { result ->
         result.fileDetails.forEach { details ->
-            when (details.id) {
-                "file" -> {
+            when (details.matchType) {
+                MatchType.file -> {
                     licenseFindings += getLicenseFindings(details)
                     copyrightFindings += getCopyrightFindings(details)
                 }
 
-                "snippet" -> {
+                MatchType.snippet -> {
                     val file = requireNotNull(details.file)
                     val lines = requireNotNull(details.lines)
                     val sourceLocations = convertLines(file, lines)
@@ -67,11 +69,11 @@ internal fun generateSummary(startTime: Instant, endTime: Instant, results: List
                     }
                 }
 
-                "none" -> {
+                MatchType.none -> {
                     // Skip if no details are available.
                 }
 
-                else -> throw IllegalArgumentException("Unsupported file details id '${details.id}'.")
+                else -> throw IllegalArgumentException("Unsupported file match type '${details.matchType}'.")
             }
         }
     }
@@ -155,8 +157,7 @@ private fun getSnippets(details: ScanFileDetails): Set<Snippet> {
     return buildSet {
         purls.forEach { purl ->
             locations.forEach { snippetLocation ->
-                val license = licenses.reduceOrNull(SpdxExpression::and)?.sorted()
-                    ?: SpdxLicenseIdExpression(SpdxConstants.NOASSERTION)
+                val license = licenses.andOrNull()?.sorted() ?: SpdxLicenseIdExpression(SpdxConstants.NOASSERTION)
 
                 add(Snippet(score, snippetLocation, provenance, purl, license))
             }

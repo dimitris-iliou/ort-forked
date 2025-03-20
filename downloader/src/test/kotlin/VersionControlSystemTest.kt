@@ -20,8 +20,13 @@
 package org.ossreviewtoolkit.downloader
 
 import io.kotest.core.spec.style.WordSpec
+import io.kotest.matchers.nulls.beNull
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.result.shouldBeSuccess
+import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNot
+import io.kotest.matchers.shouldNotBe
 
 import io.mockk.every
 import io.mockk.mockk
@@ -86,7 +91,7 @@ class VersionControlSystemTest : WordSpec({
 
             every { workingTree.guessRevisionName(any(), any()) } returns "v1.6.0"
 
-            GitFactory().create(PluginConfig())
+            GitFactory().create(PluginConfig.EMPTY)
                 .getRevisionCandidates(workingTree, pkg, allowMovingRevisions = true) shouldBeSuccess listOf(
                 "v1.6.0"
             )
@@ -110,11 +115,50 @@ class VersionControlSystemTest : WordSpec({
             every { workingTree.listRemoteBranches() } returns listOf("main")
             every { workingTree.listRemoteTags() } returns emptyList()
 
-            GitFactory().create(PluginConfig())
+            GitFactory().create(PluginConfig.EMPTY)
                 .getRevisionCandidates(workingTree, pkg, allowMovingRevisions = true) shouldBeSuccess listOf(
                 "master",
                 "main"
             )
+        }
+    }
+
+    "forUrl()" should {
+        "return null for an unsupported repository URL" {
+            val repositoryUrl = "https://example.com"
+
+            val vcs = VersionControlSystem.forUrl(repositoryUrl)
+
+            vcs should beNull()
+        }
+
+        "return a VCS instance that can handle a Git repository URL" {
+            val repositoryUrl = "https://github.com/oss-review-toolkit/ort.git"
+
+            val vcs = VersionControlSystem.forUrl(repositoryUrl)
+
+            vcs shouldNotBeNull {
+                type shouldBe VcsType.GIT
+            }
+        }
+
+        "return the VCS instance with the correct configuration from cache" {
+            val repositoryUrl = "https://github.com/oss-review-toolkit/ort.git"
+            val configs = mapOf(
+                VcsType.GIT.toString() to PluginConfig(
+                    options = mapOf("updateNestedSubmodules" to false.toString())
+                )
+            )
+
+            val vcsWithDefaultConfiguration = VersionControlSystem.forUrl(repositoryUrl)
+            val vcsWithConfigs = VersionControlSystem.forUrl(repositoryUrl, configs)
+            val vcsWithConfigsFromCache = VersionControlSystem.forUrl(repositoryUrl, configs)
+
+            vcsWithDefaultConfiguration shouldNot beNull()
+            vcsWithConfigs shouldNot beNull()
+
+            vcsWithDefaultConfiguration shouldNotBe vcsWithConfigs
+            vcsWithConfigsFromCache shouldBe vcsWithConfigs
         }
     }
 })

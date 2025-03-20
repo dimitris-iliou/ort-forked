@@ -39,9 +39,11 @@ import org.ossreviewtoolkit.model.Scope
 import org.ossreviewtoolkit.model.TextLocation
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
+import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.DownloaderConfiguration
 import org.ossreviewtoolkit.model.config.ScannerConfiguration
 import org.ossreviewtoolkit.model.toYaml
+import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.scanner.PathScannerWrapper
 import org.ossreviewtoolkit.scanner.ScanContext
 import org.ossreviewtoolkit.scanner.Scanner
@@ -140,7 +142,8 @@ private fun createAnalyzerResult(vararg packages: Package): OrtResult {
         result = AnalyzerResult.EMPTY.copy(
             projects = setOf(project),
             packages = packages.toSet()
-        )
+        ),
+        config = AnalyzerConfiguration(enabledPackageManagers = emptyList())
     )
 
     return OrtResult.EMPTY.copy(analyzer = analyzerRun)
@@ -210,7 +213,8 @@ private val pkg4 = createPackage(
     )
 )
 
-internal class DummyScanner(override val name: String = "Dummy") : PathScannerWrapper {
+internal class DummyScanner(id: String = "Dummy") : PathScannerWrapper {
+    override val descriptor = PluginDescriptor(id = id, displayName = id, description = "")
     override val version = "1.0.0"
     override val configuration = ""
 

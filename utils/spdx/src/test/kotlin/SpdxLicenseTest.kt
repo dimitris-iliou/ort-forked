@@ -21,6 +21,7 @@ package org.ossreviewtoolkit.utils.spdx
 
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.matchers.nulls.shouldNotBeNull
+import io.kotest.matchers.resource.shouldMatchResource
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldEndWith
@@ -42,7 +43,7 @@ class SpdxLicenseTest : WordSpec({
             val gpl10OrLater = SpdxLicense.forId("GPL-1.0+")
             gpl10OrLater shouldNotBeNull {
                 val gpl10OrLaterText = text.replace("\n", " ").trimEnd()
-                gpl10OrLaterText shouldStartWith "GNU GENERAL PUBLIC LICENSE  Version 1, February 1989"
+                gpl10OrLaterText shouldStartWith "GNU GENERAL PUBLIC LICENSE Version 1, February 1989"
                 gpl10OrLaterText shouldContain "; either version 1, or (at your option) any later version."
                 gpl10OrLaterText shouldEndWith "That's all there is to it!"
             }
@@ -62,7 +63,7 @@ class SpdxLicenseTest : WordSpec({
         "be correct for 'or later' non-GPL ids" {
             val gfdl11OrLater = SpdxLicense.forId("GFDL-1.1-or-later")
             gfdl11OrLater shouldNotBeNull {
-                text shouldBe javaClass.getResource("/licenses/GFDL-1.1-or-later").readText()
+                text shouldMatchResource("/licenses/GFDL-1.1-or-later")
             }
         }
     }

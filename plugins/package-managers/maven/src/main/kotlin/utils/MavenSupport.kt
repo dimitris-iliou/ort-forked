@@ -19,13 +19,13 @@
 
 package org.ossreviewtoolkit.plugins.packagemanagers.maven.utils
 
+import java.io.Closeable
 import java.io.File
 import java.net.URI
 
 import kotlin.time.Duration.Companion.hours
 
 import org.apache.logging.log4j.kotlin.logger
-import org.apache.maven.artifact.repository.Authentication
 import org.apache.maven.artifact.repository.LegacyLocalRepositoryManager
 import org.apache.maven.bridge.MavenRepositorySystem
 import org.apache.maven.execution.DefaultMavenExecutionRequest
@@ -42,7 +42,6 @@ import org.apache.maven.project.ProjectBuildingException
 import org.apache.maven.project.ProjectBuildingRequest
 import org.apache.maven.project.ProjectBuildingResult
 import org.apache.maven.properties.internal.EnvironmentUtils
-import org.apache.maven.repository.Proxy
 import org.apache.maven.session.scope.internal.SessionScope
 
 import org.codehaus.plexus.DefaultContainerConfiguration
@@ -59,7 +58,6 @@ import org.eclipse.aether.artifact.Artifact
 import org.eclipse.aether.artifact.DefaultArtifact
 import org.eclipse.aether.impl.RemoteRepositoryManager
 import org.eclipse.aether.impl.RepositoryConnectorProvider
-import org.eclipse.aether.repository.AuthenticationContext
 import org.eclipse.aether.repository.RemoteRepository
 import org.eclipse.aether.repository.WorkspaceReader
 import org.eclipse.aether.resolution.ArtifactDescriptorRequest
@@ -92,17 +90,21 @@ import org.ossreviewtoolkit.utils.ort.okHttpClient
 import org.ossreviewtoolkit.utils.ort.ortDataDirectory
 import org.ossreviewtoolkit.utils.ort.showStackTrace
 
-fun Artifact.identifier() = "$groupId:$artifactId:$version"
-
 /**
  * Return the path to this file or a corresponding message if the file is unknown.
  */
 private val File?.safePath: String
     get() = this?.invariantSeparatorsPath ?: "<unknown file>"
 
-class MavenSupport(private val workspaceReader: WorkspaceReader) {
+class MavenSupport(private val workspaceReader: WorkspaceReader) : Closeable {
     private val container = createContainer()
     private val repositorySystemSession = createRepositorySystemSession(workspaceReader)
+
+    private val remoteArtifactCache = DiskCache(
+        directory = ortDataDirectory.resolve("cache/analyzer/${workspaceReader.repository.contentType}"),
+        maxCacheSizeInBytes = 1.gibibytes,
+        maxCacheEntryAgeInSeconds = 6.hours.inWholeSeconds
+    )
 
     // The MavenSettingsBuilder class is deprecated, but internally it uses its successor SettingsBuilder. Calling
     // MavenSettingsBuilder requires less code than calling SettingsBuilder, so use it until it is removed.
@@ -217,9 +219,8 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) {
                 }
             } else {
                 val project = projectBuildingResult.project
-                val identifier = "${project.groupId}:${project.artifactId}:${project.version}"
 
-                result[identifier] = projectBuildingResult
+                result[project.internalId] = projectBuildingResult
             }
         }
 
@@ -563,6 +564,16 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) {
     }
 
     /**
+     * Return a [PackageResolverFun] that uses functionality provided by this object (mainly the [parsePackage]
+     * function) to resolve a package for a given dependency. The function is configured with the given
+     * [SBT compatibility mode][sbtMode].
+     */
+    fun defaultPackageResolverFun(sbtMode: Boolean = false): PackageResolverFun =
+        { dependencyNode ->
+            parsePackage(dependencyNode.artifact, dependencyNode.repositories, sbtMode = sbtMode)
+        }
+
+    /**
      * Create a [MavenSession] and setup the [LegacySupport] and [SessionScope] because this is required to load
      * extensions using Maven Wagon.
      */
@@ -587,6 +598,10 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) {
             legacySupport.session = null
         }
     }
+
+    override fun close() {
+        remoteArtifactCache.close()
+    }
 }
 
 private val PACKAGING_TYPES = setOf(
@@ -595,12 +610,6 @@ private val PACKAGING_TYPES = setOf(
     // Custom packaging types, see "resources/META-INF/plexus/components.xml".
     "aar", "apk", "bundle", "dll", "dylib", "eclipse-plugin", "gwt-app", "gwt-lib", "hk2-jar", "hpi",
     "jenkins-module", "orbit", "so", "zip"
-)
-
-private val remoteArtifactCache = DiskCache(
-    directory = ortDataDirectory.resolve("cache/analyzer/maven/remote-artifacts"),
-    maxCacheSizeInBytes = 1.gibibytes,
-    maxCacheEntryAgeInSeconds = 6.hours.inWholeSeconds
 )
 
 private fun createContainer(): PlexusContainer {
@@ -617,56 +626,27 @@ private fun createContainer(): PlexusContainer {
     }
 }
 
-/**
- * Convert this [RemoteRepository] to a repository in the format used by the Maven Repository System.
- * Make sure that all relevant properties are set, especially the proxy and authentication.
- */
-internal fun RemoteRepository.toArtifactRepository(
-    repositorySystemSession: RepositorySystemSession,
-    repositorySystem: MavenRepositorySystem,
-    id: String
-) = repositorySystem.createRepository(url, id, true, null, true, null, null).apply {
-    this@toArtifactRepository.proxy?.also { repoProxy ->
-        proxy = Proxy().apply {
-            host = repoProxy.host
-            port = repoProxy.port
-            protocol = repoProxy.type
-            toMavenAuthentication(
-                AuthenticationContext.forProxy(
-                    repositorySystemSession,
-                    this@toArtifactRepository
-                )
-            )?.also { authentication ->
-                userName = authentication.username
-                password = authentication.password
-            }
-        }
-    }
+/** The namespace for the Maven Tycho build extension. */
+private const val TYCHO_NAMESPACE = "org.eclipse.tycho"
 
-    this@toArtifactRepository.authentication?.also {
-        authentication = toMavenAuthentication(
-            AuthenticationContext.forRepository(
-                repositorySystemSession,
-                this@toArtifactRepository
-            )
-        )
-    }
+/** The ID for the Maven Tycho build extension. */
+private const val TYCHO_ID = "tycho-build"
+
+/** The path to the subfolder containing core extensions for Maven. */
+internal const val EXTENSIONS_PATH = ".mvn/extensions.xml"
+
+/**
+ * Return *true* if the given [file] points to a Maven Tycho project. The [file] can either reference the project
+ * folder directly or a file within the project folder.
+ */
+internal fun isTychoProject(file: File): Boolean {
+    val root = file.takeIf { it.isDirectory } ?: file.parentFile
+
+    return root?.resolve(EXTENSIONS_PATH)?.takeIf { it.isFile }?.let { extFile ->
+        val content = extFile.readText()
+        TYCHO_NAMESPACE in content && TYCHO_ID in content
+    } == true
 }
-
-/**
- * Return authentication information for an artifact repository based on the given [authContext]. The
- * libraries involved use different approaches to model authentication.
- */
-private fun toMavenAuthentication(authContext: AuthenticationContext?): Authentication? =
-    authContext?.let {
-        Authentication(
-            it[AuthenticationContext.USERNAME],
-            it[AuthenticationContext.PASSWORD]
-        ).apply {
-            passphrase = it[AuthenticationContext.PRIVATE_KEY_PASSPHRASE]
-            privateKey = it[AuthenticationContext.PRIVATE_KEY_PATH]
-        }
-    }
 
 /**
  * Return true if an artifact that has not been requested from Maven Central is also available on Maven Central

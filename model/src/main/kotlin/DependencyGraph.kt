@@ -116,13 +116,6 @@ data class DependencyGraph(
         val DEPENDENCY_REFERENCE_COMPARATOR = compareBy<DependencyReference>({ it.pkg }, { it.fragment })
 
         /**
-         * Return a name for the given [scope][scopeName] that is qualified with parts of the identifier of the given
-         * [project]. This is used to ensure that the scope names are unique when constructing a dependency graph from
-         * multiple projects.
-         */
-        fun qualifyScope(project: Project, scopeName: String): String = qualifyScope(project.id, scopeName)
-
-        /**
          * Return a name for the given [scope][scopeName] that is qualified with parts of the given [projectId]. This
          * is used to ensure that the scope names are unique when constructing a dependency graph from multiple
          * projects.
@@ -157,28 +150,24 @@ data class DependencyGraph(
      * Transform the data stored in this object to the classical layout of dependency information, which is a set of
      * [Scope]s referencing the packages they depend on.
      */
-    fun createScopes(): Set<Scope> = createScopesFor(scopes, unqualify = true)
+    fun createScopes(): Set<Scope> = createScopesFor(scopes)
 
     /**
      * Transform a subset of the data stored in this object to the classical layout of dependency information. This is
-     * analogous to [createScopes], but only the provided [scopeNames] are taken into account. If [unqualify] is
-     * *true*, remove qualifiers from scope names before constructing the [Scope]s.
+     * analogous to [createScopes], but only the provided [scopeNames] are taken into account.
      */
-    fun createScopes(scopeNames: Set<String>, unqualify: Boolean = true): Set<Scope> =
-        createScopesFor(scopes.filterKeys { it in scopeNames }, unqualify)
+    fun createScopes(scopeNames: Set<String>): Set<Scope> = createScopesFor(scopes.filterKeys { it in scopeNames })
 
     /**
-     * Convert the given [map] with scope information to a set of [Scope]s. [Optionally][unqualify] remove qualifiers
-     * from scope names.
+     * Convert the given [map] with scope information to a set of [Scope]s.
      */
-    private fun createScopesFor(map: Map<String, List<RootDependencyIndex>>, unqualify: Boolean): Set<Scope> =
+    private fun createScopesFor(map: Map<String, List<RootDependencyIndex>>): Set<Scope> =
         map.mapTo(mutableSetOf()) { entry ->
             val dependencies = entry.value.mapTo(mutableSetOf()) { index ->
                 referenceMapping[index.toKey()] ?: error("Could not resolve dependency index $index.")
             }
 
-            val scopeName = if (unqualify) unqualifyScope(entry.key) else entry.key
-            Scope(scopeName, dependencies)
+            Scope(unqualifyScope(entry.key), dependencies)
         }
 
     /**

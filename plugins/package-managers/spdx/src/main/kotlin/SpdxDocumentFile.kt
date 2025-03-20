@@ -25,10 +25,11 @@ import java.io.File
 
 import org.apache.logging.log4j.kotlin.logger
 
-import org.ossreviewtoolkit.analyzer.AbstractPackageManagerFactory
 import org.ossreviewtoolkit.analyzer.PackageManager
 import org.ossreviewtoolkit.analyzer.PackageManagerDependency
+import org.ossreviewtoolkit.analyzer.PackageManagerFactory
 import org.ossreviewtoolkit.analyzer.PackageManagerResult
+import org.ossreviewtoolkit.analyzer.determineEnabledPackageManagers
 import org.ossreviewtoolkit.analyzer.toPackageReference
 import org.ossreviewtoolkit.downloader.VersionControlSystem
 import org.ossreviewtoolkit.model.Hash
@@ -45,10 +46,13 @@ import org.ossreviewtoolkit.model.Scope
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
-import org.ossreviewtoolkit.model.config.RepositoryConfiguration
+import org.ossreviewtoolkit.model.config.Excludes
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.orEmpty
 import org.ossreviewtoolkit.model.utils.toPurl
+import org.ossreviewtoolkit.plugins.api.OrtPlugin
+import org.ossreviewtoolkit.plugins.api.PluginConfig
+import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.packagemanagers.spdx.utils.SpdxDocumentCache
 import org.ossreviewtoolkit.plugins.packagemanagers.spdx.utils.SpdxResolvedDocument
 import org.ossreviewtoolkit.utils.common.collapseWhitespace
@@ -57,12 +61,12 @@ import org.ossreviewtoolkit.utils.common.toUri
 import org.ossreviewtoolkit.utils.common.withoutPrefix
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
 import org.ossreviewtoolkit.utils.spdx.SpdxExpression
-import org.ossreviewtoolkit.utils.spdx.model.SpdxDocument
-import org.ossreviewtoolkit.utils.spdx.model.SpdxExternalDocumentReference
-import org.ossreviewtoolkit.utils.spdx.model.SpdxExternalReference
-import org.ossreviewtoolkit.utils.spdx.model.SpdxPackage
-import org.ossreviewtoolkit.utils.spdx.model.SpdxRelationship
 import org.ossreviewtoolkit.utils.spdx.toSpdx
+import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxDocument
+import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxExternalDocumentReference
+import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxExternalReference
+import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxPackage
+import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxRelationship
 
 private const val DEFAULT_SCOPE_NAME = "default"
 
@@ -254,21 +258,14 @@ private fun hasDefaultScopeLinkage(
  * A "fake" package manager implementation that uses SPDX documents as definition files to declare projects and describe
  * packages. See https://github.com/spdx/spdx-spec/issues/439 for details.
  */
-class SpdxDocumentFile(
-    managerName: String,
-    analysisRoot: File,
-    analyzerConfig: AnalyzerConfiguration,
-    repoConfig: RepositoryConfiguration
-) : PackageManager(managerName, "SpdxDocument", analysisRoot, analyzerConfig, repoConfig) {
-    class Factory : AbstractPackageManagerFactory<SpdxDocumentFile>("SpdxDocumentFile") {
-        override val globsForDefinitionFiles = listOf("*.spdx.yml", "*.spdx.yaml", "*.spdx.json")
-
-        override fun create(
-            analysisRoot: File,
-            analyzerConfig: AnalyzerConfiguration,
-            repoConfig: RepositoryConfiguration
-        ) = SpdxDocumentFile(type, analysisRoot, analyzerConfig, repoConfig)
-    }
+@OrtPlugin(
+    displayName = "SpdxDocumentFile",
+    description = "A package manager that uses SPDX documents as definition files.",
+    factory = PackageManagerFactory::class
+)
+class SpdxDocumentFile(override val descriptor: PluginDescriptor = SpdxDocumentFileFactory.descriptor) :
+    PackageManager("SpdxDocumentFile") {
+    override val globsForDefinitionFiles = listOf("*.spdx.yml", "*.spdx.yaml", "*.spdx.json")
 
     private val spdxDocumentCache = SpdxDocumentCache()
 
@@ -277,7 +274,7 @@ class SpdxDocumentFile(
      */
     private fun SpdxPackage.toIdentifier() =
         Identifier(
-            type = managerName,
+            type = projectType,
             namespace = listOfNotNull(supplier, originator).firstOrNull()
                 ?.withoutPrefix(SpdxConstants.ORGANIZATION).orEmpty().sanitize(),
             name = name.sanitize(),
@@ -342,7 +339,8 @@ class SpdxDocumentFile(
         pkgId: String,
         doc: SpdxResolvedDocument,
         packages: MutableSet<Package>,
-        ancestorIds: MutableSet<String>
+        ancestorIds: MutableSet<String>,
+        analyzerConfig: AnalyzerConfiguration
     ): Set<PackageReference> {
         logger.debug { "Retrieving dependencies for package '$pkgId'." }
 
@@ -351,22 +349,34 @@ class SpdxDocumentFile(
             return emptySet()
         }
 
-        return getDependencies(pkgId, doc, packages, ancestorIds, SpdxRelationship.Type.DEPENDENCY_OF) { target ->
+        return getDependencies(
+            pkgId,
+            doc,
+            packages,
+            ancestorIds,
+            SpdxRelationship.Type.DEPENDENCY_OF,
+            analyzerConfig
+        ) { target ->
             val issues = mutableListOf<Issue>()
-            getPackageManagerDependency(target, doc) ?: doc.getSpdxPackageForId(target, issues)?.let { dependency ->
-                packages += dependency.toPackage(doc.getDefinitionFile(target), doc)
+            getPackageManagerDependency(target, doc, analyzerConfig) ?: doc.getSpdxPackageForId(target, issues)
+                ?.let { dependency ->
+                    packages += dependency.toPackage(doc.getDefinitionFile(target), doc)
 
-                PackageReference(
-                    id = dependency.toIdentifier(),
-                    dependencies = getDependencies(target, doc, packages, ancestorIds),
-                    linkage = getLinkageForDependency(dependency, pkgId, doc.relationships),
-                    issues = issues
-                )
-            }
+                    PackageReference(
+                        id = dependency.toIdentifier(),
+                        dependencies = getDependencies(target, doc, packages, ancestorIds, analyzerConfig),
+                        linkage = getLinkageForDependency(dependency, pkgId, doc.relationships),
+                        issues = issues
+                    )
+                }
         }.also { ancestorIds.remove(pkgId) }
     }
 
-    internal fun getPackageManagerDependency(pkgId: String, doc: SpdxResolvedDocument): PackageReference? {
+    internal fun getPackageManagerDependency(
+        pkgId: String,
+        doc: SpdxResolvedDocument,
+        analyzerConfig: AnalyzerConfiguration
+    ): PackageReference? {
         val issues = mutableListOf<Issue>()
         val spdxPackage = doc.getSpdxPackageForId(pkgId, issues) ?: return null
         val definitionFile = doc.getDefinitionFile(pkgId) ?: return null
@@ -378,13 +388,20 @@ class SpdxDocumentFile(
         val packageFile = definitionFile.resolveSibling(spdxPackage.packageFilename)
 
         if (packageFile.isFile) {
-            val managedFiles = findManagedFiles(packageFile.parentFile)
-            managedFiles.forEach { (factory, files) ->
+            val managedFiles = findManagedFiles(
+                packageFile.parentFile,
+                analyzerConfig.determineEnabledPackageManagers().map {
+                    val options = analyzerConfig.getPackageManagerConfiguration(it.descriptor.id)?.options.orEmpty()
+                    it.create(PluginConfig(options))
+                }
+            )
+
+            managedFiles.forEach { (manager, files) ->
                 if (files.any { it.canonicalPath == packageFile.canonicalPath }) {
                     // TODO: The data from the spdxPackage is currently ignored, check if some fields need to be
                     //       preserved somehow.
                     return PackageManagerDependency(
-                        packageManager = factory.type,
+                        packageManager = manager.descriptor.id,
                         definitionFile = VersionControlSystem.getPathInfo(packageFile).path,
                         scope = scope,
                         linkage = PackageLinkage.PROJECT_STATIC // TODO: Set linkage based on SPDX reference type.
@@ -408,6 +425,7 @@ class SpdxDocumentFile(
         packages: MutableSet<Package>,
         ancestorIds: MutableSet<String>,
         dependencyOfRelation: SpdxRelationship.Type,
+        analyzerConfig: AnalyzerConfiguration,
         dependsOnCase: (String) -> PackageReference? = { null }
     ): Set<PackageReference> =
         doc.relationships.mapNotNullTo(mutableSetOf()) { (source, relation, target, _) ->
@@ -421,18 +439,15 @@ class SpdxDocumentFile(
                 // Dependencies can either be defined on the target...
                 pkgId.equals(target, ignoreCase = true) && relation == dependencyOfRelation -> {
                     if (pkgId != target) {
-                        issues += createAndLogIssue(
-                            source = managerName,
-                            message = "Source '$pkgId' has to match target '$target' case-sensitively."
-                        )
+                        issues += createAndLogIssue("Source '$pkgId' has to match target '$target' case-sensitively.")
                     }
 
-                    getPackageManagerDependency(source, doc) ?: doc.getSpdxPackageForId(source, issues)
+                    getPackageManagerDependency(source, doc, analyzerConfig) ?: doc.getSpdxPackageForId(source, issues)
                         ?.let { dependency ->
                             packages += dependency.toPackage(doc.getDefinitionFile(source), doc)
                             PackageReference(
                                 id = dependency.toIdentifier(),
-                                dependencies = getDependencies(source, doc, packages, ancestorIds),
+                                dependencies = getDependencies(source, doc, packages, ancestorIds, analyzerConfig),
                                 issues = issues,
                                 linkage = getLinkageForDependency(dependency, target, doc.relationships)
                             )
@@ -442,10 +457,7 @@ class SpdxDocumentFile(
                 // ...or on the source.
                 pkgId.equals(source, ignoreCase = true) && isDependsOnRelation -> {
                     if (pkgId != source) {
-                        issues += createAndLogIssue(
-                            source = managerName,
-                            message = "Source '$source' has to match target '$pkgId' case-sensitively."
-                        )
+                        issues += createAndLogIssue("Source '$source' has to match target '$pkgId' case-sensitively.")
                     }
 
                     val pkgRef = dependsOnCase(target)
@@ -465,9 +477,10 @@ class SpdxDocumentFile(
         spdxDocument: SpdxResolvedDocument,
         projectPackageId: String,
         relation: SpdxRelationship.Type,
-        packages: MutableSet<Package>
+        packages: MutableSet<Package>,
+        analyzerConfig: AnalyzerConfiguration
     ): Scope? =
-        getDependencies(projectPackageId, spdxDocument, packages, mutableSetOf(), relation).takeUnless {
+        getDependencies(projectPackageId, spdxDocument, packages, mutableSetOf(), relation, analyzerConfig).takeUnless {
             it.isEmpty()
         }?.let {
             Scope(
@@ -476,7 +489,7 @@ class SpdxDocumentFile(
             )
         }
 
-    override fun mapDefinitionFiles(definitionFiles: List<File>): List<File> =
+    override fun mapDefinitionFiles(analysisRoot: File, definitionFiles: List<File>): List<File> =
         definitionFiles.associateWith {
             spdxDocumentCache.load(it).getOrNull()
         }.filter { (_, spdxDocument) ->
@@ -495,8 +508,14 @@ class SpdxDocumentFile(
             }
         }.toList()
 
-    override fun resolveDependencies(definitionFile: File, labels: Map<String, String>): List<ProjectAnalyzerResult> {
-        val transitiveDocument = SpdxResolvedDocument.load(spdxDocumentCache, definitionFile, managerName)
+    override fun resolveDependencies(
+        analysisRoot: File,
+        definitionFile: File,
+        excludes: Excludes,
+        analyzerConfig: AnalyzerConfiguration,
+        labels: Map<String, String>
+    ): List<ProjectAnalyzerResult> {
+        val transitiveDocument = SpdxResolvedDocument.load(spdxDocumentCache, definitionFile)
 
         val spdxDocument = transitiveDocument.rootDocument.document
 
@@ -517,12 +536,18 @@ class SpdxDocumentFile(
         }
 
         SPDX_SCOPE_RELATIONSHIPS.mapNotNullTo(scopes) { type ->
-            createScope(transitiveDocument, projectPackage.spdxId, type, packages)
+            createScope(transitiveDocument, projectPackage.spdxId, type, packages, analyzerConfig)
         }
 
         scopes += Scope(
             name = DEFAULT_SCOPE_NAME,
-            dependencies = getDependencies(projectPackage.spdxId, transitiveDocument, packages, mutableSetOf())
+            dependencies = getDependencies(
+                projectPackage.spdxId,
+                transitiveDocument,
+                packages,
+                mutableSetOf(),
+                analyzerConfig
+            )
         )
 
         val project = Project(

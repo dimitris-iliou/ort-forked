@@ -85,8 +85,6 @@ internal object GitRepoCommand : CommandLineTool {
 
         return "$launcherVersion (launcher)"
     }
-
-    override fun displayName(): String = "GitRepo"
 }
 
 @OrtPlugin(
@@ -95,7 +93,7 @@ internal object GitRepoCommand : CommandLineTool {
     factory = VersionControlSystemFactory::class
 )
 class GitRepo(
-    override val descriptor: PluginDescriptor,
+    override val descriptor: PluginDescriptor = GitRepoFactory.descriptor,
     private val config: GitConfig
 ) : VersionControlSystem() {
     override val type = VcsType.GIT_REPO
@@ -146,7 +144,7 @@ class GitRepo(
 
                     paths.forEach { path ->
                         // Add the nested Repo project.
-                        val workingTree = Git(GitFactory.descriptor, config).getWorkingTree(getRootPath().resolve(path))
+                        val workingTree = Git(config = config).getWorkingTree(getRootPath().resolve(path))
                         nested[path] = workingTree.getInfo()
 
                         // Add the Git submodules of the nested Repo project.

@@ -30,21 +30,13 @@ import org.ossreviewtoolkit.downloader.VersionControlSystem
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
-import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
-import org.ossreviewtoolkit.model.config.RepositoryConfiguration
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
 import org.ossreviewtoolkit.utils.common.realFile
 
-abstract class NodePackageManager(
-    managerName: String,
-    val managerType: NodePackageManagerType,
-    analysisRoot: File,
-    analyzerConfig: AnalyzerConfiguration,
-    repoConfig: RepositoryConfiguration
-) : PackageManager(managerName, managerType.projectType, analysisRoot, analyzerConfig, repoConfig) {
-    protected abstract val graphBuilder: DependencyGraphBuilder<*>
+abstract class NodePackageManager(val managerType: NodePackageManagerType) : PackageManager(managerType.projectType) {
+    internal abstract val graphBuilder: DependencyGraphBuilder<*>
 
-    protected fun parseProject(packageJsonFile: File, analysisRoot: File): Project {
+    internal fun parseProject(packageJsonFile: File, analysisRoot: File): Project {
         logger.debug { "Parsing project info from '$packageJsonFile'." }
 
         val packageJson = parsePackageJson(packageJsonFile)
@@ -88,7 +80,7 @@ abstract class NodePackageManager(
         )
     }
 
-    override fun mapDefinitionFiles(definitionFiles: List<File>) =
+    override fun mapDefinitionFiles(analysisRoot: File, definitionFiles: List<File>) =
         NodePackageManagerDetection(definitionFiles).filterApplicable(managerType)
 
     override fun createPackageManagerResult(projectResults: Map<File, List<ProjectAnalyzerResult>>) =

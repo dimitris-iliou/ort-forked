@@ -24,24 +24,26 @@ import java.util.LinkedList
 
 import org.apache.logging.log4j.kotlin.logger
 
-import org.ossreviewtoolkit.analyzer.AbstractPackageManagerFactory
+import org.ossreviewtoolkit.analyzer.PackageManagerFactory
 import org.ossreviewtoolkit.model.Issue
 import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
-import org.ossreviewtoolkit.model.config.PackageManagerConfiguration
-import org.ossreviewtoolkit.model.config.RepositoryConfiguration
+import org.ossreviewtoolkit.model.config.Excludes
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
+import org.ossreviewtoolkit.plugins.api.OrtPlugin
+import org.ossreviewtoolkit.plugins.api.OrtPluginOption
+import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.packagemanagers.node.NodePackageManager
 import org.ossreviewtoolkit.plugins.packagemanagers.node.NodePackageManagerType
 import org.ossreviewtoolkit.plugins.packagemanagers.node.PackageJson
 import org.ossreviewtoolkit.plugins.packagemanagers.node.parsePackageJson
 import org.ossreviewtoolkit.utils.common.CommandLineTool
+import org.ossreviewtoolkit.utils.common.DirectoryStash
 import org.ossreviewtoolkit.utils.common.Os
 import org.ossreviewtoolkit.utils.common.ProcessCapture
 import org.ossreviewtoolkit.utils.common.collectMessages
-import org.ossreviewtoolkit.utils.common.stashDirectories
 import org.ossreviewtoolkit.utils.common.withoutPrefix
 
 import org.semver4j.RangesList
@@ -53,50 +55,62 @@ internal object NpmCommand : CommandLineTool {
     override fun getVersionRequirement(): RangesList = RangesListFactory.create("6.* - 10.*")
 }
 
+data class NpmConfig(
+    /**
+     * If true, the "--legacy-peer-deps" flag is passed to NPM to ignore conflicts in peer dependencies which are
+     * reported since NPM 7. This allows to analyze NPM 6 projects with peer dependency conflicts. For more information
+     * see the [documentation](https://docs.npmjs.com/cli/v8/commands/npm-install#strict-peer-deps) and the
+     * [NPM Blog](https://blog.npmjs.org/post/626173315965468672/npm-v7-series-beta-release-and-semver-major).
+     */
+    @OrtPluginOption(defaultValue = "false")
+    val legacyPeerDeps: Boolean
+)
+
 /**
  * The [Node package manager](https://www.npmjs.com/) for JavaScript.
- *
- * This package manager supports the following [options][PackageManagerConfiguration.options]:
- * - *legacyPeerDeps*: If true, the "--legacy-peer-deps" flag is passed to NPM to ignore conflicts in peer dependencies
- *   which are reported since NPM 7. This allows to analyze NPM 6 projects with peer dependency conflicts. For more
- *   information see the [documentation](https://docs.npmjs.com/cli/v8/commands/npm-install#strict-peer-deps) and the
- *   [NPM Blog](https://blog.npmjs.org/post/626173315965468672/npm-v7-series-beta-release-and-semver-major).
  */
-class Npm(
-    name: String,
-    analysisRoot: File,
-    analyzerConfig: AnalyzerConfiguration,
-    repoConfig: RepositoryConfiguration
-) : NodePackageManager(name, NodePackageManagerType.NPM, analysisRoot, analyzerConfig, repoConfig) {
-    companion object {
-        /** Name of the configuration option to toggle legacy peer dependency support. */
-        const val OPTION_LEGACY_PEER_DEPS = "legacyPeerDeps"
-    }
+@OrtPlugin(
+    id = "NPM",
+    displayName = "NPM",
+    description = "The Node package manager for JavaScript.",
+    factory = PackageManagerFactory::class
+)
+class Npm(override val descriptor: PluginDescriptor = NpmFactory.descriptor, private val config: NpmConfig) :
+    NodePackageManager(NodePackageManagerType.NPM) {
 
-    class Factory : AbstractPackageManagerFactory<Npm>("NPM") {
-        override val globsForDefinitionFiles = listOf(NodePackageManagerType.DEFINITION_FILE)
+    override val globsForDefinitionFiles = listOf(NodePackageManagerType.DEFINITION_FILE)
 
-        override fun create(
-            analysisRoot: File,
-            analyzerConfig: AnalyzerConfiguration,
-            repoConfig: RepositoryConfiguration
-        ) = Npm(type, analysisRoot, analyzerConfig, repoConfig)
-    }
+    private lateinit var stash: DirectoryStash
 
-    private val legacyPeerDeps = options[OPTION_LEGACY_PEER_DEPS].toBoolean()
     private val npmViewCache = mutableMapOf<String, PackageJson>()
     private val handler = NpmDependencyHandler(projectType, this::getRemotePackageDetails)
 
     override val graphBuilder by lazy { DependencyGraphBuilder(handler) }
 
-    override fun resolveDependencies(definitionFile: File, labels: Map<String, String>): List<ProjectAnalyzerResult> =
-        stashDirectories(definitionFile.resolveSibling("node_modules")).use {
-            resolveDependencies(definitionFile)
-        }
+    override fun beforeResolution(
+        analysisRoot: File,
+        definitionFiles: List<File>,
+        analyzerConfig: AnalyzerConfiguration
+    ) {
+        NpmCommand.checkVersion()
 
-    private fun resolveDependencies(definitionFile: File): List<ProjectAnalyzerResult> {
+        val directories = definitionFiles.mapTo(mutableSetOf()) { it.resolveSibling("node_modules") }
+        stash = DirectoryStash(directories)
+    }
+
+    override fun afterResolution(analysisRoot: File, definitionFiles: List<File>) {
+        stash.close()
+    }
+
+    override fun resolveDependencies(
+        analysisRoot: File,
+        definitionFile: File,
+        excludes: Excludes,
+        analyzerConfig: AnalyzerConfiguration,
+        labels: Map<String, String>
+    ): List<ProjectAnalyzerResult> {
         val workingDir = definitionFile.parentFile
-        val issues = installDependencies(workingDir).toMutableList()
+        val issues = installDependencies(analysisRoot, workingDir, analyzerConfig.allowDynamicVersions).toMutableList()
 
         if (issues.any { it.severity == Severity.ERROR }) {
             val project = runCatching {
@@ -129,12 +143,6 @@ class Npm(
         ).let { listOf(it) }
     }
 
-    override fun beforeResolution(definitionFiles: List<File>) {
-        // We do not actually depend on any features specific to an NPM version, but we still want to stick to a
-        // fixed minor version to be sure to get consistent results.
-        NpmCommand.checkVersion()
-    }
-
     private fun listModules(workingDir: File, issues: MutableList<Issue>): ModuleInfo {
         val listProcess = NpmCommand.run(workingDir, "list", "--depth", "Infinity", "--json", "--long")
         issues += listProcess.extractNpmIssues()
@@ -156,13 +164,13 @@ class Npm(
         }.getOrNull()
     }
 
-    private fun installDependencies(workingDir: File): List<Issue> {
-        requireLockfile(workingDir) { managerType.hasLockfile(workingDir) }
+    private fun installDependencies(analysisRoot: File, workingDir: File, allowDynamicVersions: Boolean): List<Issue> {
+        requireLockfile(analysisRoot, workingDir, allowDynamicVersions) { managerType.hasLockfile(workingDir) }
 
         val options = listOfNotNull(
             "--ignore-scripts",
             "--no-audit",
-            "--legacy-peer-deps".takeIf { legacyPeerDeps }
+            "--legacy-peer-deps".takeIf { config.legacyPeerDeps }
         )
 
         val subcommand = if (managerType.hasLockfile(workingDir)) "ci" else "install"
@@ -297,12 +305,12 @@ internal fun ProcessCapture.extractNpmIssues(): List<Issue> {
     // Generally forward issues from the NPM CLI to the ORT NPM package manager. Lower the severity of warnings to
     // hints, as warnings usually do not prevent the ORT NPM package manager from getting the dependencies right.
     lines.groupLines("npm WARN ", "npm warn ").mapTo(issues) {
-        Issue(source = "NPM", message = it, severity = Severity.HINT)
+        Issue(source = NpmFactory.descriptor.displayName, message = it, severity = Severity.HINT)
     }
 
     // For errors, however, something clearly went wrong, so keep the severity here.
     lines.groupLines("npm ERR! ", "npm error ").mapTo(issues) {
-        Issue(source = "NPM", message = it, severity = Severity.ERROR)
+        Issue(source = NpmFactory.descriptor.displayName, message = it, severity = Severity.ERROR)
     }
 
     return issues

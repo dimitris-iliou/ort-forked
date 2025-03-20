@@ -24,6 +24,7 @@ import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonPropertyOrder
 
 import org.ossreviewtoolkit.model.utils.FileArchiver
+import org.ossreviewtoolkit.plugins.api.PluginConfig
 import org.ossreviewtoolkit.utils.ort.ORT_REPO_CONFIG_FILENAME
 import org.ossreviewtoolkit.utils.ort.storage.FileStorage
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
@@ -43,6 +44,11 @@ data class ScannerConfiguration(
      * A flag to control whether excluded scopes and paths should be skipped during the scan.
      */
     val skipExcluded: Boolean = false,
+
+    /**
+     * A flag to indicate whether the scanner should add files without license to the scanner results.
+     */
+    val includeFilesWithoutFindings: Boolean = false,
 
     /**
      * Configuration of a [FileArchiver] that archives certain scanned files in an external [FileStorage].
@@ -87,7 +93,7 @@ data class ScannerConfiguration(
      * for the ScanCode wrapper. See the documentation of the scanner for available options.
      */
     @JsonAlias("options")
-    val config: Map<String, PluginConfiguration>? = null,
+    val config: Map<String, PluginConfig>? = null,
 
     /**
      * A map with the configurations of the scan result storages available. Based on this information the actual

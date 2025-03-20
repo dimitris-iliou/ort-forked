@@ -55,7 +55,7 @@ mavenPublishing {
 }
 
 graalvmNative {
-    toolchainDetection = true
+    toolchainDetection = System.getenv("GRAALVM_HOME") == null
 
     // For options see https://graalvm.github.io/native-build-tools/latest/gradle-plugin.html.
     binaries {
@@ -102,6 +102,7 @@ graalvmNative {
                 "ch.qos.logback.core.model.processor.ImplicitModelHandler",
                 "ch.qos.logback.core.pattern.FormatInfo",
                 "ch.qos.logback.core.pattern.LiteralConverter",
+                "ch.qos.logback.core.pattern.parser.Parser",
                 "ch.qos.logback.core.spi.AppenderAttachableImpl",
                 "ch.qos.logback.core.spi.ContextAwareImpl",
                 "ch.qos.logback.core.spi.FilterAttachableImpl",
@@ -138,9 +139,10 @@ tasks.named<BuildNativeImageTask>("nativeCompile") {
     // Gradle's "Copy" task cannot handle symbolic links, see https://github.com/gradle/gradle/issues/3982. That is why
     // links contained in the GraalVM distribution archive get broken during provisioning and are replaced by empty
     // files. Address this by recreating the links in the toolchain directory.
-    val toolchainDir = options.get().javaLauncher.get().executablePath.asFile.parentFile.run {
-        if (name == "bin") parentFile else this
-    }
+    val toolchainDir = System.getenv("GRAALVM_HOME")?.let { File(it) }
+        ?: options.get().javaLauncher.get().executablePath.asFile.parentFile.run {
+            if (name == "bin") parentFile else this
+        }
 
     val toolchainFiles = toolchainDir.walkTopDown().filter { it.isFile }
     val emptyFiles = toolchainFiles.filter { it.length() == 0L }

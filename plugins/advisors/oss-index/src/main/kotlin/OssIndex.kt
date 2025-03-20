@@ -35,7 +35,6 @@ import org.ossreviewtoolkit.model.AdvisorResult
 import org.ossreviewtoolkit.model.AdvisorSummary
 import org.ossreviewtoolkit.model.Issue
 import org.ossreviewtoolkit.model.Package
-import org.ossreviewtoolkit.model.config.PluginConfiguration
 import org.ossreviewtoolkit.model.vulnerabilities.Cvss2Rating
 import org.ossreviewtoolkit.model.vulnerabilities.Vulnerability
 import org.ossreviewtoolkit.model.vulnerabilities.VulnerabilityReference
@@ -47,20 +46,6 @@ import org.ossreviewtoolkit.utils.ort.OkHttpClientHelper
 
 /**
  * The number of packages to request from Sonatype OSS Index in one request.
- *
- * This [AdviceProvider] offers the following configuration options:
- *
- * #### [Options][PluginConfiguration.options]
- *
- * * **`serverUrl`:** The base URL of the OSS Index REST API. If undefined, the default base URL for the REST API of the
- *   public OSS Index service is used.
- *
- * #### [Secrets][PluginConfiguration.secrets]
- *
- * * **`username`:** The username to use for authentication.
- * * **`password`:** The password to use for authentication.
- *
- * If not both `username` and `password` are provided, authentication is disabled.
  */
 private const val BULK_REQUEST_SIZE = 128
 
@@ -73,7 +58,10 @@ private const val BULK_REQUEST_SIZE = 128
     description = "An advisor that uses Sonatype's OSS Index to determine vulnerabilities in dependencies.",
     factory = AdviceProviderFactory::class
 )
-class OssIndex(override val descriptor: PluginDescriptor, config: OssIndexConfiguration) : AdviceProvider {
+class OssIndex(
+    override val descriptor: PluginDescriptor = OssIndexFactory.descriptor,
+    config: OssIndexConfiguration
+) : AdviceProvider {
     override val details = AdvisorDetails(descriptor.id, enumSetOf(AdvisorCapability.VULNERABILITIES))
 
     private val service by lazy {

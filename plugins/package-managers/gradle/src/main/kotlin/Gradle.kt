@@ -38,8 +38,8 @@ import org.gradle.tooling.events.ProgressListener
 import org.gradle.tooling.internal.consumer.DefaultGradleConnector
 import org.gradle.tooling.model.build.BuildEnvironment
 
-import org.ossreviewtoolkit.analyzer.AbstractPackageManagerFactory
 import org.ossreviewtoolkit.analyzer.PackageManager
+import org.ossreviewtoolkit.analyzer.PackageManagerFactory
 import org.ossreviewtoolkit.analyzer.PackageManagerResult
 import org.ossreviewtoolkit.downloader.VersionControlSystem
 import org.ossreviewtoolkit.model.Identifier
@@ -49,10 +49,11 @@ import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
-import org.ossreviewtoolkit.model.config.PackageManagerConfiguration
-import org.ossreviewtoolkit.model.config.RepositoryConfiguration
+import org.ossreviewtoolkit.model.config.Excludes
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
+import org.ossreviewtoolkit.plugins.api.OrtPlugin
+import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.MavenSupport
 import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.identifier
 import org.ossreviewtoolkit.utils.common.Os
@@ -74,59 +75,49 @@ private val GRADLE_SETTINGS_FILES = listOf("settings.gradle", "settings.gradle.k
 private const val JAVA_MAX_HEAP_SIZE_OPTION = "-Xmx"
 private const val JAVA_MAX_HEAP_SIZE_VALUE = "8g"
 
+data class GradleConfig(
+    /**
+     * The version of Gradle to use when analyzing projects. Defaults to the version defined in the Gradle wrapper
+     * properties.
+     */
+    val gradleVersion: String?,
+
+    /**
+     * The version of Java to use when analyzing projects. By default, the same Java version as for ORT itself it used.
+     * Overrides `javaHome` if both are specified.
+     */
+    val javaVersion: String?,
+
+    /**
+     * The directory of the Java home to use when analyzing projects. By default, the same Java home as for ORT itself
+     * is used.
+     */
+    val javaHome: String?
+)
+
 /**
  * The [Gradle](https://gradle.org/) package manager for Java. Also see the
  * [compatibility matrix](https://docs.gradle.org/current/userguide/compatibility.html).
- *
- * This package manager supports the following [options][PackageManagerConfiguration.options]:
- * - *gradleVersion*: The version of Gradle to use when analyzing projects. Defaults to the version defined in the
- *   Gradle wrapper properties.
- * - *javaVersion*: The version of Java to use when analyzing projects. By default, the same Java version as for ORT
- *   itself it used. Overrides `javaHome` if both are specified.
- * - *javaHome*: The directory of the Java home to use when analyzing projects. By default, the same Java home as for
- *   ORT itself is used.
  */
+@OrtPlugin(
+    displayName = "Gradle",
+    description = "The Gradle package manager for Java.",
+    factory = PackageManagerFactory::class
+)
 class Gradle(
-    name: String,
-    analysisRoot: File,
-    analyzerConfig: AnalyzerConfiguration,
-    repoConfig: RepositoryConfiguration
-) : PackageManager(name, "Gradle", analysisRoot, analyzerConfig, repoConfig) {
-    companion object {
-        /**
-         * The name of the option to specify the Gradle version.
-         */
-        const val OPTION_GRADLE_VERSION = "gradleVersion"
-
-        /**
-         * The name of the option to specify the Java version to use.
-         */
-        const val OPTION_JAVA_VERSION = "javaVersion"
-
-        /**
-         * The name of the option to specify the Java home to use.
-         */
-        const val OPTION_JAVA_HOME = "javaHome"
-    }
-
-    class Factory : AbstractPackageManagerFactory<Gradle>("Gradle", isEnabledByDefault = false) {
-        // Gradle prefers Groovy ".gradle" files over Kotlin ".gradle.kts" files, but "build" files have to come before
-        // "settings" files as we should consider "settings" files only if the same directory does not also contain a
-        // "build" file.
-        override val globsForDefinitionFiles = GRADLE_BUILD_FILES + GRADLE_SETTINGS_FILES
-
-        override fun create(
-            analysisRoot: File,
-            analyzerConfig: AnalyzerConfiguration,
-            repoConfig: RepositoryConfiguration
-        ) = Gradle(type, analysisRoot, analyzerConfig, repoConfig)
-    }
+    override val descriptor: PluginDescriptor = GradleFactory.descriptor,
+    private val config: GradleConfig
+) : PackageManager("Gradle") {
+    // Gradle prefers Groovy ".gradle" files over Kotlin ".gradle.kts" files, but "build" files have to come before
+    // "settings" files as we should consider "settings" files only if the same directory does not also contain a
+    // "build" file.
+    override val globsForDefinitionFiles = GRADLE_BUILD_FILES + GRADLE_SETTINGS_FILES
 
     /**
      * A workspace reader that is backed by the local Gradle artifact cache.
      */
     private class GradleCacheReader : WorkspaceReader {
-        private val workspaceRepository = WorkspaceRepository("gradleCache")
+        private val workspaceRepository = WorkspaceRepository("gradle/remote-artifacts")
         private val gradleCacheRoot = GRADLE_USER_HOME.resolve("caches/modules-2/files-2.1")
 
         override fun findArtifact(artifact: Artifact): File? {
@@ -162,8 +153,8 @@ class Gradle(
         override fun getRepository() = workspaceRepository
     }
 
-    private val maven = MavenSupport(GradleCacheReader())
-    private val dependencyHandler = GradleDependencyHandler(managerName, projectType, maven)
+    private val mavenSupport = MavenSupport(GradleCacheReader())
+    private val dependencyHandler = GradleDependencyHandler(projectType, mavenSupport)
     private val graphBuilder = DependencyGraphBuilder(dependencyHandler)
 
     // The path to the root project. In a single-project, just points to the project path.
@@ -172,7 +163,13 @@ class Gradle(
     override fun createPackageManagerResult(projectResults: Map<File, List<ProjectAnalyzerResult>>) =
         PackageManagerResult(projectResults, graphBuilder.build(), graphBuilder.packages())
 
-    override fun resolveDependencies(definitionFile: File, labels: Map<String, String>): List<ProjectAnalyzerResult> {
+    override fun resolveDependencies(
+        analysisRoot: File,
+        definitionFile: File,
+        excludes: Excludes,
+        analyzerConfig: AnalyzerConfiguration,
+        labels: Map<String, String>
+    ): List<ProjectAnalyzerResult> {
         val gradleProperties = mutableListOf<Pair<String, String>>()
 
         val projectDir = definitionFile.parentFile
@@ -198,9 +195,8 @@ class Gradle(
 
         val gradleConnector = GradleConnector.newConnector()
 
-        val gradleVersion = options[OPTION_GRADLE_VERSION]
-        if (gradleVersion != null) {
-            gradleConnector.useGradleVersion(gradleVersion)
+        if (config.gradleVersion != null) {
+            gradleConnector.useGradleVersion(config.gradleVersion)
         }
 
         if (gradleConnector is DefaultGradleConnector) {
@@ -245,13 +241,13 @@ class Gradle(
                             addProgressListener(ProgressListener { logger.debug(it.displayName) })
                         }
 
-                        val javaHome = options[OPTION_JAVA_VERSION]
+                        val javaHome = config.javaVersion
                             ?.takeUnless { JavaBootstrapper.isRunningOnJdk(it) }
                             ?.let {
-                                JavaBootstrapper.installJdk("TEMURIN", it)
-                                    .onFailure { e -> issues += createAndLogIssue(managerName, e.collectMessages()) }
-                                    .getOrNull()
-                            } ?: options[OPTION_JAVA_HOME]?.let { File(it) }
+                                JavaBootstrapper.installJdk("TEMURIN", it).onFailure { e ->
+                                    issues += createAndLogIssue(e.collectMessages())
+                                }.getOrNull()
+                            } ?: config.javaHome?.let { File(it) }
 
                         javaHome?.also {
                             logger.info { "Setting Java home for project analysis to '$it'." }
@@ -293,7 +289,7 @@ class Gradle(
                 }
 
                 val projectId = Identifier(
-                    type = managerName,
+                    type = projectType,
                     namespace = dependencyTreeModel.group,
                     name = dependencyTreeModel.name,
                     version = dependencyTreeModel.version
@@ -317,15 +313,19 @@ class Gradle(
                 )
 
                 dependencyTreeModel.errors.mapTo(issues) {
-                    createAndLogIssue(source = managerName, message = it, severity = Severity.ERROR)
+                    createAndLogIssue(it, Severity.ERROR)
                 }
 
                 dependencyTreeModel.warnings.mapTo(issues) {
-                    createAndLogIssue(source = managerName, message = it, severity = Severity.WARNING)
+                    createAndLogIssue(it, Severity.WARNING)
                 }
 
                 listOf(ProjectAnalyzerResult(project, emptySet(), issues))
             }
         }
+    }
+
+    override fun afterResolution(analysisRoot: File, definitionFiles: List<File>) {
+        mavenSupport.close()
     }
 }
