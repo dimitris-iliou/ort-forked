@@ -97,7 +97,7 @@ class GitRepo(
     private val config: GitConfig
 ) : VersionControlSystem() {
     override val type = VcsType.GIT_REPO
-    override val priority = 50
+    override val priority = 100
     override val latestRevisionNames = listOf("HEAD", "@")
 
     override fun getVersion() = GitRepoCommand.getVersion()
