@@ -63,12 +63,37 @@ fun interface ProvenanceDownloader {
 
         val root = download(nestedProvenance.root)
 
-        nestedProvenance.subRepositories.forEach { (path, provenance) ->
-            val tempDir = download(provenance)
-            val targetDir = root.resolve(path).apply { parentFile.safeMkdirs() }
-            tempDir.toPath().moveTo(targetDir.toPath(), StandardCopyOption.ATOMIC_MOVE)
+            nestedProvenance.subRepositories.forEach { (path, provenance) ->
+                val tempDir = download(provenance)
+                val targetDir = resolveTargetDir(root, path)
+                if (path == ".") {
+                    handleTopLevelProject(tempDir, root)
+                } else {
+                    moveDirectory(tempDir, targetDir)
+                }
+            }
+                        try {
+                            file.toPath().moveTo(targetFile.toPath(), StandardCopyOption.ATOMIC_MOVE)
+                        } catch (e: UnsupportedOperationException) {
+                            file.toPath().moveTo(targetFile.toPath())
+                        }
+        private fun resolveTargetDir(root: File, path: String): File {
+            return root.resolve(path).apply { parentFile.safeMkdirs() }
+                val excludedNames = setOf(".repo") // Add more names to exclude as needed
+                if (file.name !in excludedNames) {
+                    val targetFile = root.resolve(file.name)
+                    file.toPath().moveTo(targetFile.toPath(), StandardCopyOption.ATOMIC_MOVE)
+                }
+                if (file.name != ".repo") {
+                    val targetFile = root.resolve(file.name)
+                    file.toPath().moveTo(targetFile.toPath(), StandardCopyOption.ATOMIC_MOVE)
+                }
+            }
         }
-
+    
+        private fun moveDirectory(sourceDir: File, targetDir: File) {
+            sourceDir.toPath().moveTo(targetDir.toPath(), StandardCopyOption.ATOMIC_MOVE)
+        }
         return root
     }
 }
@@ -109,6 +134,17 @@ class DefaultProvenanceDownloader(
             // Make sure that all nested repositories are removed. Even though we do not clone recursively above, nested
             // repositories could exist if the same working tree was previously cloned recursively.
             workingTree.getNested().forEach { (path, _) ->
+            if (path == "." ) {
+                    // Special handling for toplevel project checkouts
+                    // https://github.com/GerritCodeReview/git-repo/commit/0458faa502e9992a4305bfbb282fbee344d505bf
+                    root.listFiles()?.forEach { file ->
+                        if (file.name != ".repo" ) {
+                            file.safeDeleteRecursively(force = true)
+                        }
+                    }
+                } else {
+                    root.resolve(path).safeDeleteRecursively()
+                }
                 root.resolve(path).safeDeleteRecursively()
             }
 
