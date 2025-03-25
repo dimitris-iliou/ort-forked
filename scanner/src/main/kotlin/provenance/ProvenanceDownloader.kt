@@ -125,7 +125,7 @@ class DefaultProvenanceDownloader(
                     // https://github.com/GerritCodeReview/git-repo/commit/0458faa502e9992a4305bfbb282fbee344d505bf
                     root.listFiles()?.forEach { file ->
                         if (file.name != ".repo" ) {
-                            file.safeDeleteRecursively(force = true)
+                            file.safeDeleteRecursively()
                         }
                     }
                 } else {
