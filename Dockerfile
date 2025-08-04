@@ -133,17 +133,17 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     tk-dev \
     && sudo rm -rf /var/lib/apt/lists/*
 
-ARG PYTHON_VERSION
+ARG PYTHON_
 ARG PYENV_GIT_TAG
 
 ENV PYENV_ROOT=/opt/python
 ENV PATH=$PATH:$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PYENV_ROOT/conan2/bin
 RUN curl -kSs https://pyenv.run | bash \
-    && pyenv install -v $PYTHON_VERSION \
-    && pyenv global $PYTHON_VERSION
+    && pyenv install -v $PYTHON_ \
+    && pyenv global $PYTHON_
 
-ARG CONAN_VERSION
-ARG CONAN2_VERSION
+ARG CONAN_
+ARG CONAN2_
 ARG PYTHON_INSPECTOR_VERSION
 ARG PYTHON_PIPENV_VERSION
 ARG PYTHON_POETRY_VERSION
@@ -155,8 +155,7 @@ ARG SCANCODE_VERSION
 RUN ARCH=$(arch | sed s/aarch64/arm64/) \
     curl -Os https://raw.githubusercontent.com/nexB/scancode-toolkit/v$SCANCODE_VERSION/requirements.txt; \
     pip install -U --constraint requirements.txt scancode-toolkit==$SCANCODE_VERSION setuptools==$PYTHON_SETUPTOOLS_VERSION; \
-    rm requirements.txt; \
-    fi
+    rm requirements.txt;
 
 # Extract ScanCode license texts to a directory.
 RUN scancode-license-data --path /opt/scancode-license-data \
