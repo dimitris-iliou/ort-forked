@@ -36,13 +36,15 @@ import io.kotest.matchers.shouldNotBe
 import org.cyclonedx.parsers.JsonParser
 import org.cyclonedx.parsers.XmlParser
 
+import org.ossreviewtoolkit.plugins.licensefactproviders.spdx.SpdxLicenseFactProviderFactory
 import org.ossreviewtoolkit.plugins.reporters.cyclonedx.CycloneDxReporter.Companion.REPORT_BASE_FILENAME
 import org.ossreviewtoolkit.reporter.ORT_RESULT
 import org.ossreviewtoolkit.reporter.ORT_RESULT_WITH_ILLEGAL_COPYRIGHTS
 import org.ossreviewtoolkit.reporter.ORT_RESULT_WITH_VULNERABILITIES
 import org.ossreviewtoolkit.reporter.ReporterInput
+import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.normalizeLineBreaks
-import org.ossreviewtoolkit.utils.test.getAssetAsString
+import org.ossreviewtoolkit.utils.test.readResource
 
 class CycloneDxReporterFunTest : WordSpec({
     val defaultSchemaVersion = DEFAULT_SCHEMA_VERSION.versionString
@@ -56,7 +58,7 @@ class CycloneDxReporterFunTest : WordSpec({
             ).generateReport(ReporterInput(ORT_RESULT), outputDir)
 
             bomFileResults.shouldBeSingleton {
-                it shouldBeSuccess outputDir.resolve("$REPORT_BASE_FILENAME.json")
+                it shouldBeSuccess outputDir / "$REPORT_BASE_FILENAME.json"
             }
         }
 
@@ -76,12 +78,18 @@ class CycloneDxReporterFunTest : WordSpec({
         }
 
         "create the expected XML file" {
-            val expectedBom = getAssetAsString("cyclonedx-reporter-expected-result.xml")
+            val expectedBom = readResource("/cyclonedx-reporter-expected-result.xml")
 
             val bomFileResults = CycloneDxReporterFactory.create(
                 singleBom = true,
                 outputFileFormats = listOf("xml")
-            ).generateReport(ReporterInput(ORT_RESULT_WITH_VULNERABILITIES), outputDir)
+            ).generateReport(
+                ReporterInput(
+                    ORT_RESULT_WITH_VULNERABILITIES,
+                    licenseFactProvider = SpdxLicenseFactProviderFactory.create()
+                ),
+                outputDir
+            )
 
             bomFileResults.shouldBeSingleton {
                 it shouldBeSuccess { bomFile ->
@@ -124,12 +132,18 @@ class CycloneDxReporterFunTest : WordSpec({
         }
 
         "create the expected JSON file" {
-            val expectedBom = getAssetAsString("cyclonedx-reporter-expected-result.json")
+            val expectedBom = readResource("/cyclonedx-reporter-expected-result.json")
 
             val bomFileResults = CycloneDxReporterFactory.create(
                 singleBom = true,
                 outputFileFormats = listOf("json")
-            ).generateReport(ReporterInput(ORT_RESULT_WITH_VULNERABILITIES), outputDir)
+            ).generateReport(
+                ReporterInput(
+                    ORT_RESULT_WITH_VULNERABILITIES,
+                    licenseFactProvider = SpdxLicenseFactProviderFactory.create()
+                ),
+                outputDir
+            )
 
             bomFileResults.shouldBeSingleton {
                 it shouldBeSuccess { bomFile ->
@@ -203,19 +217,23 @@ class CycloneDxReporterFunTest : WordSpec({
                 CycloneDxReporterFactory.create(
                     singleBom = false,
                     outputFileFormats = listOf("json")
-                ).generateReport(ReporterInput(ORT_RESULT), outputDir).also {
-                    it shouldHaveSize 2
-                }
+                ).generateReport(
+                    ReporterInput(
+                        ORT_RESULT,
+                        licenseFactProvider = SpdxLicenseFactProviderFactory.create()
+                    ),
+                    outputDir
+                ).also { it shouldHaveSize 2 }
 
             bomFileResultWithFindings shouldBeSuccess { bomFile ->
-                val expectedBom = getAssetAsString("cyclonedx-reporter-expected-result-with-findings.json")
+                val expectedBom = readResource("/cyclonedx-reporter-expected-result-with-findings.json")
                 val actualBom = bomFile.readText().patchCycloneDxResult()
 
                 actualBom shouldEqualJson expectedBom
             }
 
             bomFileResultWithoutFindings shouldBeSuccess { bomFile ->
-                val expectedBom = getAssetAsString("cyclonedx-reporter-expected-result-without-findings.json")
+                val expectedBom = readResource("/cyclonedx-reporter-expected-result-without-findings.json")
                 val actualBom = bomFile.readText().patchCycloneDxResult()
 
                 actualBom shouldEqualJson expectedBom

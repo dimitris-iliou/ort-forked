@@ -27,70 +27,71 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.matchers.string.shouldContain
 
-import java.io.File
-
 import org.ossreviewtoolkit.utils.spdxdocument.SpdxModelMapper
+import org.ossreviewtoolkit.utils.test.readResource
 
 /**
  * This test uses the following test assets copied from the SPDX 2.2.2 specification examples.
  *
- * 1. https://github.com/spdx/spdx-spec/blob/development/v2.2.2/examples/SPDXYAMLExample-2.2.spdx.yaml
- * 2. https://github.com/spdx/spdx-spec/blob/development/v2.2.2/examples/SPDXJSONExample-v2.2.spdx.json
+ * 1. https://github.com/spdx/spdx-spec/blob/v2.2.2/examples/SPDXYAMLExample-2.2.spdx.yaml
+ * 2. https://github.com/spdx/spdx-spec/blob/v2.2.2/examples/SPDXJSONExample-v2.2.spdx.json
  *
  * The "*-no-ranges.spdx.*" resource files have the "ranges" property removed, which is actually broken in the
  * specification and impossible to implement.
+ *
+ * Note: The examples files of v2.2.2, v2.2.1 and also v2.2.1-ISO-final are identical.
  */
 class SpdxDocumentTest : WordSpec({
-    val spdxExamplesDir = File("src/test/assets/spdx-spec-examples").absoluteFile
-
-    "The official YAML example from the SPDX specification version 2.2" should {
+    "The official YAML example from the SPDX specification version 2.2.2" should {
         "be deserializable" {
-            val yaml = spdxExamplesDir.resolve("SPDXYAMLExample-2.2.spdx.yaml")
+            val yaml = readResource("/spec-examples/v2.2.2/SPDXYAMLExample-2.2.spdx.yaml")
 
-            SpdxModelMapper.read<SpdxDocument>(yaml)
+            SpdxModelMapper.fromYaml<SpdxDocument>(yaml)
         }
     }
 
-    "The official YAML example without ranges from the SPDX specification version 2.2" should {
+    "The official YAML example without ranges from the SPDX specification version 2.2.2" should {
         "have idempotent (de)-serialization" {
-            val yaml = spdxExamplesDir.resolve("SPDXYAMLExample-2.2-no-ranges.spdx.yaml").readText()
+            val yaml = readResource("/spec-examples/v2.2.2/SPDXYAMLExample-2.2-no-ranges.spdx.yaml")
 
             val reSerializedYaml = SpdxModelMapper.fromYaml<SpdxDocument>(yaml).let {
                 SpdxModelMapper.toYaml(it)
             }
 
-            reSerializedYaml lenientShouldEqualYaml yaml
+            // Account for the fact that ORT serializes SPDX 2.3 now.
+            reSerializedYaml.replace("PACKAGE-MANAGER", "PACKAGE_MANAGER") lenientShouldEqualYaml yaml
         }
     }
 
-    "The official JSON example from the SPDX specification version 2.2" should {
+    "The official JSON example from the SPDX specification version 2.2.2" should {
         "be deserializable" {
-            val json = spdxExamplesDir.resolve("SPDXJSONExample-v2.2.spdx.json")
+            val json = readResource("/spec-examples/v2.2.2/SPDXJSONExample-v2.2.spdx.json")
 
-            SpdxModelMapper.read<SpdxDocument>(json)
+            SpdxModelMapper.fromJson<SpdxDocument>(json)
         }
     }
 
-    "The official JSON example without ranges from the SPDX specification version 2.2" should {
+    "The official JSON example without ranges from the SPDX specification version 2.2.2" should {
         "have idempotent (de-)serialization" {
-            val json = spdxExamplesDir.resolve("SPDXJSONExample-v2.2-no-ranges.spdx.json").readText()
+            val json = readResource("/spec-examples/v2.2.2/SPDXJSONExample-v2.2-no-ranges.spdx.json")
 
             val reSerializedJson = SpdxModelMapper.fromJson<SpdxDocument>(json).let {
                 SpdxModelMapper.toJson(it)
             }
 
-            reSerializedJson lenientShouldEqualJson json
+            // Account for the fact that ORT serializes SPDX 2.3 now.
+            reSerializedJson.replace("PACKAGE-MANAGER", "PACKAGE_MANAGER") lenientShouldEqualJson json
         }
     }
 
     "Parsing an SPDX document" should {
         "fail if no relationship of type DESCRIBES or documentDescribes is contained" {
-            val yaml = spdxExamplesDir.resolve(
-                "SPDXYAMLExample-2.2-no-relationship-describes-or-document-describes.spdx.yaml"
+            val yaml = readResource(
+                "/spec-examples/v2.2.2/SPDXYAMLExample-2.2-no-relationship-describes-or-document-describes.spdx.yaml"
             )
 
             val exception = shouldThrow<ValueInstantiationException> {
-                SpdxModelMapper.read<SpdxDocument>(yaml)
+                SpdxModelMapper.fromYaml<SpdxDocument>(yaml)
             }
 
             exception.message shouldContain "The document must either have at least one relationship of type " +

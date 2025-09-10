@@ -52,15 +52,16 @@ import org.ossreviewtoolkit.model.licenses.LicenseClassifications
 import org.ossreviewtoolkit.plugins.reporters.ctrlx.CtrlXAutomationReporter.Companion.REPORT_FILENAME
 import org.ossreviewtoolkit.reporter.ORT_RESULT
 import org.ossreviewtoolkit.reporter.ReporterInput
+import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.ort.createOrtTempDir
 import org.ossreviewtoolkit.utils.spdx.SpdxSingleLicenseExpression
 import org.ossreviewtoolkit.utils.spdx.toSpdx
-import org.ossreviewtoolkit.utils.test.getAssetFile
+import org.ossreviewtoolkit.utils.test.getResource
 
 class CtrlXAutomationReporterFunTest : StringSpec({
     "The official sample file can be deserialized" {
-        val fossInfoFile = getAssetFile("sample.fossinfo.json")
-        val fossInfo = fossInfoFile.inputStream().use { CtrlXAutomationReporter.JSON.decodeFromStream<FossInfo>(it) }
+        val fossInfoResource = getResource("/sample.fossinfo.json")
+        val fossInfo = fossInfoResource.openStream().use { CtrlXAutomationReporter.JSON.decodeFromStream<FossInfo>(it) }
 
         fossInfo.components shouldNotBeNull {
             this should haveSize(8)
@@ -72,7 +73,7 @@ class CtrlXAutomationReporterFunTest : StringSpec({
         val reportFiles = CtrlXAutomationReporterFactory.create().generateReport(ReporterInput(ORT_RESULT), outputDir)
 
         reportFiles.shouldBeSingleton {
-            it shouldBeSuccess outputDir.resolve(REPORT_FILENAME)
+            it shouldBeSuccess outputDir / REPORT_FILENAME
         }
     }
 

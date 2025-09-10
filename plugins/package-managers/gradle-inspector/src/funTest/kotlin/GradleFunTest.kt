@@ -32,6 +32,7 @@ import org.ossreviewtoolkit.model.toYaml
 import org.ossreviewtoolkit.plugins.versioncontrolsystems.git.GitCommand
 import org.ossreviewtoolkit.utils.common.Os
 import org.ossreviewtoolkit.utils.common.ProcessCapture
+import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.ort.Environment
 import org.ossreviewtoolkit.utils.test.getAssetFile
 import org.ossreviewtoolkit.utils.test.matchExpectedResult
@@ -42,12 +43,10 @@ class GradleFunTest : StringSpec() {
     private val isJava9OrAbove = Environment.JAVA_VERSION.split('.').first().toInt() >= 9
 
     private fun installGradleWrapper(version: String) {
-        println("Installing Gradle wrapper version $version.")
-
         val (gradle, wrapper) = if (Os.isWindows) {
-            Pair("gradle.bat", projectDir.resolve("gradlew.bat"))
+            Pair("gradle.bat", projectDir / "gradlew.bat")
         } else {
-            Pair("gradle", projectDir.resolve("gradlew"))
+            Pair("gradle", projectDir / "gradlew")
         }
 
         val command = if (wrapper.isFile) wrapper.absolutePath else gradle

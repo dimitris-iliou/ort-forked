@@ -28,7 +28,6 @@ object CopyrightableFiles {
         "REUSE.toml",
         "gradlew",
         "gradle/",
-        "docker/versions.dockerfile",
         "examples/",
         "integrations/completions/",
         "plugins/reporters/asciidoc/src/main/resources/pdf-theme/pdf-theme.yml",
@@ -43,6 +42,8 @@ object CopyrightableFiles {
         "resources/licenserefs/",
         "test/assets/",
         "funTest/assets/",
+        "test/resources/",
+        "funTest/resources/",
         "website/babel.config.js",
         "website/docusaurus.config.js",
         "website/docs/configuration/_category_.yml",
@@ -50,6 +51,7 @@ object CopyrightableFiles {
         "website/docs/guides/_category_.yml",
         "website/docs/plugins/_category_.yml",
         "website/docs/plugins/advisors/_category_.yml",
+        "website/docs/plugins/license-fact-providers/_category_.yml",
         "website/docs/plugins/package-configuration-providers/_category_.yml",
         "website/docs/plugins/package-curation-providers/_category_.yml",
         "website/docs/plugins/package-managers/_category_.yml",
@@ -67,7 +69,8 @@ object CopyrightableFiles {
         "md",
         "png",
         "svg",
-        "ttf"
+        "ttf",
+        "woff2"
     )
 
     fun filter(filesProvider: Provider<List<File>>): List<File> = filesProvider.get().filter { file ->

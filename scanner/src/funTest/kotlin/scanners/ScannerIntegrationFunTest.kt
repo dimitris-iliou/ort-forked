@@ -20,7 +20,8 @@
 package org.ossreviewtoolkit.scanner.scanners
 
 import io.kotest.core.spec.style.WordSpec
-import io.kotest.matchers.should
+import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.shouldBe
 
 import java.io.File
 
@@ -34,6 +35,7 @@ import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.PackageReference
 import org.ossreviewtoolkit.model.PackageType
 import org.ossreviewtoolkit.model.Project
+import org.ossreviewtoolkit.model.Repository
 import org.ossreviewtoolkit.model.ScanSummary
 import org.ossreviewtoolkit.model.Scope
 import org.ossreviewtoolkit.model.TextLocation
@@ -55,9 +57,9 @@ import org.ossreviewtoolkit.scanner.provenance.DummyNestedProvenanceStorage
 import org.ossreviewtoolkit.scanner.provenance.DummyProvenanceStorage
 import org.ossreviewtoolkit.utils.common.VCS_DIRECTORIES
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
-import org.ossreviewtoolkit.utils.test.getAssetFile
-import org.ossreviewtoolkit.utils.test.matchExpectedResult
 import org.ossreviewtoolkit.utils.test.patchActualResult
+import org.ossreviewtoolkit.utils.test.patchExpectedResult
+import org.ossreviewtoolkit.utils.test.readResource
 
 class ScannerIntegrationFunTest : WordSpec({
     "Scanning all packages corresponding to a single VCS" should {
@@ -65,39 +67,48 @@ class ScannerIntegrationFunTest : WordSpec({
         val ortResult = createScanner().scan(analyzerResult, skipExcluded = false, emptyMap())
 
         "return the expected ORT result" {
-            val expectedResultFile = getAssetFile("scanner-integration-all-pkgs-expected-ort-result.yml")
+            val expectedResult = readResource("/scanner-integration-all-pkgs-expected-ort-result.yml")
 
-            patchActualResult(ortResult.toYaml(), patchStartAndEndTime = true) should
-                matchExpectedResult(expectedResultFile)
+            patchActualResult(ortResult.toYaml(), patchStartAndEndTime = true) shouldBe
+                patchExpectedResult(expectedResult)
         }
 
         "return the expected (merged) scan results" {
-            val expectedResultFile = getAssetFile("scanner-integration-expected-scan-results.yml")
+            val expectedResult = readResource("/scanner-integration-expected-scan-results.yml")
 
             val scanResults = ortResult.getScanResults().toSortedMap()
 
-            patchActualResult(scanResults.toYaml(), patchStartAndEndTime = true) should
-                matchExpectedResult(expectedResultFile)
+            patchActualResult(scanResults.toYaml(), patchStartAndEndTime = true) shouldBe
+                patchExpectedResult(expectedResult)
         }
 
         "return the expected (merged) file lists" {
-            val expectedResultFile = getAssetFile("scanner-integration-expected-file-lists.yml")
+            val expectedResult = readResource("/scanner-integration-expected-file-lists.yml")
 
             val fileLists = ortResult.getFileLists().toSortedMap()
 
-            fileLists.toYaml() should matchExpectedResult(expectedResultFile)
+            fileLists.toYaml() shouldBe patchExpectedResult(expectedResult)
         }
     }
 
     "Scanning a subset of the packages corresponding to a single VCS" should {
         "return the expected ORT result" {
             val analyzerResult = createAnalyzerResult(pkg1, pkg3)
-            val expectedResultFile = getAssetFile("scanner-integration-subset-pkgs-expected-ort-result.yml")
+            val expectedResult = readResource("/scanner-integration-subset-pkgs-expected-ort-result.yml")
 
             val ortResult = createScanner().scan(analyzerResult, skipExcluded = false, emptyMap())
 
-            patchActualResult(ortResult.toYaml(), patchStartAndEndTime = true) should
-                matchExpectedResult(expectedResultFile)
+            patchActualResult(ortResult.toYaml(), patchStartAndEndTime = true) shouldBe
+                patchExpectedResult(expectedResult)
+        }
+    }
+
+    "Scanning a project with the same provenance as packages" should {
+        "not have duplicated scan results" {
+            val analyzerResult = createAnalyzerResultWithProject(project0, pkg0)
+            val ortResult = createScanner().scan(analyzerResult, skipExcluded = false, emptyMap())
+
+            ortResult.getScanResultsForId(project0.id) shouldHaveSize 1
         }
     }
 })
@@ -128,25 +139,38 @@ internal fun createScanner(scannerWrappers: Map<PackageType, List<ScannerWrapper
 }
 
 private fun createAnalyzerResult(vararg packages: Package): OrtResult {
+    val project = Project.EMPTY.copy(
+        id = createId("project")
+    )
+
+    return createAnalyzerResultWithProject(project, *packages)
+}
+
+private fun createAnalyzerResultWithProject(project: Project, vararg packages: Package): OrtResult {
     val scope = Scope(
         name = "deps",
         dependencies = packages.mapTo(mutableSetOf()) { PackageReference(it.id) }
     )
 
-    val project = Project.EMPTY.copy(
-        id = createId("project"),
+    val projectWithScope = project.copy(
         scopeDependencies = setOf(scope)
     )
 
     val analyzerRun = AnalyzerRun.EMPTY.copy(
         result = AnalyzerResult.EMPTY.copy(
-            projects = setOf(project),
+            projects = setOf(projectWithScope),
             packages = packages.toSet()
         ),
         config = AnalyzerConfiguration(enabledPackageManagers = emptyList())
     )
 
-    return OrtResult.EMPTY.copy(analyzer = analyzerRun)
+    return OrtResult.EMPTY.copy(
+        analyzer = analyzerRun,
+        repository = Repository.EMPTY.copy(
+            vcsProcessed = projectWithScope.vcsProcessed,
+            vcs = projectWithScope.vcs
+        )
+    )
 }
 
 private fun createId(name: String): Identifier = Identifier("Dummy::$name:1.0.0")
@@ -157,6 +181,23 @@ private fun createPackage(name: String, vcs: VcsInfo): Package =
         vcs = vcs,
         vcsProcessed = vcs.normalize()
     )
+
+private fun createProject(name: String, vcs: VcsInfo): Project =
+    Project.EMPTY.copy(
+        id = createId(name),
+        vcs = vcs,
+        vcsProcessed = vcs.normalize()
+    )
+
+private val project0 = createProject(
+    name = "project",
+    vcs = VcsInfo(
+        type = VcsType.GIT,
+        url = "https://github.com/oss-review-toolkit/ort-test-data-scanner.git",
+        revision = "97d57bb4795bc41f496e1a8e2c7751cefc7da7ec",
+        path = ""
+    )
+)
 
 // A package with an empty VCS path.
 private val pkg0 = createPackage(

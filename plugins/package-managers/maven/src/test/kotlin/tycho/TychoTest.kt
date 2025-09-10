@@ -26,13 +26,11 @@ import io.kotest.engine.spec.tempdir
 import io.kotest.engine.spec.tempfile
 import io.kotest.inspectors.forAll
 import io.kotest.matchers.collections.beEmpty
-import io.kotest.matchers.collections.contain
+import io.kotest.matchers.collections.containExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
-import io.kotest.matchers.comparables.shouldBeGreaterThan
 import io.kotest.matchers.nulls.beNull
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.shouldNot
 import io.kotest.matchers.string.shouldContain
 
 import io.mockk.every
@@ -44,14 +42,18 @@ import io.mockk.unmockkAll
 import io.mockk.verify
 
 import java.io.File
+import java.io.IOException
 import java.util.jar.Manifest
 
 import org.apache.maven.cli.MavenCli
 import org.apache.maven.execution.MavenSession
 import org.apache.maven.project.MavenProject
 
+import org.eclipse.aether.artifact.Artifact
 import org.eclipse.aether.artifact.DefaultArtifact
+import org.eclipse.aether.graph.DefaultDependencyNode
 import org.eclipse.aether.graph.DependencyNode
+import org.eclipse.aether.repository.RemoteRepository
 
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.Issue
@@ -62,8 +64,6 @@ import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
-import org.ossreviewtoolkit.model.config.PathExclude
-import org.ossreviewtoolkit.model.config.PathExcludeReason
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
 import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.PackageResolverFun
 import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.identifier
@@ -79,15 +79,15 @@ class TychoTest : WordSpec({
         "select only Tycho root projects" {
             val tychoProjectDir1 = tempdir()
             tychoProjectDir1.addTychoExtension()
-            val tychoDefinitionFile1 = tychoProjectDir1.resolve("pom.xml").also { it.writeText("pom-tycho1") }
+            val tychoDefinitionFile1 = tychoProjectDir1.resolve("pom.xml").apply { writeText("pom-tycho1") }
             val tychoSubProjectDir = tychoProjectDir1.resolve("subproject")
             val tychoSubModule = tychoSubProjectDir.resolve("pom.xml")
             val tychoProjectDir2 = tempdir()
             tychoProjectDir2.addTychoExtension()
-            val tychoDefinitionFile2 = tychoProjectDir2.resolve("pom.xml").also { it.writeText("pom-tycho2") }
+            val tychoDefinitionFile2 = tychoProjectDir2.resolve("pom.xml").apply { writeText("pom-tycho2") }
 
             val mavenProjectDir = tempdir()
-            val mavenDefinitionFile = mavenProjectDir.resolve("pom.xml").also { it.writeText("pom-maven") }
+            val mavenDefinitionFile = mavenProjectDir.resolve("pom.xml").apply { writeText("pom-maven") }
             val mavenSubProjectDir = mavenProjectDir.resolve("subproject")
             val mavenSubModule = mavenSubProjectDir.resolve("pom.xml")
 
@@ -100,9 +100,9 @@ class TychoTest : WordSpec({
             )
 
             val tycho = Tycho()
-            val mappedDefinitionFiles = tycho.mapDefinitionFiles(tempdir(), definitionFiles)
+            val mappedDefinitionFiles = tycho.mapDefinitionFiles(tempdir(), definitionFiles, AnalyzerConfiguration())
 
-            mappedDefinitionFiles shouldContainExactlyInAnyOrder listOf(tychoDefinitionFile1, tychoDefinitionFile2)
+            mappedDefinitionFiles should containExactlyInAnyOrder(tychoDefinitionFile1, tychoDefinitionFile2)
         }
     }
 
@@ -126,7 +126,7 @@ class TychoTest : WordSpec({
                 every { packages() } returns setOf(pkg1, pkg2)
             }
 
-            every { tycho.createGraphBuilder(any(), any(), any(), any()) } returns graphBuilder
+            every { tycho.createGraphBuilder(any(), any(), any(), any(), any()) } returns graphBuilder
 
             val results = tycho.resolveDependencies(
                 tempdir(),
@@ -227,7 +227,7 @@ class TychoTest : WordSpec({
                 regExBuildProjectError.matchEntire(issue.message)?.groupValues?.get(1)
             }
 
-            projectIssues shouldContainExactlyInAnyOrder listOf(
+            projectIssues should containExactlyInAnyOrder(
                 subProject2.identifier("Tycho").toCoordinates(),
                 subProject3.identifier("Tycho").toCoordinates()
             )
@@ -238,6 +238,10 @@ class TychoTest : WordSpec({
             val rootProject = createMavenProject("root", definitionFile)
             val subProject = createMavenProject("sub")
             val projectsList = listOf(rootProject, subProject)
+
+            mockkObject(TargetHandler)
+            val targetHandler = mockk<TargetHandler>()
+            every { TargetHandler.create(definitionFile.parentFile) } returns targetHandler
 
             val tycho = spyk(Tycho())
             injectCliMock(tycho, projectsList.toJson(), projectsList)
@@ -252,7 +256,7 @@ class TychoTest : WordSpec({
 
             val slotProjects = slot<Collection<MavenProject>>()
             verify {
-                P2ArtifactResolver.create(definitionFile.parentFile, capture(slotProjects))
+                P2ArtifactResolver.create(targetHandler, capture(slotProjects))
             }
 
             slotProjects.captured shouldContainExactlyInAnyOrder projectsList
@@ -270,6 +274,7 @@ class TychoTest : WordSpec({
             )
             val resolver = mockk<P2ArtifactResolver> {
                 every { resolverIssues } returns issues
+                every { isFeature(any()) } returns false
             }
 
             val tycho = spyk(Tycho())
@@ -285,96 +290,11 @@ class TychoTest : WordSpec({
 
             val rootResults = results.single { it.project.id.name == "root" }
             rootResults.issues shouldContainExactlyInAnyOrder issues
-        }
 
-        "exclude projects from the build according to path excludes" {
-            val analysisRoot = tempdir()
-            val tychoRoot = analysisRoot.createSubModule("tycho-root")
-            tychoRoot.createSubModule("tycho-sub1")
-            tychoRoot.createSubModule("tycho-sub2")
-            tychoRoot.createSubModule("tycho-excluded-sub1")
-            val module = tychoRoot.createSubModule("tycho-excluded-sub2")
-            module.createSubModule("tycho-excluded-sub2-sub")
-            val rootProject = createMavenProject("root", tychoRoot.pom)
-
-            val excludes = Excludes(
-                paths = listOf(
-                    PathExclude("tycho-root/tycho-excluded-sub1", PathExcludeReason.EXAMPLE_OF),
-                    PathExclude("tycho-root/tycho-excluded-sub2/**", PathExcludeReason.TEST_OF),
-                    PathExclude("other-root/**", PathExcludeReason.EXAMPLE_OF)
-                )
-            )
-            val analyzerConfig = AnalyzerConfiguration(skipExcluded = true)
-
-            val tycho = spyk(Tycho())
-            val cli = injectCliMock(tycho, listOf(rootProject).toJson(), listOf(rootProject))
-
-            tycho.resolveDependencies(analysisRoot, tychoRoot.pom, excludes, analyzerConfig, emptyMap())
-
-            val slotArgs = slot<Array<String>>()
-            verify {
-                cli.doMain(capture(slotArgs), any(), any(), any())
+            verify(atLeast = 1) {
+                // Make sure that the resolver is used for the feature check function.
+                resolver.isFeature(any())
             }
-
-            with(slotArgs.captured) {
-                val indexPl = indexOf("-pl")
-                indexPl shouldBeGreaterThan -1
-                val excludedProjects = get(indexPl + 1).split(",")
-                excludedProjects shouldContainExactlyInAnyOrder listOf(
-                    "!tycho-excluded-sub1",
-                    "!tycho-excluded-sub2",
-                    "!tycho-excluded-sub2/tycho-excluded-sub2-sub"
-                )
-            }
-        }
-
-        "not add a -pl option if no projects are excluded" {
-            val analysisRoot = tempdir()
-            val tychoRoot = analysisRoot.createSubModule("tycho-root")
-            tychoRoot.createSubModule("tycho-sub1")
-            tychoRoot.createSubModule("tycho-sub2")
-            val rootProject = createMavenProject("root", tychoRoot.pom)
-
-            val excludes = Excludes(paths = listOf(PathExclude("other-root/**", PathExcludeReason.EXAMPLE_OF)))
-            val analyzerConfig = AnalyzerConfiguration(skipExcluded = true)
-
-            val tycho = spyk(Tycho())
-            val cli = injectCliMock(tycho, listOf(rootProject).toJson(), listOf(rootProject))
-
-            tycho.resolveDependencies(analysisRoot, tychoRoot.pom, excludes, analyzerConfig, emptyMap())
-
-            val slotArgs = slot<Array<String>>()
-            verify {
-                cli.doMain(capture(slotArgs), any(), any(), any())
-            }
-
-            slotArgs.captured.toList() shouldNot contain("-pl")
-        }
-
-        "not exclude projects if skipExcluded is false" {
-            val analysisRoot = tempdir()
-            val tychoRoot = analysisRoot.createSubModule("tycho-root")
-            tychoRoot.createSubModule("tycho-sub1")
-            tychoRoot.createSubModule("tycho-sub2")
-            tychoRoot.createSubModule("tycho-excluded-sub1")
-            val rootProject = createMavenProject("root", tychoRoot.pom)
-
-            val excludes = Excludes(
-                paths = listOf(PathExclude("tycho-root/tycho-excluded-sub1", PathExcludeReason.EXAMPLE_OF))
-            )
-            val analyzerConfig = AnalyzerConfiguration()
-
-            val tycho = spyk(Tycho())
-            val cli = injectCliMock(tycho, listOf(rootProject).toJson(), listOf(rootProject))
-
-            tycho.resolveDependencies(analysisRoot, tychoRoot.pom, excludes, analyzerConfig, emptyMap())
-
-            val slotArgs = slot<Array<String>>()
-            verify {
-                cli.doMain(capture(slotArgs), any(), any(), any())
-            }
-
-            slotArgs.captured.toList() shouldNot contain("-pl")
         }
     }
 
@@ -387,7 +307,7 @@ class TychoTest : WordSpec({
                 pkg
             }
 
-            val resolver = tychoPackageResolverFun(delegate, mockk(), mockk())
+            val resolver = tychoPackageResolverFun(delegate, mockk(), mockk(), mockk())
 
             resolver(dependency) shouldBe pkg
         }
@@ -444,15 +364,45 @@ class TychoTest : WordSpec({
                 sourceArtifact shouldBe RemoteArtifact.EMPTY
                 vcs shouldBe VcsInfo.EMPTY
                 vcsProcessed shouldBe VcsInfo.EMPTY
-                declaredLicenses shouldContainExactlyInAnyOrder listOf(bundleProperties["Bundle-License"])
+                declaredLicenses should containExactlyInAnyOrder(bundleProperties["Bundle-License"])
                 declaredLicensesProcessed shouldBe ProcessedDeclaredLicense(
                     spdxExpression = SpdxExpression.parse("Apache-2.0"),
                     mapped = mapOf("The Apache License" to SpdxExpression.parse("Apache-2.0"))
                 )
                 concludedLicense should beNull()
-                authors shouldContainExactlyInAnyOrder listOf(bundleProperties["Bundle-Vendor"])
+                authors should containExactlyInAnyOrder(bundleProperties["Bundle-Vendor"])
                 homepageUrl shouldBe "https://example.com/package"
             }
+        }
+
+        "handle Tycho identifiers that need to be mapped to Maven dependencies" {
+            val originalArtifact = mockk<Artifact>()
+            val mappedArtifact = mockk<Artifact>()
+            val repo1 = mockk<RemoteRepository>()
+            val repo2 = mockk<RemoteRepository>()
+            val dependency = DefaultDependencyNode(originalArtifact).apply {
+                repositories = listOf(repo1, repo2)
+            }
+
+            val pkg = mockk<Package>()
+            val delegate: PackageResolverFun = { node ->
+                if (node == dependency) {
+                    throw IOException("Test exception: Unresolvable dependency.")
+                }
+
+                node.artifact shouldBe mappedArtifact
+                node.repositories should containExactlyInAnyOrder(repo1, repo2)
+
+                pkg
+            }
+
+            val targetHandler = mockk<TargetHandler> {
+                every { mapToMavenDependency(originalArtifact) } returns mappedArtifact
+            }
+
+            val resolver = tychoPackageResolverFun(delegate, mockk(), mockk(), targetHandler)
+
+            resolver(dependency) shouldBe pkg
         }
     }
 
@@ -676,22 +626,6 @@ private fun injectCliMock(
     return cli
 }
 
-/**
- * Return a reference to the Maven pom file in this folder.
- */
-private val File.pom: File
-    get() = resolve("pom.xml")
-
-/**
- * Create a sub folder with the given [name] and a pom file to simulate a Maven module. Return the created folder
- * for the module.
- */
-private fun File.createSubModule(name: String): File =
-    resolve(name).apply {
-        mkdirs()
-        pom.also { it.writeText("pom-$name") }
-    }
-
 /** The test artifact used by many tests. */
 private val testArtifact = DefaultArtifact(TEST_GROUP_ID, TEST_ARTIFACT_ID, "jar", TEST_VERSION)
 
@@ -714,9 +648,12 @@ private val resolveException = RuntimeException("Test exception: Could not resol
 private fun createResolverFunWithRepositoryHelper(block: LocalRepositoryHelper.() -> Unit): PackageResolverFun {
     val helper = mockk<LocalRepositoryHelper>(block = block)
     val resolver = createResolverMock()
+    val targetHandler = mockk<TargetHandler> {
+        every { mapToMavenDependency(any()) } returns null
+    }
 
     val delegateResolverFun: PackageResolverFun = { throw resolveException }
-    return tychoPackageResolverFun(delegateResolverFun, helper, resolver)
+    return tychoPackageResolverFun(delegateResolverFun, helper, resolver, targetHandler)
 }
 
 /**
@@ -740,5 +677,6 @@ private fun createResolverMock(
     return mockk {
         every { getBinaryArtifactFor(testArtifact) } returns binaryArtifact
         every { getSourceArtifactFor(testArtifact) } returns sourceArtifact
+        every { isBinary(any()) } returns false
     }
 }

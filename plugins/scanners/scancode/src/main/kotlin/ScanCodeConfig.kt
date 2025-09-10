@@ -22,6 +22,7 @@ package org.ossreviewtoolkit.plugins.scanners.scancode
 import org.ossreviewtoolkit.model.ScannerDetails
 import org.ossreviewtoolkit.plugins.api.OrtPluginOption
 import org.ossreviewtoolkit.scanner.ScanStorage
+import org.ossreviewtoolkit.scanner.ScannerMatcherCriteria
 
 data class ScanCodeConfig(
     /**
@@ -36,7 +37,8 @@ data class ScanCodeConfig(
      * like "--processes". If this does not contain "--processes", it is added with a value of one less than the number
      * of available processors.
      */
-    val commandLineNonConfig: List<String>?,
+    @OrtPluginOption(defaultValue = "")
+    val commandLineNonConfig: List<String>,
 
     /**
      * A flag to indicate whether the "high-level" per-file license reported by ScanCode starting with version 32 should
@@ -53,23 +55,23 @@ data class ScanCodeConfig(
     /**
      * A regular expression to match the scanner name when looking up scan results in the storage.
      */
-    val regScannerName: String?,
+    override val regScannerName: String?,
 
     /**
      * The minimum version of stored scan results to use.
      */
-    val minVersion: String?,
+    override val minVersion: String?,
 
     /**
      * The maximum version of stored scan results to use.
      */
-    val maxVersion: String?,
+    override val maxVersion: String?,
 
     /**
      * The configuration to use for the scanner. Only scan results with the same configuration are used when looking up
      * scan results in the storage.
      */
-    val configuration: String?,
+    override val configuration: String?,
 
     /**
      * Whether to read scan results from the storage.
@@ -82,4 +84,4 @@ data class ScanCodeConfig(
      */
     @OrtPluginOption(defaultValue = "true")
     val writeToStorage: Boolean
-)
+) : ScannerMatcherCriteria

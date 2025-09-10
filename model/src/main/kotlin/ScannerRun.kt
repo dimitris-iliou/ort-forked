@@ -20,6 +20,8 @@
 package org.ossreviewtoolkit.model
 
 import com.fasterxml.jackson.annotation.JsonIgnore
+import com.fasterxml.jackson.annotation.JsonInclude
+import com.fasterxml.jackson.annotation.JsonPropertyOrder
 import com.fasterxml.jackson.databind.annotation.JsonSerialize
 
 import java.io.File
@@ -39,6 +41,7 @@ import org.ossreviewtoolkit.model.utils.mergeScanResultsByScanner
 import org.ossreviewtoolkit.model.utils.prependPath
 import org.ossreviewtoolkit.model.utils.vcsPath
 import org.ossreviewtoolkit.utils.common.getDuplicates
+import org.ossreviewtoolkit.utils.common.zipWithSets
 import org.ossreviewtoolkit.utils.ort.Environment
 
 /**
@@ -78,6 +81,14 @@ data class ScannerRun(
     val scanResults: Set<ScanResult>,
 
     /**
+     * A map of [Identifier]s associated with a set of [Issue]s that occurred during a scan besides the issues created
+     * by the scanners themselves as part of the [ScanSummary].
+     */
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    @JsonPropertyOrder(alphabetic = true)
+    val issues: Map<Identifier, Set<Issue>> = emptyMap(),
+
+    /**
      * The names of the scanners which have been used to scan the package.
      */
     @JsonSerialize(converter = ScannersMapConverter::class)
@@ -101,6 +112,7 @@ data class ScannerRun(
             config = ScannerConfiguration(),
             provenances = emptySet(),
             scanResults = emptySet(),
+            issues = emptyMap(),
             files = emptySet(),
             scanners = emptyMap()
         )
@@ -112,7 +124,7 @@ data class ScannerRun(
                 "Found a scan result with an unknown provenance, which is not allowed."
             }
 
-            (scanResult.provenance as? RepositoryProvenance)?.let { repositoryProvenance ->
+            (scanResult.provenance as? RepositoryProvenance)?.also { repositoryProvenance ->
                 require(repositoryProvenance.vcsInfo.path.isEmpty()) {
                     "Found a scan result with a non-empty VCS path, which is not allowed."
                 }
@@ -123,7 +135,21 @@ data class ScannerRun(
             }
         }
 
-        provenances.getDuplicates { it.id }.keys.let { idsForDuplicateProvenanceResolutionResults ->
+        scanResults.getDuplicates { it.provenance to it.scanner }.keys.also { duplicates ->
+            require(duplicates.isEmpty()) {
+                val (dupProvenance, dupScanner) = duplicates.first()
+
+                buildString {
+                    appendLine("Found multiple scan results for the same provenance and scanner.")
+                    appendLine("Scanner:")
+                    appendLine(dupScanner.toYaml())
+                    appendLine("Provenance:")
+                    append(dupProvenance.toYaml())
+                }
+            }
+        }
+
+        provenances.getDuplicates { it.id }.keys.also { idsForDuplicateProvenanceResolutionResults ->
             require(idsForDuplicateProvenanceResolutionResults.isEmpty()) {
                 "Found multiple provenance resolution results for the following ids: " +
                     "${idsForDuplicateProvenanceResolutionResults.joinToString { it.toCoordinates() }}."
@@ -135,7 +161,7 @@ data class ScannerRun(
             it.getKnownProvenancesWithoutVcsPath().values
         }
 
-        (scannedProvenances - resolvedProvenances).let {
+        (scannedProvenances - resolvedProvenances).also {
             require(it.isEmpty()) {
                 "Found scan results which do not correspond to any resolved provenances, which is not allowed: \n" +
                     it.toYaml()
@@ -143,7 +169,7 @@ data class ScannerRun(
         }
 
         val fileListProvenances = files.mapTo(mutableSetOf()) { it.provenance }
-        (fileListProvenances - resolvedProvenances).let {
+        (fileListProvenances - resolvedProvenances).also {
             require(it.isEmpty()) {
                 "Found a file lists which do not correspond to any resolved provenances, which is not allowed: \n" +
                     it.toYaml()
@@ -151,7 +177,7 @@ data class ScannerRun(
         }
 
         files.forEach { fileList ->
-            (fileList.provenance as? RepositoryProvenance)?.let {
+            (fileList.provenance as? RepositoryProvenance)?.also {
                 require(it.vcsInfo.path.isEmpty()) {
                     "Found a file list with a non-empty VCS path, which is not allowed."
                 }
@@ -159,6 +185,13 @@ data class ScannerRun(
                 require(it.vcsInfo.revision == it.resolvedRevision) {
                     "The revision and resolved revision of a file list are not equal, which is not allowed."
                 }
+            }
+        }
+
+        files.getDuplicates { it.provenance }.keys.also { duplicateProvenances ->
+            require(duplicateProvenances.isEmpty()) {
+                "Found multiple file lists for the same provenance:\n" +
+                    duplicateProvenances.first().toYaml()
             }
         }
     }
@@ -260,7 +293,50 @@ data class ScannerRun(
     fun getAllIssues(): Map<Identifier, Set<Issue>> =
         scanResultsById.mapValues { (_, scanResults) ->
             scanResults.flatMapTo(mutableSetOf()) { it.summary.issues }
-        }
+        }.zipWithSets(issues)
+
+    /**
+     * Merge this [ScannerRun] with the given [other] [ScannerRun].
+     *
+     * Both [ScannerRun]s must have the same [config] and non-conflicting [environment], otherwise an
+     * [IllegalArgumentException] is thrown.
+     *
+     * files and scanResults are merged by their [KnownProvenance]s, while issues and scanners are merged by their
+     * names.
+     *
+     * The [startTime] and [endTime] are widened to the earliest and latest values of both [ScannerRun]s.
+     */
+    operator fun plus(other: ScannerRun): ScannerRun {
+        val mergedFiles = (files + other.files)
+            .groupBy { it.provenance }
+            .values
+            .mapTo(mutableSetOf()) { fileLists ->
+                fileLists.reduce { acc, next -> acc + next }
+            }
+
+        val mergedScanResults = (scanResults + other.scanResults)
+            .groupBy { it.provenance to it.scanner }
+            .values
+            .mapTo(mutableSetOf()) { scanResults ->
+                scanResults.reduce { acc, next -> acc + next }
+            }
+
+        return ScannerRun(
+            startTime = minOf(startTime, other.startTime),
+            endTime = maxOf(endTime, other.endTime),
+            environment = environment + other.environment,
+            config = config.also {
+                require(it == other.config) {
+                    "Cannot merge ScannerRuns with different configurations: $it != ${other.config}."
+                }
+            },
+            provenances = provenances + other.provenances,
+            scanResults = mergedScanResults,
+            issues = issues.zipWithSets(other.issues),
+            scanners = scanners.zipWithSets(other.scanners),
+            files = mergedFiles
+        )
+    }
 }
 
 private fun scanResultForProvenanceResolutionIssues(packageProvenance: KnownProvenance?, issues: List<Issue>) =

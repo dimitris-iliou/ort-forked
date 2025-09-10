@@ -28,8 +28,8 @@ import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.engine.spec.tempdir
 import io.kotest.matchers.collections.beEmpty
+import io.kotest.matchers.collections.containExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldContain
-import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.should
@@ -51,6 +51,7 @@ import org.ossreviewtoolkit.model.PackageCuration
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.config.CopyrightGarbage
 import org.ossreviewtoolkit.model.config.NotifierConfiguration
+import org.ossreviewtoolkit.model.config.PackageConfiguration
 import org.ossreviewtoolkit.model.config.RepositoryConfiguration
 import org.ossreviewtoolkit.model.config.Resolutions
 import org.ossreviewtoolkit.model.config.SendMailConfiguration
@@ -61,11 +62,12 @@ import org.ossreviewtoolkit.plugins.api.PluginConfig
 import org.ossreviewtoolkit.reporter.HowToFixTextProvider
 import org.ossreviewtoolkit.reporter.ReporterFactory
 import org.ossreviewtoolkit.reporter.ReporterInput
+import org.ossreviewtoolkit.utils.ort.ORT_PACKAGE_CONFIGURATION_FILENAME
 import org.ossreviewtoolkit.utils.ort.ORT_PACKAGE_CURATIONS_FILENAME
 import org.ossreviewtoolkit.utils.ort.ORT_REPO_CONFIG_FILENAME
 import org.ossreviewtoolkit.utils.ort.ORT_RESOLUTIONS_FILENAME
 import org.ossreviewtoolkit.utils.spdx.toSpdx
-import org.ossreviewtoolkit.utils.test.getAssetFile
+import org.ossreviewtoolkit.utils.test.readResourceValue
 
 class ExamplesFunTest : StringSpec({
     val examplesDir = File("../examples")
@@ -104,6 +106,12 @@ class ExamplesFunTest : StringSpec({
         }
     }
 
+    "The package configuration file can be deserialized" {
+        shouldNotThrow<IOException> {
+            takeExampleFile(ORT_PACKAGE_CONFIGURATION_FILENAME).readValue<PackageConfiguration>()
+        }
+    }
+
     "The license classifications file can be deserialized" {
         shouldNotThrow<IOException> {
             val classifications =
@@ -138,9 +146,8 @@ class ExamplesFunTest : StringSpec({
     }
 
     "The rules script can be run" {
-        val resultFile = getAssetFile("semver4j-ort-result.yml")
+        val ortResult = readResourceValue<OrtResult>("/semver4j-ort-result.yml")
         val licenseFile = File("../examples/license-classifications.yml")
-        val ortResult = resultFile.readValue<OrtResult>()
         val evaluator = Evaluator(
             ortResult = ortResult,
             licenseClassifications = licenseFile.readValue()
@@ -150,7 +157,7 @@ class ExamplesFunTest : StringSpec({
 
         val result = evaluator.run(script)
 
-        result.violations.map { it.rule } shouldContainExactlyInAnyOrder listOf(
+        result.violations.map { it.rule } should containExactlyInAnyOrder(
             "COPYLEFT_LIMITED_IN_SOURCE",
             "DEPRECATED_SCOPE_EXCLUDE_REASON_IN_ORT_YML",
             "HIGH_SEVERITY_VULNERABILITY_IN_PACKAGE",

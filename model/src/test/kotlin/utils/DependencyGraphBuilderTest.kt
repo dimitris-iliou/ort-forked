@@ -24,7 +24,6 @@ import io.kotest.core.spec.style.WordSpec
 import io.kotest.matchers.collections.beEmpty
 import io.kotest.matchers.collections.containExactly
 import io.kotest.matchers.collections.containExactlyInAnyOrder
-import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.should
@@ -207,7 +206,7 @@ class DependencyGraphBuilderTest : WordSpec({
                 .build()
             val scopes = graph.createScopes()
 
-            scopeDependencies(scopes, scope) shouldContainExactly listOf(depCyc2)
+            scopeDependencies(scopes, scope) should containExactly(depCyc2)
 
             graph.nodes shouldHaveSize 3
         }
@@ -224,7 +223,7 @@ class DependencyGraphBuilderTest : WordSpec({
                     .build()
             }
 
-            exception.message shouldContain depNoPkg.id.toString()
+            exception.message shouldContain depNoPkg.id.toCoordinates()
         }
 
         "take issues into account when checking for illegal references" {

@@ -21,28 +21,34 @@ package org.ossreviewtoolkit.plugins.reporters.asciidoc
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.engine.spec.tempdir
-import io.kotest.matchers.should
+import io.kotest.matchers.shouldBe
 
 import java.time.LocalDate
 
+import org.ossreviewtoolkit.plugins.licensefactproviders.spdx.SpdxLicenseFactProviderFactory
 import org.ossreviewtoolkit.reporter.ORT_RESULT
 import org.ossreviewtoolkit.reporter.ReporterInput
-import org.ossreviewtoolkit.utils.test.getAssetFile
-import org.ossreviewtoolkit.utils.test.matchExpectedResult
+import org.ossreviewtoolkit.utils.test.patchExpectedResult
+import org.ossreviewtoolkit.utils.test.readResource
 
 class ManPageTemplateReporterFunTest : StringSpec({
     "ManPage report is created from default template" {
-        val expectedResultFile = getAssetFile("manpage-template-reporter-expected-result.1")
+        val expectedResult = readResource("/manpage-template-reporter-expected-result.1")
         val reporter = ManPageTemplateReporterFactory.create()
 
-        val reportContent = reporter.generateReport(ReporterInput(ORT_RESULT), tempdir())
-            .single().getOrThrow().readText()
+        val reportContent = reporter.generateReport(
+            ReporterInput(
+                ORT_RESULT,
+                licenseFactProvider = SpdxLicenseFactProviderFactory.create()
+            ),
+            tempdir()
+        ).single().getOrThrow().readText()
 
-        reportContent should matchExpectedResult(
-            expectedResultFile,
+        reportContent shouldBe patchExpectedResult(
+            expectedResult,
             custom = mapOf(
                 "<REPLACE_DATE>" to "${LocalDate.now()}",
-                "<REPLACE_ASCIIDOCTOR_VERSION>" to reporter.asciidoctor.asciidoctorVersion()
+                "<REPLACE_ASCIIDOCTOR_VERSION>" to AsciiDocTemplateReporter.ASCIIDOCTOR.asciidoctorVersion()
             )
         )
     }

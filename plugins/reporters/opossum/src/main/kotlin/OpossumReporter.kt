@@ -44,10 +44,11 @@ import org.ossreviewtoolkit.plugins.reporters.opossum.OpossumSignalFlat.OpossumS
 import org.ossreviewtoolkit.reporter.Reporter
 import org.ossreviewtoolkit.reporter.ReporterFactory
 import org.ossreviewtoolkit.reporter.ReporterInput
+import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.packZip
 import org.ossreviewtoolkit.utils.ort.createOrtTempDir
 import org.ossreviewtoolkit.utils.spdx.SpdxLicense
-import org.ossreviewtoolkit.utils.spdx.andOrNull
+import org.ossreviewtoolkit.utils.spdx.toExpression
 
 private const val ISSUE_PRIORITY = 900
 
@@ -82,7 +83,7 @@ data class OpossumReporterConfig(
  * A [Reporter] that generates an [OpossumInput].
  */
 @OrtPlugin(
-    displayName = "Opossum Reporter",
+    displayName = "Opossum",
     description = "Generates a report in the Opossum format.",
     factory = ReporterFactory::class
 )
@@ -106,7 +107,7 @@ class OpossumReporter(
         OpossumInputCreator().create(input, maxDepth)
 
     private fun writeReport(outputFile: File, opossumInput: OpossumInput) {
-        val inputJson = createOrtTempDir().resolve("input.json")
+        val inputJson = createOrtTempDir() / "input.json"
 
         inputJson.writeReport(opossumInput)
 
@@ -129,7 +130,7 @@ class OpossumReporter(
             addBaseUrl("/", input.ortResult.repository.vcs)
 
             SpdxLicense.entries.forEach {
-                val licenseText = input.licenseTextProvider.getLicenseText(it.id)
+                val licenseText = input.licenseFactProvider.getLicenseText(it.id)
                 frequentLicenses += OpossumFrequentLicense(it.id, it.fullName, licenseText)
             }
 
@@ -356,7 +357,7 @@ class OpossumReporter(
                     val license = licenseFindings
                         .filter { it.location.path == pathFromFinding }
                         .map { it.license }
-                        .andOrNull()
+                        .toExpression()
 
                     val pathSignal = OpossumSignal.create(
                         source,

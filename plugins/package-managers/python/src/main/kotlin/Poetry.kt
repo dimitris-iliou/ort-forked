@@ -21,6 +21,11 @@ package org.ossreviewtoolkit.plugins.packagemanagers.python
 
 import java.io.File
 
+import net.peanuuutz.tomlkt.Toml
+import net.peanuuutz.tomlkt.getStringOrNull
+import net.peanuuutz.tomlkt.getTableOrNull
+import net.peanuuutz.tomlkt.parseToTomlTable
+
 import org.apache.logging.log4j.kotlin.logger
 
 import org.ossreviewtoolkit.analyzer.PackageManager
@@ -38,13 +43,14 @@ import org.ossreviewtoolkit.plugins.packagemanagers.python.utils.PythonInspector
 import org.ossreviewtoolkit.plugins.packagemanagers.python.utils.toOrtPackages
 import org.ossreviewtoolkit.plugins.packagemanagers.python.utils.toPackageReferences
 import org.ossreviewtoolkit.utils.common.CommandLineTool
+import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.safeDeleteRecursively
 import org.ossreviewtoolkit.utils.common.withoutPrefix
 import org.ossreviewtoolkit.utils.common.withoutSuffix
 import org.ossreviewtoolkit.utils.ort.createOrtTempFile
 
-import org.semver4j.RangesListFactory
 import org.semver4j.Semver
+import org.semver4j.range.RangeListFactory
 
 internal object PoetryCommand : CommandLineTool {
     override fun command(workingDir: File?) = "poetry"
@@ -112,7 +118,7 @@ class Poetry(
      */
     private fun inspectLockfile(lockfile: File, dependencyGroupName: String): PythonInspector.Result {
         val workingDir = lockfile.parentFile
-        val requirementsFile = createOrtTempFile("requirements.txt")
+        val requirementsFile = createOrtTempFile("requirements", ".txt")
 
         logger.info { "Generating '${requirementsFile.name}' file in '$workingDir' directory..." }
 
@@ -134,7 +140,7 @@ class Poetry(
     }
 
     private fun detectPythonVersion(workingDir: File): String? {
-        val pyprojectFile = workingDir.resolve(PYPROJECT_FILENAME)
+        val pyprojectFile = workingDir / PYPROJECT_FILENAME
         val constraint = getPythonVersionConstraint(pyprojectFile) ?: return null
         return getPythonVersion(constraint)?.also {
             logger.info { "Detected Python version '$it' from '$constraint'." }
@@ -162,10 +168,10 @@ internal fun parseScopeNamesFromPyproject(pyprojectFile: File): Set<String> {
 
 internal fun getPythonVersion(constraint: String): String? {
     val rangeLists = constraint.split(',')
-        .map { RangesListFactory.create(it) }
+        .map { RangeListFactory.create(it) }
         .takeIf { it.isNotEmpty() } ?: return null
 
-    return PYTHON_VERSIONS.lastOrNull { version ->
+    return PythonInspector.getSupportedPythonVersions().lastOrNull { version ->
         rangeLists.all { rangeList ->
             val semver = Semver.coerce(version)
             semver != null && rangeList.isSatisfiedBy(semver)
@@ -174,20 +180,12 @@ internal fun getPythonVersion(constraint: String): String? {
 }
 
 internal fun getPythonVersionConstraint(pyprojectTomlFile: File): String? {
-    val dependenciesSection = getTomlSectionContent(pyprojectTomlFile, "tool.poetry.dependencies")
-        ?: return null
+    if (!pyprojectTomlFile.isFile) return null
 
-    return dependenciesSection.split('\n').firstNotNullOfOrNull {
-        it.trim().withoutPrefix("python = ")
-    }?.removeSurrounding("\"")
-}
+    val config = runCatching { Toml.parseToTomlTable(pyprojectTomlFile.reader()) }.getOrElse { return null }
+    val requiresPython = config.getTableOrNull("project")?.getStringOrNull("requires-python")
+    val toolPython = config.getTableOrNull("tool")?.getTableOrNull("poetry")?.getTableOrNull("dependencies")
+        ?.getStringOrNull("python")
 
-private fun getTomlSectionContent(tomlFile: File, sectionName: String): String? {
-    val lines = tomlFile.takeIf { it.isFile }?.readLines() ?: return null
-
-    val sectionHeaderIndex = lines.indexOfFirst { it.trim() == "[$sectionName]" }
-    if (sectionHeaderIndex == -1) return null
-
-    val sectionLines = lines.subList(sectionHeaderIndex + 1, lines.size).takeWhile { !it.trim().startsWith('[') }
-    return sectionLines.joinToString("\n")
+    return requiresPython ?: toolPython
 }

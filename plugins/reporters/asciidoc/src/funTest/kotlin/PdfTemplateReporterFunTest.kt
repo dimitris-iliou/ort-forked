@@ -22,20 +22,28 @@ package org.ossreviewtoolkit.plugins.reporters.asciidoc
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.engine.spec.tempdir
+import io.kotest.matchers.collections.containExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldBeSingleton
-import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.longs.beInRange
 import io.kotest.matchers.result.shouldBeSuccess
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 
+import org.ossreviewtoolkit.plugins.licensefactproviders.spdx.SpdxLicenseFactProviderFactory
 import org.ossreviewtoolkit.reporter.ORT_RESULT
 import org.ossreviewtoolkit.reporter.ORT_RESULT_WITH_VULNERABILITIES
 import org.ossreviewtoolkit.reporter.ReporterInput
+import org.ossreviewtoolkit.utils.common.div
 
 class PdfTemplateReporterFunTest : StringSpec({
     "The report is created successfully from an existing result and default template" {
-        val reportFileResults = PdfTemplateReporterFactory.create().generateReport(ReporterInput(ORT_RESULT), tempdir())
+        val reportFileResults = PdfTemplateReporterFactory.create().generateReport(
+            ReporterInput(
+                ORT_RESULT,
+                licenseFactProvider = SpdxLicenseFactProviderFactory.create()
+            ),
+            tempdir()
+        )
 
         reportFileResults.shouldBeSingleton {
             it shouldBeSuccess { reportFile ->
@@ -65,12 +73,17 @@ class PdfTemplateReporterFunTest : StringSpec({
     }
 
     "Advisor reports are generated if the result contains an advisor section" {
+        val outputDir = tempdir()
         val reportFileResults = PdfTemplateReporterFactory.create().generateReport(
             ReporterInput(ORT_RESULT_WITH_VULNERABILITIES),
-            tempdir()
+            outputDir
         )
 
-        val reportFileNames = reportFileResults.mapNotNull { it.getOrNull()?.name }
-        reportFileNames.shouldContainAll("AsciiDoc_vulnerability_report.pdf", "AsciiDoc_defect_report.pdf")
+        val reportFiles = reportFileResults.map { it.shouldBeSuccess() }
+        reportFiles should containExactlyInAnyOrder(
+            outputDir / "AsciiDoc_defect_report.pdf",
+            outputDir / "AsciiDoc_disclosure_document.pdf",
+            outputDir / "AsciiDoc_vulnerability_report.pdf"
+        )
     }
 })

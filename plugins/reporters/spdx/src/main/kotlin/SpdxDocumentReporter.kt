@@ -19,6 +19,8 @@
 
 package org.ossreviewtoolkit.plugins.reporters.spdx
 
+import com.fasterxml.jackson.databind.node.ObjectNode
+
 import java.io.File
 
 import org.apache.logging.log4j.kotlin.logger
@@ -34,9 +36,17 @@ import org.ossreviewtoolkit.utils.spdx.SpdxConstants.LICENSE_REF_PREFIX
 import org.ossreviewtoolkit.utils.spdx.SpdxExpression
 import org.ossreviewtoolkit.utils.spdx.SpdxLicenseWithExceptionExpression
 import org.ossreviewtoolkit.utils.spdxdocument.SpdxModelMapper.FileFormat
+import org.ossreviewtoolkit.utils.spdxdocument.model.SPDX_VERSION_2_2
+import org.ossreviewtoolkit.utils.spdxdocument.model.SPDX_VERSION_2_3
 import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxDocument
 
 data class SpdxDocumentReporterConfig(
+    /**
+     * The SPDX version to use. Only accepts [SPDX_VERSION_2_2] or [SPDX_VERSION_2_3]".
+     */
+    @OrtPluginOption(defaultValue = SPDX_VERSION_2_2)
+    val spdxVersion: String,
+
     /**
      * The comment to add to the [SpdxDocument.creationInfo].
      */
@@ -89,7 +99,7 @@ data class SpdxDocumentReporterConfig(
  * as a future extension of this [SpdxDocumentReporter] or as a separate [Reporter].
  */
 @OrtPlugin(
-    displayName = "SPDX Document Reporter",
+    displayName = "SPDX",
     description = "Creates software bills of materials (SBOM) in the SPDX format.",
     factory = ReporterFactory::class
 )
@@ -105,20 +115,11 @@ class SpdxDocumentReporter(
         val outputFileFormats = config.outputFileFormats
             .mapTo(mutableSetOf()) { FileFormat.valueOf(it.uppercase()) }
 
-        val params = SpdxDocumentModelMapper.SpdxDocumentParams(
-            documentName = config.documentName,
-            documentComment = config.documentComment.orEmpty(),
-            creationInfoComment = config.creationInfoComment.orEmpty(),
-            creationInfoPerson = config.creationInfoPerson.orEmpty(),
-            creationInfoOrganization = config.creationInfoOrganization.orEmpty(),
-            fileInformationEnabled = config.fileInformationEnabled
-        )
-
         val spdxDocument = SpdxDocumentModelMapper.map(
             input.ortResult,
             input.licenseInfoResolver,
-            input.licenseTextProvider,
-            params
+            input.licenseFactProvider,
+            config
         )
 
         val licenseRefExceptions = spdxDocument.getLicenseRefExceptions()
@@ -134,9 +135,10 @@ class SpdxDocumentReporter(
         return outputFileFormats.map { fileFormat ->
             runCatching {
                 outputDir.resolve("$REPORT_BASE_FILENAME.${fileFormat.fileExtension}").apply {
-                    bufferedWriter().use { writer ->
-                        fileFormat.mapper.writeValue(writer, spdxDocument)
-                    }
+                    val spdx23Node = fileFormat.mapper.valueToTree<ObjectNode>(spdxDocument)
+                    val spdxNode = spdx23Node.takeIf { config.wantSpdx23 } ?: spdx23Node.patchSpdx23To22()
+
+                    fileFormat.mapper.writeValue(this, spdxNode)
                 }
             }
         }
@@ -164,6 +166,23 @@ private fun SpdxExpression.getLicenseRefExceptions(result: MutableSet<String>) {
             result.add(exception)
         }
 
-        else -> { }
+        else -> {}
     }
+}
+
+private fun ObjectNode.patchSpdx23To22(): ObjectNode {
+    put("spdxVersion", "SPDX-2.2")
+    val packages = get("packages") ?: return this
+
+    packages.forEach { pkg ->
+        pkg.get("externalRefs")?.forEach { ref ->
+            val refCatText = ref.get("referenceCategory")?.textValue() ?: return@forEach
+
+            if ("-" in refCatText) {
+                (ref as ObjectNode).put("referenceCategory", refCatText.replace("-", "_"))
+            }
+        }
+    }
+
+    return this
 }

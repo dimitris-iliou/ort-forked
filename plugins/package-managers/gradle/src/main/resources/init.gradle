@@ -56,7 +56,7 @@ interface OrtDependencyTreeModel {
     String getName()
     String getVersion()
     List<OrtConfiguration> getConfigurations()
-    List<String> getRepositories()
+    List<OrtRepository> getRepositories()
     List<String> getErrors()
     List<String> getWarnings()
 }
@@ -72,11 +72,18 @@ interface OrtDependency {
     String getVersion()
     String getClassifier()
     String getExtension()
+    Set<String> getVariants()
     List<OrtDependency> getDependencies()
     String getError()
     String getWarning()
     String getPomFile()
     String getLocalPath()
+}
+
+interface OrtRepository {
+    String getUrl()
+    String getUsername()
+    String getPassword()
 }
 
 @ToString(includeNames = true)
@@ -86,7 +93,7 @@ class OrtDependencyTreeModelImpl implements OrtDependencyTreeModel, Serializable
     String name
     String version
     List<OrtConfiguration> configurations
-    List<String> repositories
+    List<OrtRepository> repositories
     List<String> errors
     List<String> warnings
 }
@@ -106,11 +113,19 @@ class OrtDependencyImpl implements OrtDependency, Serializable {
     String version = ''
     String classifier = ''
     String extension = ''
+    Set<String> variants = []
     List<OrtDependency> dependencies = []
     String error
     String warning
     String pomFile
     String localPath
+}
+
+@TupleConstructor
+class OrtRepositoryImpl implements OrtRepository, Serializable {
+    String url = ''
+    String username = null
+    String password = null
 }
 
 class OrtDependencyTreeGradlePlugin extends AbstractOrtDependencyTreePlugin<Gradle> {
@@ -221,9 +236,9 @@ class AbstractOrtDependencyTreePlugin<T> implements Plugin<T> {
                 }
             }
 
-            List<String> repositories = project.repositories.findResults {
+            List<OrtRepository> repositories = project.repositories.findResults {
                 if (it instanceof DefaultMavenArtifactRepository) {
-                    it.url.toString()
+                    new OrtRepositoryImpl(it.url.toString(), it.credentials?.username, it.credentials?.password)
                 } else if (it instanceof DefaultFlatDirArtifactRepository) {
                     warnings.add('Project uses a flat dir repository which is not supported by the analyzer. ' +
                             "Dependencies from this repository will be ignored: ${it.dirs}".toString())
@@ -369,7 +384,7 @@ class AbstractOrtDependencyTreePlugin<T> implements Plugin<T> {
                     def classifier = artifact?.classifier ?: ''
                     def extension = artifact?.extension ?: ''
 
-                    return new OrtDependencyImpl(id.group, id.module, id.version, classifier, extension, dependencies,
+                    return new OrtDependencyImpl(id.group, id.module, id.version, classifier, extension, [] as Set, dependencies,
                             error, warning, pomFile, null)
                 } else if (id instanceof ProjectComponentIdentifier) {
                     if (id.build.isCurrentBuild() || !project.gradle.gradleVersion.isAtLeastVersion(7, 2)) {

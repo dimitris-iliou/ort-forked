@@ -25,29 +25,29 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
           ref: ${{ env.ORT_VERSION }}
           fetch-depth: 0
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@94baf225fe0a508e581a564467443d0e2379123b # v4
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
         with:
           dependency-graph: generate-and-submit
-      - name: Publish to OSSRH
+      - name: Publish to Maven Central
         env:
           GITHUB_DEPENDENCY_GRAPH_REF: refs/heads/main
-          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.OSSRH_USERNAME }}
-          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.OSSRH_PASSWORD }}
-          ORG_GRADLE_PROJECT_RELEASE_SIGNING_ENABLED: true
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signAllPublications: true
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
           SONATYPE_CONNECT_TIMEOUT_SECONDS: 300
-        run: ./gradlew --no-configuration-cache publishAndReleaseToMavenCentral
+        run: ./gradlew publishAndReleaseToMavenCentral
       - name: Build ORT Distributions
         env:
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
-        run: ./gradlew :cli:signDistTar :cli:signDistZip :helper-cli:signDistTar :helper-cli:signDistZip
+        run: ./gradlew :cli:signDistTar :cli:signDistZip :cli-helper:signDistTar :cli-helper:signDistZip
       - name: Generate Release Notes
         run: ./gradlew -q printChangeLog > RELEASE_NOTES.md
       - name: Create GitHub Release
@@ -56,12 +56,12 @@ jobs:
         run: |
           gh release create $ORT_VERSION --notes-file RELEASE_NOTES.md \
               ./cli/build/distributions/ort-$ORT_VERSION.{tgz,zip}* \
-              ./helper-cli/build/distributions/orth-$ORT_VERSION.{tgz,zip}*
+              ./cli-helper/build/distributions/orth-$ORT_VERSION.{tgz,zip}*
       - name: Attest Build Provenance
-        uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2 # v2
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
           subject-path: |
             ./cli/build/distributions/ort-${{ env.ORT_VERSION }}.tgz
             ./cli/build/distributions/ort-${{ env.ORT_VERSION }}.zip
-            ./helper-cli/build/distributions/orth-${{ env.ORT_VERSION }}.tgz
-            ./helper-cli/build/distributions/orth-${{ env.ORT_VERSION }}.zip
+            ./cli-helper/build/distributions/orth-${{ env.ORT_VERSION }}.tgz
+            ./cli-helper/build/distributions/orth-${{ env.ORT_VERSION }}.zip

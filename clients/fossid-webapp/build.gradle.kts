@@ -26,10 +26,12 @@ dependencies {
     api(libs.okhttp)
     api(libs.retrofit)
 
-    implementation(libs.jackson.module.kotlin)
+    implementation(jacksonLibs.jacksonModuleKotlin)
     implementation(libs.kotlinx.coroutines)
     implementation(libs.retrofit.converter.jackson)
 
     testImplementation(libs.mockk)
     testImplementation(libs.wiremock)
 }
+
+description = "A client to communicate with the API of a FOSSID instance."

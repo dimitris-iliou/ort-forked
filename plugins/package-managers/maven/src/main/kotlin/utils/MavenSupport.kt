@@ -81,8 +81,9 @@ import org.ossreviewtoolkit.model.fromYaml
 import org.ossreviewtoolkit.model.toYaml
 import org.ossreviewtoolkit.utils.common.DiskCache
 import org.ossreviewtoolkit.utils.common.collectMessages
+import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.gibibytes
-import org.ossreviewtoolkit.utils.common.searchUpwardsForSubdirectory
+import org.ossreviewtoolkit.utils.common.searchUpwardFor
 import org.ossreviewtoolkit.utils.ort.OrtAuthenticator
 import org.ossreviewtoolkit.utils.ort.OrtProxySelector
 import org.ossreviewtoolkit.utils.ort.downloadText
@@ -101,7 +102,7 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) : Closeable {
     private val repositorySystemSession = createRepositorySystemSession(workspaceReader)
 
     private val remoteArtifactCache = DiskCache(
-        directory = ortDataDirectory.resolve("cache/analyzer/${workspaceReader.repository.contentType}"),
+        directory = ortDataDirectory / "cache" / "analyzer" / workspaceReader.repository.contentType,
         maxCacheSizeInBytes = 1.gibibytes,
         maxCacheEntryAgeInSeconds = 6.hours.inWholeSeconds
     )
@@ -127,7 +128,7 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) : Closeable {
 
         populator.populateFromSettings(request, settings)
         populator.populateDefaults(request)
-        repositorySystemSession.injectProxy(request)
+        repositorySystemSession.initializeRequest(request)
 
         return request
     }
@@ -163,14 +164,18 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) : Closeable {
     }
 
     /**
-     * Makes sure that the [MavenExecutionRequest] is correctly configured with the current proxy.
+     * Make sure that the passed in [request] is correctly configured.
      *
-     * This is necessary in the special case that in the Maven environment no repositories are
-     * defined, and hence Maven Central is used as default. Then, for the Maven Central repository
-     * no proxy is set.
+     * This function injects several configuration options set in the current Maven environment into the remote
+     * repositories associated with the [request], such as proxy settings or the mirror configuration. This is
+     * obviously not done automatically, so that builds could fail in environments where such settings are required.
      */
-    private fun RepositorySystemSession.injectProxy(request: MavenExecutionRequest) {
-        containerLookup<MavenRepositorySystem>().injectProxy(this, request.remoteRepositories)
+    private fun RepositorySystemSession.initializeRequest(request: MavenExecutionRequest) {
+        with(containerLookup<MavenRepositorySystem>()) {
+            injectProxy(this@initializeRequest, request.remoteRepositories)
+            injectMirror(this@initializeRequest, request.remoteRepositories)
+            injectAuthentication(this@initializeRequest, request.remoteRepositories)
+        }
     }
 
     /**
@@ -298,11 +303,12 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) : Closeable {
         val remoteRepositories = allRepositories.filterNot {
             // Some (Linux) file URIs do not start with "file://" but look like "file:/opt/android-sdk-linux".
             it.url.startsWith("file:/")
-        }.map { repository ->
-            val proxy = repositorySystemSession.proxySelector.getProxy(repository)
-            val authentication = repositorySystemSession.authenticationSelector.getAuthentication(repository)
-            RemoteRepository.Builder(repository).setAuthentication(authentication).setProxy(proxy).build()
-        }.toSet()
+        }.mapTo(mutableSetOf()) { repository ->
+            RemoteRepository.Builder(repository).apply {
+                repositorySystemSession.proxySelector.getProxy(repository)?.also(::setProxy)
+                repositorySystemSession.authenticationSelector.getAuthentication(repository)?.also(::setAuthentication)
+            }.build()
+        }
 
         if (allRepositories.size > remoteRepositories.size) {
             logger.debug { "Ignoring local repositories ${allRepositories - remoteRepositories}." }
@@ -518,7 +524,7 @@ class MavenSupport(private val workspaceReader: WorkspaceReader) : Closeable {
             // TODO: Once SBT is implemented independently of Maven we can completely remove the "localProjects"
             //       parameter to this function as no other caller is actually using it.
             if (sbtMode) {
-                it.searchUpwardsForSubdirectory("target") ?: it
+                it.searchUpwardFor(dirPath = "target") ?: it
             } else {
                 it
             }
@@ -665,5 +671,5 @@ private fun isArtifactModified(artifact: Artifact, remoteArtifact: RemoteArtifac
         }
 
         val checksum = okHttpClient.downloadText(mavenCentralUrl).getOrElse { return false }
-        !hash.verify(parseChecksum(checksum, hash.algorithm.name))
+        hash != parseChecksum(checksum, hash.algorithm.name)
     }

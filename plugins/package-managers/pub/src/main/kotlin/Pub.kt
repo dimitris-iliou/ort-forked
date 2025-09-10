@@ -67,6 +67,7 @@ import org.ossreviewtoolkit.utils.common.CommandLineTool
 import org.ossreviewtoolkit.utils.common.Os
 import org.ossreviewtoolkit.utils.common.ProcessCapture
 import org.ossreviewtoolkit.utils.common.collectMessages
+import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.realFile
 import org.ossreviewtoolkit.utils.common.safeMkdirs
 import org.ossreviewtoolkit.utils.common.splitOnWhitespace
@@ -77,8 +78,8 @@ import org.ossreviewtoolkit.utils.ort.okHttpClient
 import org.ossreviewtoolkit.utils.ort.ortToolsDirectory
 import org.ossreviewtoolkit.utils.ort.showStackTrace
 
-import org.semver4j.RangesList
-import org.semver4j.RangesListFactory
+import org.semver4j.range.RangeList
+import org.semver4j.range.RangeListFactory
 
 private const val PUBSPEC_YAML = "pubspec.yaml"
 private const val PUB_LOCK_FILE = "pubspec.lock"
@@ -90,7 +91,7 @@ private val flutterCommand = if (Os.isWindows) "flutter.bat" else "flutter"
 private val dartCommand = if (Os.isWindows) "dart.bat" else "dart"
 
 internal class PubCommand(private val flutterAbsolutePath: File) : CommandLineTool {
-    @Suppress("Unused") // The no-arg constructor is required by the requirements command.
+    @Suppress("unused") // The no-arg constructor is required by the requirements command.
     constructor() : this(File(""))
 
     override fun getVersion(workingDir: File?): String {
@@ -99,7 +100,7 @@ internal class PubCommand(private val flutterAbsolutePath: File) : CommandLineTo
         return transformVersion(result.stdout)
     }
 
-    override fun getVersionRequirement(): RangesList = RangesListFactory.create("[2.10,)")
+    override fun getVersionRequirement(): RangeList = RangeListFactory.create("[2.10,)")
 
     override fun transformVersion(output: String) = output.removePrefix("Dart SDK version: ").substringBefore(' ')
 
@@ -167,14 +168,14 @@ class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, pri
     override val globsForDefinitionFiles = listOf(PUBSPEC_YAML)
 
     private val flutterVersion = Os.env["FLUTTER_VERSION"] ?: config.flutterVersion
-    private val flutterInstallDir = ortToolsDirectory.resolve("flutter-$flutterVersion")
+    private val flutterInstallDir = ortToolsDirectory / "flutter-$flutterVersion"
 
     private val flutterHome by lazy {
-        Os.getPathFromEnvironment(flutterCommand)?.realFile()?.parentFile?.parentFile
-            ?: Os.env["FLUTTER_HOME"]?.let { File(it) } ?: flutterInstallDir.resolve("flutter")
+        Os.getPathFromEnvironment(flutterCommand)?.realFile?.parentFile?.parentFile
+            ?: Os.env["FLUTTER_HOME"]?.let { File(it) } ?: (flutterInstallDir / "flutter")
     }
 
-    private val flutterAbsolutePath = flutterHome.resolve("bin")
+    private val flutterAbsolutePath = flutterHome / "bin"
 
     private data class ParsePackagesResult(
         val packages: Map<Identifier, Package>,
@@ -221,18 +222,15 @@ class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, pri
 
         logger.info { "Bootstrapping Flutter as it was not found." }
 
-        val archive = when {
-            Os.isWindows -> "windows/flutter_windows_$flutterVersion.zip"
-            Os.isLinux -> "linux/flutter_linux_$flutterVersion.tar.xz"
-            Os.isMac -> {
-                when (val arch = System.getProperty("os.arch")) {
-                    "x86_64" -> "macos/flutter_macos_$flutterVersion.zip"
-                    "aarch64" -> "macos/flutter_macos_arm64_$flutterVersion.zip"
-                    else -> throw IllegalArgumentException("Unsupported macOS architecture '$arch'.")
-                }
+        val archive = when (Os.Name.current) {
+            Os.Name.WINDOWS -> "windows/flutter_windows_$flutterVersion.zip"
+            Os.Name.LINUX -> "linux/flutter_linux_$flutterVersion.tar.xz"
+            Os.Name.MAC -> when (Os.Arch.current) {
+                Os.Arch.X86_64 -> "macos/flutter_macos_$flutterVersion.zip"
+                Os.Arch.AARCH64 -> "macos/flutter_macos_arm64_$flutterVersion.zip"
+                else -> throw IllegalArgumentException("Unsupported macOS architecture '${Os.Arch.current}'.")
             }
-
-            else -> throw IllegalArgumentException("Unsupported operating system.")
+            else -> throw IllegalArgumentException("Unsupported operating system '${Os.Name.current}'.")
         }
 
         val url = "https://storage.googleapis.com/flutter_infra_release/releases/stable/$archive"
@@ -340,7 +338,7 @@ class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, pri
 
             logger.info { "Reading $PUB_LOCK_FILE file in $workingDir." }
 
-            val lockfile = parseLockfile(workingDir.resolve(PUB_LOCK_FILE))
+            val lockfile = parseLockfile(workingDir / PUB_LOCK_FILE)
 
             logger.info { "Successfully read lockfile." }
 
@@ -518,8 +516,8 @@ class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, pri
         if (packageName.isEmpty()) return emptyList()
 
         val projectRoot = reader.findProjectRoot(packageInfo, workingDir) ?: return emptyList()
-        val androidDir = projectRoot.resolve("android")
-        val definitionFile = androidDir.resolve("build.gradle")
+        val androidDir = projectRoot / "android"
+        val definitionFile = androidDir / "build.gradle"
 
         // Check for build.gradle failed, no Gradle scan required.
         val gradleFactory = analyzerConfig.getGradleFactory()
@@ -551,8 +549,8 @@ class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, pri
         if (packageName.isEmpty()) return null
 
         val projectRoot = reader.findProjectRoot(packageInfo, workingDir) ?: return null
-        val iosDir = projectRoot.resolve("ios")
-        val definitionFile = iosDir.resolve("$packageName.podspec")
+        val iosDir = projectRoot / "ios"
+        val definitionFile = iosDir / "$packageName.podspec"
 
         // Check for build.gradle failed, no Gradle scan required.
         if (!definitionFile.isFile) return null
@@ -617,7 +615,7 @@ class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, pri
                     source == "path" -> {
                         rawName = packageName
                         val path = packageInfo.description.path.orEmpty()
-                        vcs = VersionControlSystem.forDirectory(workingDir.resolve(path))?.getInfo() ?: run {
+                        vcs = VersionControlSystem.forDirectory(workingDir / path)?.getInfo() ?: run {
                             logger.warn {
                                 "Invalid path of package $rawName: " +
                                     "'$path' is outside of the project root '$workingDir'."
@@ -786,7 +784,7 @@ class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, pri
      * Check the [PUBSPEC_YAML] within [workingDir] if the project contains the Flutter SDK.
      */
     private fun containsFlutterSdk(workingDir: File): Boolean {
-        val dependencies = parsePubspec(workingDir.resolve(PUBSPEC_YAML)).dependencies ?: return false
+        val dependencies = parsePubspec(workingDir / PUBSPEC_YAML).dependencies ?: return false
         return dependencies.values.filterIsInstance<SdkDependency>().any { it.sdk == "flutter" }
     }
 

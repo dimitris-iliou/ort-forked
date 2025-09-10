@@ -22,11 +22,11 @@ package org.ossreviewtoolkit.plugins.packagemanagers.gradle
 import OrtDependency
 
 import io.kotest.core.spec.style.WordSpec
+import io.kotest.inspectors.forAll
 import io.kotest.matchers.collections.beEmpty
 import io.kotest.matchers.collections.containExactly
 import io.kotest.matchers.collections.containExactlyInAnyOrder
 import io.kotest.matchers.collections.haveSize
-import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.beNull
 import io.kotest.matchers.should
@@ -84,7 +84,7 @@ class GradleDependencyHandlerTest : WordSpec({
             scopes.map { it.name } should containExactlyInAnyOrder(scope1, scope2)
 
             val scope1Dependencies = scopeDependencies(scopes, scope1)
-            scope1Dependencies.all { it.dependencies.isEmpty() } shouldBe true
+            scope1Dependencies.forAll { it.dependencies should beEmpty() }
             scope1Dependencies.identifiers() should containExactlyInAnyOrder(dep1.toId(), dep3.toId())
 
             val scope2Dependencies = scopeDependencies(scopes, scope2)
@@ -143,7 +143,7 @@ class GradleDependencyHandlerTest : WordSpec({
                 .packages()
                 .map { it.id }
 
-            packageIds shouldContainExactlyInAnyOrder setOf(dep1.toId(), dep2.toId())
+            packageIds should containExactlyInAnyOrder(dep1.toId(), dep2.toId())
         }
 
         "deal with transitive dependencies correctly" {

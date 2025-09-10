@@ -33,20 +33,16 @@ import org.ossreviewtoolkit.model.ScanSummary
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.TextLocation
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
-import org.ossreviewtoolkit.plugins.api.OrtPluginOption
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.scanner.LocalPathScannerWrapper
 import org.ossreviewtoolkit.scanner.ScanContext
 import org.ossreviewtoolkit.scanner.ScanException
 import org.ossreviewtoolkit.scanner.ScannerMatcher
-import org.ossreviewtoolkit.scanner.ScannerMatcherConfig
 import org.ossreviewtoolkit.scanner.ScannerWrapperFactory
 import org.ossreviewtoolkit.utils.common.CommandLineTool
 import org.ossreviewtoolkit.utils.common.Os
 
 private const val CONFIDENCE_NOTICE = "Confidence threshold not high enough for any known license"
-
-private val JSON = Json { ignoreUnknownKeys = true }
 
 object AskalonoCommand : CommandLineTool {
     override fun command(workingDir: File?) =
@@ -57,41 +53,6 @@ object AskalonoCommand : CommandLineTool {
         // askalono 0.2.0-beta.1
         output.removePrefix("askalono ")
 }
-
-data class AskalonoConfig(
-    /**
-     * A regular expression to match the scanner name when looking up scan results in the storage.
-     */
-    val regScannerName: String?,
-
-    /**
-     * The minimum version of stored scan results to use.
-     */
-    val minVersion: String?,
-
-    /**
-     * The maximum version of stored scan results to use.
-     */
-    val maxVersion: String?,
-
-    /**
-     * The configuration to use for the scanner. Only scan results with the same configuration are used when looking up
-     * scan results in the storage.
-     */
-    val configuration: String?,
-
-    /**
-     * Whether to read scan results from the storage.
-     */
-    @OrtPluginOption(defaultValue = "true")
-    val readFromStorage: Boolean,
-
-    /**
-     * Whether to write scan results to the storage.
-     */
-    @OrtPluginOption(defaultValue = "true")
-    val writeToStorage: Boolean
-)
 
 @OrtPlugin(
     displayName = "askalono",
@@ -104,20 +65,15 @@ class Askalono(
     config: AskalonoConfig
 ) : LocalPathScannerWrapper() {
     override val configuration = ""
+    override val matcher by lazy { ScannerMatcher.create(details, config) }
 
-    override val matcher by lazy {
-        ScannerMatcher.create(
-            details,
-            ScannerMatcherConfig(
-                config.regScannerName,
-                config.minVersion,
-                config.maxVersion,
-                config.configuration
-            )
-        )
+    override val version by lazy {
+        require(AskalonoCommand.isInPath()) {
+            "The '${AskalonoCommand.command()}' command is not available in the PATH environment."
+        }
+
+        AskalonoCommand.getVersion()
     }
-
-    override val version by lazy { AskalonoCommand.getVersion() }
 
     override val readFromStorage = config.readFromStorage
     override val writeToStorage = config.writeToStorage
@@ -137,7 +93,7 @@ class Askalono(
     }
 
     override fun createSummary(result: String, startTime: Instant, endTime: Instant): ScanSummary {
-        val results = result.byteInputStream().use { JSON.decodeToSequence<AskalonoResult>(it) }
+        val results = result.byteInputStream().use { Json.decodeToSequence<AskalonoResult>(it) }
 
         val licenseFindings = mutableSetOf<LicenseFinding>()
 

@@ -20,6 +20,7 @@
 package org.ossreviewtoolkit.plugins.packagemanagers.gradle
 
 import OrtDependencyTreeModel
+import OrtRepository
 
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -32,6 +33,7 @@ import org.eclipse.aether.artifact.Artifact
 import org.eclipse.aether.repository.RemoteRepository
 import org.eclipse.aether.repository.WorkspaceReader
 import org.eclipse.aether.repository.WorkspaceRepository
+import org.eclipse.aether.util.repository.AuthenticationBuilder
 
 import org.gradle.tooling.GradleConnector
 import org.gradle.tooling.events.ProgressListener
@@ -58,6 +60,7 @@ import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.MavenSupport
 import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.identifier
 import org.ossreviewtoolkit.utils.common.Os
 import org.ossreviewtoolkit.utils.common.collectMessages
+import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.safeDeleteRecursively
 import org.ossreviewtoolkit.utils.common.splitOnWhitespace
 import org.ossreviewtoolkit.utils.common.temporaryProperties
@@ -118,12 +121,10 @@ class Gradle(
      */
     private class GradleCacheReader : WorkspaceReader {
         private val workspaceRepository = WorkspaceRepository("gradle/remote-artifacts")
-        private val gradleCacheRoot = GRADLE_USER_HOME.resolve("caches/modules-2/files-2.1")
+        private val gradleCacheRoot = GRADLE_USER_HOME / "caches" / "modules-2" / "files-2.1"
 
         override fun findArtifact(artifact: Artifact): File? {
-            val artifactRootDir = gradleCacheRoot.resolve(
-                "${artifact.groupId}/${artifact.artifactId}/${artifact.version}"
-            )
+            val artifactRootDir = gradleCacheRoot / artifact.groupId / artifact.artifactId / artifact.version
 
             val artifactFiles = artifactRootDir.walk().filter {
                 val classifier = if (artifact.classifier.isNullOrBlank()) "" else "${artifact.classifier}-"
@@ -170,8 +171,6 @@ class Gradle(
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {
-        val gradleProperties = mutableListOf<Pair<String, String>>()
-
         val projectDir = definitionFile.parentFile
         val isRootProject = GRADLE_SETTINGS_FILES.any { projectDir.resolve(it).isFile }
 
@@ -181,17 +180,6 @@ class Gradle(
 
         // Do not reset the root project directory for subprojects.
         if (isRootProject || isIndependentProject) rootProjectDir = projectDir
-
-        val userPropertiesFile = GRADLE_USER_HOME.resolve("gradle.properties")
-        if (userPropertiesFile.isFile) {
-            userPropertiesFile.inputStream().use {
-                val properties = Properties().apply { load(it) }
-
-                properties.mapNotNullTo(gradleProperties) { (key, value) ->
-                    ((key as String) to (value as String)).takeUnless { key.startsWith("systemProp.") }
-                }
-            }
-        }
 
         val gradleConnector = GradleConnector.newConnector()
 
@@ -208,7 +196,7 @@ class Gradle(
         // Gradle's default maximum heap is 512 MiB which is too low for bigger projects,
         // see https://docs.gradle.org/current/userguide/build_environment.html#sec:configuring_jvm_memory.
         // Set the value to empirically determined 8 GiB if no value is set in "~/.gradle/gradle.properties".
-        val jvmArgs = gradleProperties.toMap().get("org.gradle.jvmargs").orEmpty()
+        val jvmArgs = getGradleProperties()["org.gradle.jvmargs"].orEmpty()
             .replace("MaxPermSize", "MaxMetaspaceSize") // Replace a deprecated JVM argument.
             .splitOnWhitespace()
             .mapTo(mutableListOf()) { it.unquote() }
@@ -276,10 +264,7 @@ class Gradle(
 
                 initScriptFile.parentFile.safeDeleteRecursively()
 
-                val repositories = dependencyTreeModel.repositories.map {
-                    // TODO: Also handle authentication and snapshot policy.
-                    RemoteRepository.Builder(it, "default", it).build()
-                }
+                val repositories = dependencyTreeModel.repositories.map { it.toRemoteRepository() }
 
                 dependencyHandler.repositories = repositories
 
@@ -329,3 +314,30 @@ class Gradle(
         mavenSupport.close()
     }
 }
+
+private fun getGradleProperties(): Map<String, String> =
+    GRADLE_USER_HOME.resolve("gradle.properties")
+        .takeIf { it.isFile }
+        ?.inputStream()
+        ?.use { Properties().apply { load(it) } }
+        ?.mapNotNull { (key, value) ->
+            key.toString().takeUnless { it.startsWith("systemProp.") }?.let { it to value.toString() }
+        }
+        ?.toMap()
+        .orEmpty()
+
+/**
+ * Convert this [OrtRepository] to a [RemoteRepository] taking the known properties into account.
+ * TODO: Also handle snapshot policy.
+ */
+private fun OrtRepository.toRemoteRepository(): RemoteRepository =
+    RemoteRepository.Builder(url, "default", url).apply {
+        if (username != null) {
+            setAuthentication(
+                AuthenticationBuilder().apply {
+                    addUsername(username)
+                    password?.also(::addPassword)
+                }.build()
+            )
+        }
+    }.build()

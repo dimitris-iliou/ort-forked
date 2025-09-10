@@ -38,7 +38,7 @@ import org.ossreviewtoolkit.utils.spdx.nullOrBlankToSpdxNoassertionOrNone
 
 @OrtPlugin(
     id = "AOSD2.1",
-    displayName = "Audi Open Source Diagnostics 2.1 Reporter",
+    displayName = "Audi Open Source Diagnostics 2.1",
     description = "A reporter for the Audi Open Source Diagnostics (AOSD) 2.1 format.",
     factory = ReporterFactory::class
 )
@@ -84,17 +84,17 @@ private fun Map<Identifier, IndexedValue<CuratedPackage>>.toComponents(
         val relevantLicenseInfo = nonExcludedLicenseInfo.filter(LicenseView.CONCLUDED_OR_DECLARED_AND_DETECTED)
 
         // Use an unsimplified expression here to better document where a license selection might come from.
-        val licenseExpression = relevantLicenseInfo.toCompoundExpression()?.sorted()
+        val licenseExpression = relevantLicenseInfo.toExpression()?.sorted()
 
         val selectedLicenseInfo = relevantLicenseInfo
             .applyChoices(input.ortResult.getPackageLicenseChoices(pkg.metadata.id))
             .applyChoices(input.ortResult.getRepositoryLicenseChoices())
 
-        val selectedExpression = selectedLicenseInfo.toCompoundExpression()?.simplify()?.sorted()
+        val selectedExpression = selectedLicenseInfo.toExpression()?.simplify()?.sorted()
             ?.takeUnless { it.offersChoice() }
 
         val licenseTexts = licenseExpression?.licenses().orEmpty().mapNotNullTo(mutableSetOf()) { license ->
-            input.licenseTextProvider.getLicenseText(license)
+            input.licenseFactProvider.getLicenseText(license)
         }.joinToString("\n--\n") { it.trimEnd() }
 
         with(pkg.metadata) {

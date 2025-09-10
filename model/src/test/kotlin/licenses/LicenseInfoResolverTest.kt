@@ -20,6 +20,7 @@
 package org.ossreviewtoolkit.model.licenses
 
 import io.kotest.core.spec.style.WordSpec
+import io.kotest.engine.spec.tempdir
 import io.kotest.matchers.Matcher
 import io.kotest.matchers.be
 import io.kotest.matchers.collections.beEmpty
@@ -27,13 +28,10 @@ import io.kotest.matchers.collections.contain
 import io.kotest.matchers.collections.containExactly
 import io.kotest.matchers.collections.containExactlyInAnyOrder
 import io.kotest.matchers.collections.haveSize
-import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.neverNullMatcher
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
-
-import java.io.File
 
 import org.ossreviewtoolkit.model.ArtifactProvenance
 import org.ossreviewtoolkit.model.CopyrightFinding
@@ -58,11 +56,13 @@ import org.ossreviewtoolkit.model.config.PathExcludeReason
 import org.ossreviewtoolkit.model.declaredLicenses
 import org.ossreviewtoolkit.model.utils.FileArchiver
 import org.ossreviewtoolkit.model.utils.FileProvenanceFileStorage
+import org.ossreviewtoolkit.utils.common.div
+import org.ossreviewtoolkit.utils.common.extractResource
 import org.ossreviewtoolkit.utils.ort.DeclaredLicenseProcessor
 import org.ossreviewtoolkit.utils.ort.storage.LocalFileStorage
 import org.ossreviewtoolkit.utils.spdx.SpdxExpression
+import org.ossreviewtoolkit.utils.spdx.SpdxLicense
 import org.ossreviewtoolkit.utils.spdx.SpdxSingleLicenseExpression
-import org.ossreviewtoolkit.utils.spdx.getLicenseText
 import org.ossreviewtoolkit.utils.spdx.toSpdx
 import org.ossreviewtoolkit.utils.test.createDefault
 import org.ossreviewtoolkit.utils.test.transformingCollectionEmptyMatcher
@@ -175,7 +175,7 @@ class LicenseInfoResolverTest : WordSpec({
             result.licenses.find { it.license == "Apache-2.0 WITH LLVM-exception".toSpdx() } shouldNotBeNull {
                 originalExpressions.filter {
                     it.source == LicenseSource.DETECTED
-                }.map { it.expression } shouldContainExactlyInAnyOrder listOf(
+                }.map { it.expression } should containExactlyInAnyOrder(
                     "Apache-2.0 WITH LLVM-exception".toSpdx()
                 )
             }
@@ -426,7 +426,7 @@ class LicenseInfoResolverTest : WordSpec({
 
             result.licenses.flatMap { resolvedLicense ->
                 resolvedLicense.originalExpressions.filter { it.source == LicenseSource.DETECTED }
-            } shouldContainExactlyInAnyOrder listOf(
+            } should containExactlyInAnyOrder(
                 ResolvedOriginalExpression("Apache-2.0".toSpdx(), LicenseSource.DETECTED, false),
                 ResolvedOriginalExpression("MIT".toSpdx(), LicenseSource.DETECTED, true)
             )
@@ -482,7 +482,7 @@ class LicenseInfoResolverTest : WordSpec({
             )
             result.licenses.flatMap { resolvedLicense ->
                 resolvedLicense.originalExpressions.map { it.expression }
-            } shouldContainExactlyInAnyOrder listOf("MIT".toSpdx())
+            } should containExactlyInAnyOrder("MIT".toSpdx())
         }
 
         "contain a list of the original license expressions" {
@@ -657,7 +657,8 @@ class LicenseInfoResolverTest : WordSpec({
                 )
             )
 
-            val archiveDir = File("src/test/assets/archive")
+            val archiveDir = tempdir() / "archive"
+            extractResource("/archive.zip", archiveDir / "88dce74b694866af2a5e380206b119f5e38aad5f" / "archive.zip")
             val archiver = FileArchiver(
                 patterns = LicenseFilePatterns.DEFAULT.licenseFilenames,
                 storage = FileProvenanceFileStorage(
@@ -675,7 +676,7 @@ class LicenseInfoResolverTest : WordSpec({
             val file = result.files.first()
             file.provenance shouldBe provenance
             file.path shouldBe "LICENSE"
-            file.file.readText() shouldBe "Copyright 2020 Holder\n\n${getLicenseText("MIT")}"
+            file.file.readText() shouldBe "Copyright 2020 Holder\n\n${SpdxLicense.MIT.text}"
             file.licenses should containLicensesExactly("MIT")
             file.licenses should containLocationForLicense(
                 license = "MIT",

@@ -19,10 +19,18 @@
 
 package org.ossreviewtoolkit.model.config
 
+import com.fasterxml.jackson.annotation.JsonAlias
 import com.fasterxml.jackson.annotation.JsonInclude
+
+import com.sksamuel.hoplite.ConfigAlias
 
 import org.ossreviewtoolkit.utils.common.zip
 
+/**
+ * The configuration model of the analyzer. This class is (de-)serialized in the following places:
+ * - Deserialized from "config.yml" as part of [OrtConfiguration] (via Hoplite).
+ * - (De-)Serialized as part of [org.ossreviewtoolkit.model.OrtResult] (via Jackson).
+ */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 data class AnalyzerConfiguration(
     /**
@@ -77,6 +85,8 @@ data class AnalyzerConfiguration(
      * Package manager specific configurations. The key needs to match the name of the package manager class, e.g.
      * "NuGet" for the NuGet package manager.
      */
+    @ConfigAlias("analyzers")
+    @JsonAlias("analyzers")
     val packageManagers: Map<String, PackageManagerConfiguration>? = null,
 
     /**

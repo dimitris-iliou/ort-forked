@@ -20,7 +20,8 @@
   "packageRules": [
     {
       "matchManagers": ["gradle"],
-      "commitMessageTopic": "{{depName}}"
+      "commitMessageTopic": "{{depName}}",
+      "recreateWhen": "never"
     },
     {
       "matchPackageNames": [
@@ -31,14 +32,14 @@
     },
     {
       "matchPackageNames": [
-        "software.amazon.awssdk:s3"
+        "software.amazon.awssdk:*"
       ],
       "matchUpdateTypes": ["patch"],
-      "schedule": "after 9pm on sunday"
+      "schedule": "after 9pm on wednesday"
     },
     {
       "matchManagers": ["npm"],
-      "schedule": "after 9pm on sunday"
+      "schedule": "after 9pm on wednesday"
     }
   ],
   "nuget": {

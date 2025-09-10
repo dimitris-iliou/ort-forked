@@ -21,8 +21,10 @@ package org.ossreviewtoolkit.plugins.packagemanagers.maven
 
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.engine.spec.tempdir
-import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
+import io.kotest.matchers.collections.containExactlyInAnyOrder
+import io.kotest.matchers.should
 
+import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.plugins.packagemanagers.maven.tycho.addTychoExtension
 
 class MavenTest : WordSpec({
@@ -30,15 +32,15 @@ class MavenTest : WordSpec({
         "filter out Tycho definition files" {
             val tychoProjectDir1 = tempdir()
             tychoProjectDir1.addTychoExtension()
-            val tychoDefinitionFile1 = tychoProjectDir1.resolve("pom.xml").also { it.writeText("pom-tycho1") }
+            val tychoDefinitionFile1 = tychoProjectDir1.resolve("pom.xml").apply { writeText("pom-tycho1") }
             val tychoSubProjectDir = tychoProjectDir1.resolve("subproject")
             val tychoSubModule = tychoSubProjectDir.resolve("pom.xml")
             val tychoProjectDir2 = tempdir()
             tychoProjectDir2.addTychoExtension()
-            val tychoDefinitionFile2 = tychoProjectDir2.resolve("pom.xml").also { it.writeText("pom-tycho2") }
+            val tychoDefinitionFile2 = tychoProjectDir2.resolve("pom.xml").apply { writeText("pom-tycho2") }
 
             val mavenProjectDir = tempdir()
-            val mavenDefinitionFile = mavenProjectDir.resolve("pom.xml").also { it.writeText("pom-maven") }
+            val mavenDefinitionFile = mavenProjectDir.resolve("pom.xml").apply { writeText("pom-maven") }
             val mavenSubProjectDir = mavenProjectDir.resolve("subproject")
             val mavenSubModule = mavenSubProjectDir.resolve("pom.xml")
 
@@ -51,9 +53,9 @@ class MavenTest : WordSpec({
             )
 
             val maven = Maven()
-            val mappedDefinitionFiles = maven.mapDefinitionFiles(tempdir(), definitionFiles)
+            val mappedDefinitionFiles = maven.mapDefinitionFiles(tempdir(), definitionFiles, AnalyzerConfiguration())
 
-            mappedDefinitionFiles shouldContainExactlyInAnyOrder listOf(mavenDefinitionFile, mavenSubModule)
+            mappedDefinitionFiles should containExactlyInAnyOrder(mavenDefinitionFile, mavenSubModule)
         }
     }
 })

@@ -35,6 +35,7 @@ dependencies {
     implementation(projects.downloader)
     implementation(projects.utils.commonUtils)
 
+    implementation(libs.bouncyCastle)
     implementation(libs.maven.embedder)
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.kotlinx.serialization.json)
@@ -44,6 +45,10 @@ dependencies {
     // The classes from the maven-resolver dependencies are not used directly but initialized by the Plexus IoC
     // container automatically. They are required on the classpath for Maven dependency resolution to work.
     runtimeOnly(libs.bundles.mavenResolver)
+
+    // Under certain circumstances, Tycho uses Wagon to download metadata for SNAPSHOT artifacts. Therefore, at
+    // least the wagon-http dependency should be available on the classpath.
+    runtimeOnly(libs.wagon.http)
 
     // TODO: Remove this once https://issues.apache.org/jira/browse/MNG-6561 is resolved.
     runtimeOnly(libs.maven.compat)

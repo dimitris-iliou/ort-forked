@@ -40,7 +40,7 @@ abstract class AbstractPackageProvenanceStorageFunTest(vararg listeners: TestLis
     protected abstract fun createStorage(): PackageProvenanceStorage
 
     init {
-        register(*listeners)
+        extensions(listeners.asList())
 
         beforeEach {
             storage = createStorage()

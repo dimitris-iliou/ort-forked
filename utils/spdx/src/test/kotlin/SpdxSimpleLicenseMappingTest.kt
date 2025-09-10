@@ -30,13 +30,12 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.containADigit
 import io.kotest.matchers.types.beOfType
 
-import org.ossreviewtoolkit.utils.common.titlecase
 import org.ossreviewtoolkit.utils.spdx.parser.SpdxExpressionLexer
 import org.ossreviewtoolkit.utils.spdx.parser.SpdxExpressionParser
 import org.ossreviewtoolkit.utils.spdx.parser.Token
 
 class SpdxSimpleLicenseMappingTest : WordSpec({
-    "The license map" should {
+    "The simple license mapping" should {
         "not contain any duplicate keys with respect to capitalization" {
             val keys = SpdxSimpleLicenseMapping.simpleLicenseMapping.keys.toMutableList()
             val uniqueKeys = SpdxSimpleLicenseMapping.simpleExpressionMapping.keys
@@ -60,7 +59,7 @@ class SpdxSimpleLicenseMappingTest : WordSpec({
         }
     }
 
-    "The mapping" should {
+    "The simple expression mapping" should {
         "contain only single ID strings" {
             val ids = SpdxSimpleLicenseMapping.simpleExpressionMapping.keys +
                 SpdxSimpleLicenseMapping.deprecatedExpressionMapping.keys
@@ -88,10 +87,8 @@ class SpdxSimpleLicenseMappingTest : WordSpec({
             SpdxSimpleLicenseMapping.simpleExpressionMapping.forAll { (key, license) ->
                 SpdxSimpleLicenseMapping.map(key.lowercase(), mapDeprecated = false) shouldBe license
                 SpdxSimpleLicenseMapping.map(key.uppercase(), mapDeprecated = false) shouldBe license
-                SpdxSimpleLicenseMapping.map(key.titlecase(), mapDeprecated = false) shouldBe license
                 SpdxSimpleLicenseMapping.map(key.lowercase(), mapDeprecated = true) shouldBe license
                 SpdxSimpleLicenseMapping.map(key.uppercase(), mapDeprecated = true) shouldBe license
-                SpdxSimpleLicenseMapping.map(key.titlecase(), mapDeprecated = true) shouldBe license
             }
         }
     }

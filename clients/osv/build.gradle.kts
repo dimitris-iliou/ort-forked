@@ -30,6 +30,7 @@ dependencies {
     api(libs.retrofit)
 
     implementation(libs.bundles.ks3)
+    implementation(libs.kotlinx.coroutines)
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.retrofit.converter.kotlinxSerialization)
@@ -37,3 +38,5 @@ dependencies {
 
     testImplementation(libs.kotest.assertions.json)
 }
+
+description = "A client to communicate with the Google OSV API."

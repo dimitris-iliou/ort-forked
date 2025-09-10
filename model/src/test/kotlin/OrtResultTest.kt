@@ -22,6 +22,7 @@ package org.ossreviewtoolkit.model
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.matchers.collections.beEmpty
+import io.kotest.matchers.collections.containExactly
 import io.kotest.matchers.collections.containExactlyInAnyOrder
 import io.kotest.matchers.collections.haveSize
 import io.kotest.matchers.collections.shouldContain
@@ -34,20 +35,59 @@ import io.kotest.matchers.string.shouldMatch
 import io.kotest.matchers.types.beInstanceOf
 
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.config.IssueResolution
 import org.ossreviewtoolkit.model.config.IssueResolutionReason
+import org.ossreviewtoolkit.model.config.PackageConfiguration
 import org.ossreviewtoolkit.model.config.PathExclude
 import org.ossreviewtoolkit.model.config.PathExcludeReason
+import org.ossreviewtoolkit.model.config.PathInclude
+import org.ossreviewtoolkit.model.config.PathIncludeReason
 import org.ossreviewtoolkit.model.config.RepositoryConfiguration
 import org.ossreviewtoolkit.model.config.Resolutions
 import org.ossreviewtoolkit.model.config.RuleViolationResolution
 import org.ossreviewtoolkit.model.config.RuleViolationResolutionReason
+import org.ossreviewtoolkit.utils.ort.ProcessedDeclaredLicense
+import org.ossreviewtoolkit.utils.spdx.toSpdx
 import org.ossreviewtoolkit.utils.test.readOrtResult
 
 class OrtResultTest : WordSpec({
+    "applyPackageCurations()" should {
+        "apply a single package curation with a declared license mapping" {
+            val licenseUrl = "https://www.nuget.org/packages/CommandLineParser/2.9.1/license"
+
+            val pkg = Package.EMPTY.copy(
+                declaredLicenses = setOf(licenseUrl)
+            )
+
+            val curation = PackageCuration(
+                id = pkg.id,
+                data = PackageCurationData(
+                    declaredLicenseMapping = mapOf(
+                        licenseUrl to "MIT".toSpdx()
+                    )
+                )
+            )
+
+            applyPackageCurations(setOf(pkg), listOf(curation)).shouldContainExactly(
+                CuratedPackage(
+                    metadata = Package.EMPTY.copy(
+                        declaredLicenses = setOf(licenseUrl),
+                        declaredLicensesProcessed = ProcessedDeclaredLicense(
+                            spdxExpression = "MIT".toSpdx(),
+                            mapped = mapOf(licenseUrl to "MIT".toSpdx()),
+                            unmapped = emptySet()
+                        )
+                    ),
+                    curations = listOf(curation.data)
+                )
+            )
+        }
+    }
+
     "getDependencies()" should {
         "be able to get all direct dependencies of a package" {
-            val ortResult = readOrtResult("src/test/assets/sbt-multi-project-example-expected-output.yml")
+            val ortResult = readOrtResult("/sbt-multi-project-example-expected-output.yml")
             val id = Identifier("Maven:com.typesafe.akka:akka-stream_2.12:2.5.6")
 
             val dependencies = ortResult.getDependencies(id, 1).map { it.toCoordinates() }
@@ -60,8 +100,49 @@ class OrtResultTest : WordSpec({
         }
     }
 
+    "getPackageConfigurations()" should {
+        val id = Identifier("Maven:org.ossreviewtoolkit:model:1.0.0")
+        val provenance = ArtifactProvenance(
+            sourceArtifact = RemoteArtifact(url = "https://example.org/artifact.zip", hash = Hash.NONE)
+        )
+
+        "return package configurations exactly matching the identifier" {
+            val packageConfig1 = PackageConfiguration(id = id, sourceCodeOrigin = SourceCodeOrigin.ARTIFACT)
+            val packageConfig2 = PackageConfiguration(id = id, sourceArtifactUrl = provenance.sourceArtifact.url)
+            val packageConfig3 =
+                PackageConfiguration(id = id.copy(version = "2.0.0"), sourceCodeOrigin = SourceCodeOrigin.ARTIFACT)
+
+            val ortResult = OrtResult.EMPTY.copy(
+                resolvedConfiguration = ResolvedConfiguration(
+                    packageConfigurations = listOf(packageConfig1, packageConfig2, packageConfig3)
+                )
+            )
+
+            ortResult.getPackageConfigurations(id, provenance) should
+                containExactlyInAnyOrder(packageConfig1, packageConfig2)
+        }
+
+        "return package configurations with matching version ranges" {
+            val packageConfig1 =
+                PackageConfiguration(id = id.copy(version = "[1.0,2.0)"), sourceCodeOrigin = SourceCodeOrigin.ARTIFACT)
+            val packageConfig2 =
+                PackageConfiguration(id = id.copy(version = "[0.1,)"), sourceCodeOrigin = SourceCodeOrigin.ARTIFACT)
+            val packageConfig3 =
+                PackageConfiguration(id = id.copy(version = "]1.0.0,)"), sourceCodeOrigin = SourceCodeOrigin.ARTIFACT)
+
+            val ortResult = OrtResult.EMPTY.copy(
+                resolvedConfiguration = ResolvedConfiguration(
+                    packageConfigurations = listOf(packageConfig1, packageConfig2, packageConfig3)
+                )
+            )
+
+            ortResult.getPackageConfigurations(id, provenance) should
+                containExactlyInAnyOrder(packageConfig1, packageConfig2)
+        }
+    }
+
     "getProjectsAndPackages()" should {
-        val ortResult = readOrtResult("src/test/assets/gradle-all-dependencies-expected-result.yml")
+        val ortResult = readOrtResult("/gradle-all-dependencies-expected-result.yml")
         val subProjectId = Identifier("Gradle:org.ossreviewtoolkit.gradle.example:lib:1.0.0")
 
         "be able to get all ids including sub-projects" {
@@ -247,6 +328,80 @@ class OrtResultTest : WordSpec({
             openIssues.map { it.message } shouldHaveSingleElement "Included issue"
         }
 
+        "omit issues of non-included projects" {
+            val ortResult = OrtResult.EMPTY.copy(
+                repository = Repository.EMPTY.copy(
+                    config = RepositoryConfiguration(
+                        includes = Includes(
+                            paths = listOf(
+                                PathInclude(
+                                    pattern = "included/pom.xml",
+                                    reason = PathIncludeReason.SOURCE_OF
+                                )
+                            )
+                        )
+                    )
+                ),
+                analyzer = AnalyzerRun.EMPTY.copy(
+                    result = AnalyzerResult.EMPTY.copy(
+                        projects = setOf(
+                            Project.EMPTY.copy(
+                                id = Identifier("Maven:org.oss-review-toolkit:excluded:1.0"),
+                                definitionFilePath = "excluded/pom.xml",
+                                declaredLicenses = emptySet()
+                            )
+                        ),
+                        issues = mapOf(
+                            Identifier("Maven:org.oss-review-toolkit:excluded:1.0") to
+                                listOf(Issue(message = "Excluded issue", source = "")),
+                            Identifier("Maven:org.oss-review-toolkit:included:1.0") to
+                                listOf(Issue(message = "Included issue", source = ""))
+                        )
+                    )
+                )
+            )
+
+            val openIssues = ortResult.getOpenIssues()
+
+            openIssues.map { it.message } shouldHaveSingleElement "Included issue"
+        }
+
+        "include issues of included projects" {
+            val ortResult = OrtResult.EMPTY.copy(
+                repository = Repository.EMPTY.copy(
+                    config = RepositoryConfiguration(
+                        includes = Includes(
+                            paths = listOf(
+                                PathInclude(
+                                    pattern = "included/pom.xml",
+                                    reason = PathIncludeReason.SOURCE_OF
+                                )
+                            )
+                        )
+                    )
+                ),
+                analyzer = AnalyzerRun.EMPTY.copy(
+                    result = AnalyzerResult.EMPTY.copy(
+                        projects = setOf(
+                            Project.EMPTY.copy(
+                                id = Identifier("Maven:org.oss-review-toolkit:included:1.0"),
+                                definitionFilePath = "included/pom.xml",
+                                declaredLicenses = emptySet()
+                            )
+                        ),
+                        issues = mapOf(
+                            Identifier("Maven:org.oss-review-toolkit:included:1.0") to
+                                listOf(Issue(message = "Included issue", source = ""))
+                        )
+                    )
+                )
+            )
+
+            val openIssues = ortResult.getOpenIssues()
+
+            openIssues.map { it.message } shouldHaveSingleElement "Included issue"
+        }
+
         "omit scan issues with excluded affected path" {
             val projectId = Identifier("Maven:org.oss-review-toolkit:example-project:1.0")
             val vcs = VcsInfo(
@@ -264,7 +419,7 @@ class OrtResultTest : WordSpec({
                         excludes = Excludes(
                             paths = listOf(
                                 PathExclude(
-                                    pattern = "test/**",
+                                    pattern = "path/**",
                                     reason = PathExcludeReason.TEST_OF
                                 )
                             )
@@ -306,7 +461,7 @@ class OrtResultTest : WordSpec({
                                     Issue(
                                         message = "Included issue",
                                         source = "ScanCode",
-                                        affectedPath = "test/assets/asset.json"
+                                        affectedPath = "path/that/is/affected"
                                     )
                                 )
                             )
@@ -323,13 +478,13 @@ class OrtResultTest : WordSpec({
 
     "dependencyNavigator" should {
         "return a navigator for the dependency tree" {
-            val ortResult = readOrtResult("src/test/assets/sbt-multi-project-example-expected-output.yml")
+            val ortResult = readOrtResult("/sbt-multi-project-example-expected-output.yml")
 
             ortResult.dependencyNavigator shouldBe DependencyTreeNavigator
         }
 
         "return a navigator for the dependency graph" {
-            val ortResult = readOrtResult("src/test/assets/sbt-multi-project-example-graph.yml")
+            val ortResult = readOrtResult("/sbt-multi-project-example-graph.yml")
 
             ortResult.dependencyNavigator should beInstanceOf<DependencyGraphNavigator>()
         }
@@ -368,7 +523,7 @@ class OrtResultTest : WordSpec({
 
             val ruleViolations = ortResult.getRuleViolations(omitResolved = false, minSeverity = Severity.entries.min())
 
-            ruleViolations.map { it.rule }.shouldContainExactly("rule id")
+            ruleViolations.map { it.rule } should containExactly("rule id")
         }
 
         "drop violations which are resolved or below minSeverity if omitResolved is true and minSeverity is WARNING" {
@@ -419,7 +574,7 @@ class OrtResultTest : WordSpec({
 
             val ruleViolations = ortResult.getRuleViolations(omitResolved = true, minSeverity = Severity.WARNING)
 
-            ruleViolations.map { it.rule }.shouldContainExactly("Rule violation without resolution")
+            ruleViolations.map { it.rule } should containExactly("Rule violation without resolution")
         }
     }
 })

@@ -23,6 +23,8 @@ import java.io.File
 
 import kotlin.io.path.moveTo
 
+import org.ossreviewtoolkit.utils.common.div
+
 import org.semver4j.Semver
 
 private const val COMPOSER_LOCK_FILE = "composer.lock"
@@ -30,7 +32,7 @@ private const val COMPOSER_LOCK_FILE = "composer.lock"
 class LockfileProvider(private val definitionFile: File) {
     private val workingDir = definitionFile.parentFile
 
-    val lockfile = workingDir.resolve(COMPOSER_LOCK_FILE)
+    val lockfile = workingDir / COMPOSER_LOCK_FILE
 
     fun <T> ensureLockfile(block: (File) -> T): T {
         if (lockfile.isFile) return block(lockfile)
@@ -42,7 +44,7 @@ class LockfileProvider(private val definitionFile: File) {
             block(lockfile)
         } finally {
             lockfile.delete()
-            definitionFileBackup?.also { it.toPath().moveTo(definitionFile.toPath(), overwrite = true) }
+            definitionFileBackup?.toPath()?.moveTo(definitionFile.toPath(), overwrite = true)
         }
     }
 

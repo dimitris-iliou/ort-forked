@@ -33,20 +33,16 @@ dependencies {
     implementation(projects.downloader)
     implementation(projects.utils.ortUtils)
 
+    implementation(jacksonLibs.jacksonModuleKotlin)
     implementation(libs.bundles.exposed)
-    implementation(libs.hikari)
-    implementation(libs.jackson.module.kotlin)
     implementation(libs.kotlinx.coroutines)
     implementation(libs.postgres)
-    implementation(libs.retrofit.converter.jackson)
     implementation(libs.sw360Client) {
         constraints {
-            implementation("commons-io:commons-io:2.18.0")
+            implementation("commons-io:commons-io:2.20.0")
                 .because("commons-io 2.11.0 is vulnerable by CVE-2024-47554")
         }
     }
-
-    funTestApi(testFixtures(projects.scanner))
 
     funTestImplementation(platform(projects.plugins.scanners))
     funTestImplementation(platform(projects.plugins.versionControlSystems))
@@ -58,6 +54,8 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.retrofit.converter.kotlinxSerialization)
     testImplementation(libs.wiremock)
+
+    testFixturesImplementation(projects.utils.testUtils)
 
     testFixturesImplementation(libs.kotest.assertions.core)
     testFixturesImplementation(libs.kotest.runner.junit5)

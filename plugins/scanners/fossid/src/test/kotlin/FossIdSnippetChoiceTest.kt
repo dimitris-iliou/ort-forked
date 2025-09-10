@@ -36,6 +36,7 @@ import io.mockk.unmockkObject
 import org.ossreviewtoolkit.clients.fossid.EntityResponseBody
 import org.ossreviewtoolkit.clients.fossid.FossIdRestService
 import org.ossreviewtoolkit.clients.fossid.FossIdServiceWithVersion
+import org.ossreviewtoolkit.clients.fossid.PolymorphicData
 import org.ossreviewtoolkit.clients.fossid.PolymorphicList
 import org.ossreviewtoolkit.clients.fossid.PolymorphicResponseBody
 import org.ossreviewtoolkit.clients.fossid.addComponentIdentification
@@ -287,15 +288,27 @@ class FossIdSnippetChoiceTest : WordSpec({
                     path = FILE_1,
                     componentName = "fakepackage1",
                     componentVersion = "1.0.0",
-                    isDirectory = false
+                    isDirectory = false,
+                    preserveExistingIdentifications = true
                 )
+
                 val payload = OrtCommentPayload(mapOf("MIT" to listOf(choiceLocation)), 1, 0)
                 val comment = jsonMapper.writeValueAsString(OrtComment(payload))
-                service.addFileComment(USER, API_KEY, scanCode, FILE_1, comment)
+
+                service.addFileComment(
+                    user = USER,
+                    apiKey = API_KEY,
+                    scanCode = scanCode,
+                    path = FILE_1,
+                    comment = comment,
+                    isImportant = false,
+                    includeInReport = false
+                )
             }
 
             summary.issues.forAtLeastOne {
-                it.message shouldBe "This scan has 0 file(s) pending identification in FossID."
+                it.message shouldBe "This scan has 0 file(s) pending identification in FossID. " +
+                    "Please review and resolve them at: https://www.example.org/fossid/index.html?action=scanview&sid=1"
             }
         }
 
@@ -341,7 +354,8 @@ class FossIdSnippetChoiceTest : WordSpec({
             summary.issues.filter { it.severity > Severity.HINT } should beEmpty()
 
             summary.issues.forAtLeastOne {
-                it.message shouldBe "This scan has 0 file(s) pending identification in FossID."
+                it.message shouldBe "This scan has 0 file(s) pending identification in FossID. " +
+                    "Please review and resolve them at: https://www.example.org/fossid/index.html?action=scanview&sid=1"
             }
         }
 
@@ -396,7 +410,8 @@ class FossIdSnippetChoiceTest : WordSpec({
             summary.issues.filter { it.severity > Severity.HINT } should beEmpty()
 
             summary.issues.forAtLeastOne {
-                it.message shouldBe "This scan has 1 file(s) pending identification in FossID."
+                it.message shouldBe "This scan has 1 file(s) pending identification in FossID. " +
+                    "Please review and resolve them at: https://www.example.org/fossid/index.html?action=scanview&sid=1"
             }
         }
 
@@ -649,7 +664,8 @@ class FossIdSnippetChoiceTest : WordSpec({
             val summary = fossId.scan(createPackage(pkgId, vcsInfo), snippetChoices = emptyList()).summary
 
             summary.issues.forAtLeastOne {
-                it.message shouldBe "This scan has 1 file(s) pending identification in FossID."
+                it.message shouldBe "This scan has 1 file(s) pending identification in FossID. " +
+                    "Please review and resolve them at: https://www.example.org/fossid/index.html?action=scanview&sid=1"
             }
 
             summary.issues.filter { it.severity > Severity.HINT } should beEmpty()
@@ -714,7 +730,8 @@ class FossIdSnippetChoiceTest : WordSpec({
             val summary = fossId.scan(createPackage(pkgId, vcsInfo), snippetChoices = snippetChoices).summary
 
             summary.issues.forAtLeastOne {
-                it.message shouldBe "This scan has 1 file(s) pending identification in FossID."
+                it.message shouldBe "This scan has 1 file(s) pending identification in FossID. " +
+                    "Please review and resolve them at: https://www.example.org/fossid/index.html?action=scanview&sid=1"
             }
 
             summary.issues.filter { it.severity > Severity.HINT } should beEmpty()
@@ -960,7 +977,7 @@ fun FossIdServiceWithVersion.mockFiles(
     if (matchedLines.isNotEmpty()) {
         coEvery { listMatchedLines(USER, API_KEY, scanCode, any(), any()) } answers {
             val lines = matchedLines[arg(5)]
-            EntityResponseBody(status = 1, data = lines)
+            EntityResponseBody(status = 1, data = PolymorphicData(lines))
         }
     }
 
@@ -971,13 +988,20 @@ fun FossIdServiceWithVersion.mockFiles(
  * Prepare this service mock to expect a mark as identified call for the given [scanCode] and [path].
  */
 fun FossIdServiceWithVersion.expectMarkAsIdentified(scanCode: String, path: String): FossIdServiceWithVersion {
-    coEvery { markAsIdentified(USER, API_KEY, scanCode, path, any()) } returns
-        EntityResponseBody(status = 1)
     coEvery {
-        addComponentIdentification(USER, API_KEY, scanCode, path, any(), any(), false)
+        markAsIdentified(USER, API_KEY, scanCode, path, any())
     } returns EntityResponseBody(status = 1)
-    coEvery { addFileComment(USER, API_KEY, scanCode, path, any()) } returns
-        EntityResponseBody(status = 1)
+
+    coEvery {
+        addComponentIdentification(
+            USER, API_KEY, scanCode, path, any(), any(), any(), preserveExistingIdentifications = true
+        )
+    } returns EntityResponseBody(status = 1)
+
+    coEvery {
+        addFileComment(USER, API_KEY, scanCode, path, any(), isImportant = false, includeInReport = false)
+    } returns EntityResponseBody(status = 1)
+
     return this
 }
 

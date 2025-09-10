@@ -33,7 +33,7 @@ import org.ossreviewtoolkit.plugins.api.Plugin
 import org.ossreviewtoolkit.plugins.api.PluginConfig
 import org.ossreviewtoolkit.utils.common.CommandLineTool
 import org.ossreviewtoolkit.utils.common.collectMessages
-import org.ossreviewtoolkit.utils.common.uppercaseFirstChar
+import org.ossreviewtoolkit.utils.common.titlecase
 import org.ossreviewtoolkit.utils.ort.ORT_REPO_CONFIG_FILENAME
 import org.ossreviewtoolkit.utils.ort.showStackTrace
 
@@ -158,7 +158,7 @@ abstract class VersionControlSystem : Plugin {
         }
 
         private fun Collection<String>.generateCapitalizationVariants() =
-            flatMap { listOf(it, it.uppercase(), it.uppercaseFirstChar()) }
+            flatMap { listOf(it, it.uppercase(), it.titlecase()) }
     }
 
     /**
@@ -167,7 +167,7 @@ abstract class VersionControlSystem : Plugin {
     abstract val type: VcsType
 
     /**
-     *  The [priority] defines the order in which VCS implementaions are to be used. A higher value means a higher
+     *  The [priority] defines the order in which VCS implementations are to be used. A higher value means a higher
      *  priority.
      */
     abstract val priority: Int

@@ -27,6 +27,8 @@ import org.ossreviewtoolkit.model.config.createFileArchiver
 import org.ossreviewtoolkit.model.licenses.DefaultLicenseInfoProvider
 import org.ossreviewtoolkit.model.licenses.LicenseClassifications
 import org.ossreviewtoolkit.model.licenses.LicenseInfoResolver
+import org.ossreviewtoolkit.plugins.licensefactproviders.api.CompositeLicenseFactProvider
+import org.ossreviewtoolkit.plugins.licensefactproviders.api.LicenseFactProvider
 import org.ossreviewtoolkit.reporter.StatisticsCalculator.getStatistics
 
 /**
@@ -44,9 +46,9 @@ data class ReporterInput(
     val ortConfig: OrtConfiguration = OrtConfiguration(),
 
     /**
-     * A [LicenseTextProvider], can be used to integrate licenses texts into reports.
+     * A [LicenseFactProvider], can be used to integrate licenses facts like license texts into reports.
      */
-    val licenseTextProvider: LicenseTextProvider = DefaultLicenseTextProvider(),
+    val licenseFactProvider: LicenseFactProvider = CompositeLicenseFactProvider(emptyList()),
 
     /**
      * A [CopyrightGarbage] container, can be used to clean up copyrights used in reports.
@@ -78,6 +80,6 @@ data class ReporterInput(
     /**
      * Statistics for [ortResult].
      */
-    @Suppress("UNUSED") // This can be used from templates.
+    @Suppress("unused") // This can be used from templates.
     val statistics: Statistics by lazy { getStatistics(ortResult, licenseInfoResolver, ortConfig) }
 }

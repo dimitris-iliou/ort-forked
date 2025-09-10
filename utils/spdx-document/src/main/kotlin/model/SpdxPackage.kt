@@ -22,13 +22,15 @@ package org.ossreviewtoolkit.utils.spdxdocument.model
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 
+import java.time.Instant
+
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
 import org.ossreviewtoolkit.utils.spdx.SpdxExpression.Strictness.ALLOW_LICENSEREF_EXCEPTIONS
 import org.ossreviewtoolkit.utils.spdx.isSpdxExpressionOrNotPresent
 
 /**
  * Information about a package used in an [SpdxDocument].
- * See https://spdx.github.io/spdx-spec/v2.2.2/package-information/.
+ * See https://spdx.github.io/spdx-spec/v2.3/package-information/.
  */
 data class SpdxPackage(
     /**
@@ -51,6 +53,13 @@ data class SpdxPackage(
      */
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     val attributionTexts: List<String> = emptyList(),
+
+    /**
+     * The actual date the package was built.
+     * Format: YYYY-MM-DDThh:mm:ssZ
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    val builtDate: Instant? = null,
 
     /**
      * Checksums of the package.
@@ -116,13 +125,13 @@ data class SpdxPackage(
      * The concluded license for the package as SPDX expression. To represent a not present value [SpdxConstants.NONE]
      * or [SpdxConstants.NOASSERTION] must be used.
      */
-    val licenseConcluded: String,
+    val licenseConcluded: String = SpdxConstants.NOASSERTION,
 
     /**
      * The declared license for the package as SPDX expression. To represent a not present value [SpdxConstants.NONE] or
      * [SpdxConstants.NOASSERTION] must be used.
      */
-    val licenseDeclared: String,
+    val licenseDeclared: String = SpdxConstants.NOASSERTION,
 
     /**
      * A list of all licenses found in the package. These are simply license ID strings, no SPDX license expressions,
@@ -163,6 +172,19 @@ data class SpdxPackage(
     val packageVerificationCode: SpdxPackageVerificationCode? = null,
 
     /**
+     * This field provides information about the primary purpose of the identified package.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    val primaryPackagePurpose: Purpose? = null,
+
+    /**
+     * The date the package was released.
+     * Format: YYYY-MM-DDThh:mm:ssZ
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    val releaseDate: Instant? = null,
+
+    /**
      * Any relevant background information or additional comments about the origin of the package.
      */
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
@@ -185,49 +207,76 @@ data class SpdxPackage(
     val supplier: String? = null,
 
     /**
+     * The end of the support period for a package from the supplier.
+     * Format: YYYY-MM-DDThh:mm:ssZ
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    val validUntilDate: Instant? = null,
+
+    /**
      * The version of the package.
      */
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     val versionInfo: String = ""
 ) {
-    init {
-        require(spdxId.startsWith(SpdxConstants.REF_PREFIX)) {
-            "The SPDX ID '$spdxId' has to start with '${SpdxConstants.REF_PREFIX}'."
-        }
-
-        require(spdxId.all { it.isLetterOrDigit() || it == '.' || it == '-' }) {
-            "The SPDX ID '$spdxId' is only allowed to contain letters, numbers, '.', and '-'."
-        }
-
-        require(copyrightText.isNotBlank()) { "The copyright text must not be blank." }
-
-        require(downloadLocation.isNotBlank()) { "The download location must not be blank." }
-
-        require(name.isNotBlank()) { "The package name for SPDX-ID '$spdxId' must not be blank." }
-
-        val validPrefixes = listOf(SpdxConstants.PERSON, SpdxConstants.ORGANIZATION)
-
-        if (originator != null) {
-            require(originator == SpdxConstants.NOASSERTION || validPrefixes.any { originator.startsWith(it) }) {
-                "If specified, the originator has to start with any of $validPrefixes or be set to 'NOASSERTION'."
-            }
-        }
-
-        if (supplier != null) {
-            require(supplier == SpdxConstants.NOASSERTION || validPrefixes.any { supplier.startsWith(it) }) {
-                "If specified, the supplier has to start with any of $validPrefixes or be set to 'NOASSERTION'."
-            }
-        }
-
-        // TODO: The check for [licenseInfoFromFiles] can be made more strict, but the SPDX specification is not exact
-        //       enough yet to do this safely.
-        licenseInfoFromFiles.filterNot {
-            it.isSpdxExpressionOrNotPresent(ALLOW_LICENSEREF_EXCEPTIONS)
-        }.let { nonSpdxLicenses ->
-            require(nonSpdxLicenses.isEmpty()) {
-                "The entries in 'licenseInfoFromFiles' must each be either an SPDX expression, 'NONE' or " +
-                    "'NOASSERTION', but found ${nonSpdxLicenses.joinToString { "'$it'" }}."
-            }
-        }
+    /**
+     * The primary purpose how the package is being used (rather than the content of the package).
+     * See https://spdx.github.io/spdx-spec/v2.3/package-information/#724-primary-package-purpose-field.
+     */
+    enum class Purpose {
+        APPLICATION,
+        ARCHIVE,
+        CONTAINER,
+        DEVICE,
+        FILE,
+        FIRMWARE,
+        FRAMEWORK,
+        INSTALL,
+        LIBRARY,
+        OPERATING_SYSTEM,
+        SOURCE,
+        OTHER
     }
+
+    fun validate(): SpdxPackage =
+        apply {
+            require(spdxId.startsWith(SpdxConstants.REF_PREFIX)) {
+                "The SPDX ID '$spdxId' has to start with '${SpdxConstants.REF_PREFIX}'."
+            }
+
+            require(spdxId.all { it.isLetterOrDigit() || it == '.' || it == '-' }) {
+                "The SPDX ID '$spdxId' is only allowed to contain letters, numbers, '.', and '-'."
+            }
+
+            require(copyrightText.isNotBlank()) { "The copyright text must not be blank." }
+
+            require(downloadLocation.isNotBlank()) { "The download location must not be blank." }
+
+            require(name.isNotBlank()) { "The package name for SPDX-ID '$spdxId' must not be blank." }
+
+            val validPrefixes = listOf(SpdxConstants.PERSON, SpdxConstants.ORGANIZATION)
+
+            if (originator != null) {
+                require(originator == SpdxConstants.NOASSERTION || validPrefixes.any { originator.startsWith(it) }) {
+                    "If specified, the originator has to start with any of $validPrefixes or be set to 'NOASSERTION'."
+                }
+            }
+
+            if (supplier != null) {
+                require(supplier == SpdxConstants.NOASSERTION || validPrefixes.any { supplier.startsWith(it) }) {
+                    "If specified, the supplier has to start with any of $validPrefixes or be set to 'NOASSERTION'."
+                }
+            }
+
+            // TODO: The check for [licenseInfoFromFiles] can be made more strict, but the SPDX specification is not
+            //       exact enough yet to do this safely.
+            licenseInfoFromFiles.filterNot {
+                it.isSpdxExpressionOrNotPresent(ALLOW_LICENSEREF_EXCEPTIONS)
+            }.let { nonSpdxLicenses ->
+                require(nonSpdxLicenses.isEmpty()) {
+                    "The entries in 'licenseInfoFromFiles' must each be either an SPDX expression, 'NONE' or " +
+                        "'NOASSERTION', but found ${nonSpdxLicenses.joinToString { "'$it'" }}."
+                }
+            }
+        }
 }

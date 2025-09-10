@@ -17,18 +17,18 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-24.04, windows-2022]
+        os: [ubuntu-24.04, windows-2025]
     runs-on: ${{ matrix.os }}
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
     - name: Setup Java
-      uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4
+      uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5
       with:
         distribution: temurin
         java-version: 21
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@94baf225fe0a508e581a564467443d0e2379123b # v4
+      uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
     - name: Build all classes
       run: ./gradlew classes
   codeql-analysis:
@@ -39,33 +39,34 @@ jobs:
       security-events: write
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@5f8171a638ada777af81d42b55959a643bb29017 # v3
+      uses: github/codeql-action/init@d3678e237b9c32a6c9bffb3315c335f976f3549f # v3
       with:
         languages: java
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@94baf225fe0a508e581a564467443d0e2379123b # v4
+      uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
     - name: Build all classes
       run: ./gradlew -Dorg.gradle.jvmargs=-Xmx1g --no-build-cache classes
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@5f8171a638ada777af81d42b55959a643bb29017 # v3
+      uses: github/codeql-action/analyze@d3678e237b9c32a6c9bffb3315c335f976f3549f # v3
   test:
     strategy:
       matrix:
-        os: [ubuntu-24.04, windows-2022]
+        os: [ubuntu-24.04, windows-2025]
+      fail-fast: false
     runs-on: ${{ matrix.os }}
     needs: build
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
     - name: Setup Java
-      uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4
+      uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5
       with:
         distribution: temurin
         java-version: 21
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@94baf225fe0a508e581a564467443d0e2379123b # v4
+      uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
     - name: Run unit tests
       run: ./gradlew --scan test jacocoTestReport
     - name: Create Test Summary
@@ -74,7 +75,7 @@ jobs:
         paths: "**/test-results/**/TEST-*.xml"
       if: always()
     - name: Upload code coverage data
-      uses: codecov/codecov-action@0565863a31f2c772f9f0395002a31e3f06189574 # v5
+      uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         flags: test-${{ matrix.os }}
@@ -83,16 +84,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       with:
         submodules: recursive
     - name: Set tool version environment variables
-      run: sed "s/^ARG //" docker/versions.dockerfile >> $GITHUB_ENV
+      run: cat .env.versions >> $GITHUB_ENV
     - name: Install required tools
       run: |
-          # Uninstall mono-devel because it contains the "lc" command which conflicts with BoyterLc.
-          sudo apt-get -qq remove mono-devel
-
           # Install git-repo.
           mkdir -p $HOME/.local/bin
           curl https://storage.googleapis.com/git-repo-downloads/repo -o $HOME/.local/bin/repo
@@ -102,10 +100,6 @@ jobs:
           curl -LOs https://github.com/amzn/askalono/releases/download/$ASKALONO_VERSION/askalono-Linux.zip
           unzip askalono-Linux.zip -d $HOME/.local/bin
 
-          # Install Boyter Lc for functional tests.
-          curl -LOs https://github.com/boyter/lc/releases/download/v$BOYTERLC_VERSION/lc-$BOYTERLC_VERSION-x86_64-unknown-linux.zip
-          unzip lc-$BOYTERLC_VERSION-x86_64-unknown-linux.zip -d $HOME/.local/bin
-
           # Install Licensee for functional tests.
           echo "gem: --bindir $HOME/.local/bin" > $HOME/.gemrc
           gem install --user-install licensee -v $LICENSEE_VERSION
@@ -114,7 +108,7 @@ jobs:
           curl -Os https://raw.githubusercontent.com/nexB/scancode-toolkit/v$SCANCODE_VERSION/requirements.txt
           pipx install --pip-args="--no-cache-dir --constraint requirements.txt" scancode-toolkit==$SCANCODE_VERSION
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@94baf225fe0a508e581a564467443d0e2379123b # v4
+      uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
     - name: Run functional tests that do not require external tools
       run: ./gradlew --scan -Ptests.exclude=org.ossreviewtoolkit.plugins.packagemanagers.* funTest jacocoFunTestReport
     - name: Create Test Summary
@@ -123,7 +117,7 @@ jobs:
         paths: "**/test-results/**/TEST-*.xml"
       if: always()
     - name: Upload code coverage data
-      uses: codecov/codecov-action@0565863a31f2c772f9f0395002a31e3f06189574 # v5
+      uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         flags: funTest-non-docker
@@ -131,15 +125,15 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       with:
         submodules: recursive
     - name: Free Disk Space
       uses: ./.github/actions/free-disk-space
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3
+      uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
     - name: Build ORT Docker Image
-      uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # v6
+      uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6
       with:
         context: .
         load: true
@@ -147,7 +141,7 @@ jobs:
         target: all-tools
         cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/ort:cache
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@94baf225fe0a508e581a564467443d0e2379123b # v4
+      uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
     - name: Run functional tests that do require external tools
       run: |
         # Run the functional tests in the Docker container.
@@ -168,7 +162,7 @@ jobs:
         paths: "**/test-results/**/TEST-*.xml"
       if: always()
     - name: Upload code coverage data
-      uses: codecov/codecov-action@0565863a31f2c772f9f0395002a31e3f06189574 # v5
+      uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         flags: funTest-docker

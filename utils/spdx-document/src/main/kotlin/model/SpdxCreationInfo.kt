@@ -25,7 +25,7 @@ import java.time.Instant
 
 /**
  * Creation information for an [SpdxDocument].
- * See https://spdx.github.io/spdx-spec/v2.2.2/document-creation-information/.
+ * See https://spdx.github.io/spdx-spec/v2.3/document-creation-information/.
  */
 data class SpdxCreationInfo(
     /**
@@ -56,10 +56,15 @@ data class SpdxCreationInfo(
 
 ) {
     init {
-        require(creators.isNotEmpty()) { "Creators must contain at least one entry, but was empty." }
-
-        require(licenseListVersion.isEmpty() || licenseListVersion.split('.').size == 2) {
-            "The license list version must contain exactly the major and minor parts."
-        }
+        validate()
     }
+
+    fun validate(): SpdxCreationInfo =
+        apply {
+            require(creators.isNotEmpty()) { "Creators must contain at least one entry, but was empty." }
+
+            require(licenseListVersion.isEmpty() || licenseListVersion.split('.').size == 2) {
+                "The license list version must contain exactly the major and minor parts."
+            }
+        }
 }

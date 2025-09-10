@@ -38,13 +38,13 @@ import java.io.File
 import org.ossreviewtoolkit.analyzer.PackageManagerFactory
 import org.ossreviewtoolkit.model.OrtResult
 import org.ossreviewtoolkit.model.config.OrtConfiguration
-import org.ossreviewtoolkit.model.config.OrtConfigurationWrapper
 import org.ossreviewtoolkit.model.config.ProviderPluginConfiguration
+import org.ossreviewtoolkit.model.mapper
 import org.ossreviewtoolkit.model.readValue
-import org.ossreviewtoolkit.model.writeValue
 import org.ossreviewtoolkit.utils.common.EnvironmentVariableFilter
+import org.ossreviewtoolkit.utils.common.div
+import org.ossreviewtoolkit.utils.common.extractResource
 import org.ossreviewtoolkit.utils.ort.ORT_REFERENCE_CONFIG_FILENAME
-import org.ossreviewtoolkit.utils.test.getAssetFile
 
 /**
  * A test for the main entry point of the application.
@@ -55,18 +55,21 @@ class OrtMainFunTest : StringSpec() {
 
     override suspend fun beforeSpec(spec: Spec) {
         configFile = tempfile(suffix = ".yml")
-        configFile.writeValue(
-            OrtConfigurationWrapper(
-                OrtConfiguration(
-                    packageCurationProviders = listOf(
-                        ProviderPluginConfiguration(
-                            type = "File",
-                            options = mapOf("path" to getAssetFile("gradle-curations.yml").path)
-                        )
-                    )
+
+        val curationsFile = tempdir() / "gradle-curations.yml"
+        extractResource("/gradle-curations.yml", curationsFile)
+
+        val writer = configFile.mapper().writerFor(OrtConfiguration::class.java).withRootName("ort")
+        val config = OrtConfiguration(
+            packageCurationProviders = listOf(
+                ProviderPluginConfiguration(
+                    type = "File",
+                    options = mapOf("path" to curationsFile.path)
                 )
             )
         )
+
+        writer.writeValue(configFile, config)
     }
 
     override suspend fun beforeTest(testCase: TestCase) {

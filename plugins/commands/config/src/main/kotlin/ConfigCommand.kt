@@ -19,6 +19,7 @@
 
 package org.ossreviewtoolkit.plugins.commands.config
 
+import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.dataformat.yaml.YAMLMapper
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 
@@ -30,7 +31,6 @@ import com.github.ajalt.clikt.parameters.types.file
 import com.github.ajalt.mordant.rendering.Theme
 
 import org.ossreviewtoolkit.model.config.OrtConfiguration
-import org.ossreviewtoolkit.model.config.OrtConfigurationWrapper
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.commands.api.OrtCommand
@@ -40,8 +40,7 @@ import org.ossreviewtoolkit.utils.common.expandTilde
 import org.ossreviewtoolkit.utils.ort.ORT_REFERENCE_CONFIG_FILENAME
 
 @OrtPlugin(
-    id = "config",
-    displayName = "config command",
+    displayName = "Config",
     description = "Show different ORT configurations.",
     factory = OrtCommandFactory::class
 )
@@ -68,12 +67,13 @@ class ConfigCommand(descriptor: PluginDescriptor = ConfigCommandFactory.descript
     ).convert { it.expandTilde() }
         .file(mustExist = true, canBeFile = true, canBeDir = false, mustBeWritable = false, mustBeReadable = true)
 
-    private val mapper = YAMLMapper().apply {
-        registerKotlinModule()
-    }
+    private val configWriter = YAMLMapper()
+        .registerKotlinModule()
+        .setDefaultPropertyInclusion(JsonInclude.Include.NON_NULL)
+        .writerFor(OrtConfiguration::class.java)
+        .withRootName("ort")
 
-    private fun OrtConfiguration.renderYaml() =
-        mapper.writerWithDefaultPrettyPrinter().writeValueAsString(OrtConfigurationWrapper(this)).removePrefix("---\n")
+    private fun OrtConfiguration.renderYaml() = configWriter.writeValueAsString(this).removePrefix("---\n")
 
     override fun run() {
         if (showDefault) {
@@ -91,7 +91,8 @@ class ConfigCommand(descriptor: PluginDescriptor = ConfigCommandFactory.descript
         if (showReference) {
             echo("The reference configuration is:")
             echo()
-            echo(javaClass.getResource("/$ORT_REFERENCE_CONFIG_FILENAME").readText())
+            val referenceConfigUrl = checkNotNull(javaClass.getResource("/$ORT_REFERENCE_CONFIG_FILENAME"))
+            echo(referenceConfigUrl.readText())
         }
 
         checkSyntax?.run {

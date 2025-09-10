@@ -23,7 +23,11 @@ import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.engine.spec.tempfile
 import io.kotest.matchers.collections.beEmpty
+import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.maps.shouldContainValue
+import io.kotest.matchers.nulls.beNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
@@ -54,7 +58,7 @@ class FossIdClientReturnTypeTest : StringSpec({
     val server = WireMockServer(
         WireMockConfiguration.options()
             .dynamicPort()
-            .usingFilesUnderDirectory("src/test/assets/return-type")
+            .usingFilesUnderClasspath("return-type")
     )
     lateinit var service: FossIdRestService
 
@@ -74,7 +78,7 @@ class FossIdClientReturnTypeTest : StringSpec({
     "Single scan can be queried" {
         service.getScan("", "", SCAN_CODE_2) shouldNotBeNull {
             checkResponse("get scan")
-            data.shouldBeTypeOf<Scan>()
+            data?.value.shouldBeTypeOf<Scan>()
         }
     }
 
@@ -88,7 +92,7 @@ class FossIdClientReturnTypeTest : StringSpec({
     "Scans for project can be listed when there is exactly one" {
         service.listScansForProject("", "", PROJECT_CODE_3) shouldNotBeNull {
             checkResponse("list scans")
-            data shouldNotBeNull {
+            data.shouldNotBeNull {
                 size shouldBe 1
                 first().shouldBeTypeOf<Scan>()
             }
@@ -167,7 +171,7 @@ class FossIdClientReturnTypeTest : StringSpec({
             119
         ) shouldNotBeNull {
             checkResponse("list matched lines")
-            data shouldNotBeNull {
+            data?.value shouldNotBeNull {
                 localFile shouldNot beEmpty()
                 mirrorFile shouldNot beEmpty()
             }
@@ -256,6 +260,28 @@ class FossIdClientReturnTypeTest : StringSpec({
         }
     }
 
+    "When create scan returns an error, no exception is thrown" {
+        service.createScan(
+            "",
+            "",
+            PROJECT_CODE_1,
+            SCAN_CODE_1,
+            "git_repo_url",
+            "develop"
+        ) shouldNotBeNull {
+            message shouldBe "These issues were found while parsing the request:"
+            data?.value?.message shouldBe "Field git_repo_url: there was an issue executing command: timeout 200 git " +
+                "ls-remote 'ssh git repo' 2>&1. Exit status: 128. Output: Repository not found The requested " +
+                "repository does not exist, or you do not have permission to access it. fatal: Could not read from " +
+                "remote repository.  Please make sure you have the correct access rights and the repository exists."
+            data?.value?.messageParameters?.shouldContainValue(
+                "Repository not found The requested repository does not exist, or you do not have permission " +
+                    "to access it. fatal: Could not read from remote repository.  Please make sure you have the " +
+                    "correct access rights and the repository exists."
+            )
+        }
+    }
+
     "A file can be marked as identified" {
         service.markAsIdentified(
             "",
@@ -318,6 +344,63 @@ class FossIdClientReturnTypeTest : StringSpec({
             "TestORT"
         ) shouldNotBeNull {
             checkResponse("add file comment")
+        }
+    }
+
+    "An error response can be parsed" {
+        service.getProject("", "", "semver4j_2_20201203_090342") shouldNotBeNull {
+            error shouldBe "Classes.FossID.user_not_found_or_api_key_is_not_correct"
+            message shouldBe "User is not found or API key is incorrect"
+        }
+    }
+
+    "Projects can be listed" {
+        service.listProjects("", "") shouldNotBeNull {
+            data shouldNotBeNull {
+                this shouldHaveSize 2
+                first().projectName shouldBe "TestProject1"
+            }
+        }
+    }
+
+    "Uploaded archives can be extracted" {
+        service.extractArchives("", "", SCAN_CODE_1, "test.zip") shouldNotBeNull {
+            checkResponse("extract archives")
+        }
+    }
+
+    "Content can be removed" {
+        service.removeUploadedContent("", "", SCAN_CODE_1, "test.zip") shouldNotBeNull {
+            checkResponse("remove uploaded content", true)
+            data?.value?.value shouldBe true
+        }
+    }
+
+    "Error is handled when content can't be removed" {
+        service.removeUploadedContent("", "", SCAN_CODE_2, "missing.zip") shouldNotBeNull {
+            data?.value?.message shouldBe "The filename is not valid"
+        }
+    }
+
+    "File can be uploaded" {
+        val file = tempfile().apply {
+            writeText("Hello World!")
+        }
+
+        service.uploadFile("", "", SCAN_CODE_1, file) shouldNotBeNull {
+            status shouldBe 1
+            data should beNull()
+        }
+    }
+
+    "File can be uploaded in chunk" {
+        val file = tempfile().apply {
+            writeText("Hello World!")
+        }
+
+        service.uploadFile("", "", SCAN_CODE_2, file, 10, true) shouldNotBeNull {
+            status shouldBe 1
+            data should beNull()
         }
     }
 })

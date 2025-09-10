@@ -38,8 +38,7 @@ import org.ossreviewtoolkit.reporter.ReporterFactory
 import org.ossreviewtoolkit.scanner.ScannerWrapperFactory
 
 @OrtPlugin(
-    id = "plugins",
-    displayName = "plugins command",
+    displayName = "Plugins",
     description = "Print information about the installed ORT plugins.",
     factory = OrtCommandFactory::class
 )
@@ -62,22 +61,17 @@ class PluginsCommand(descriptor: PluginDescriptor = PluginsCommandFactory.descri
         echo()
 
         plugins.forEach { plugin ->
-            echo(
-                HorizontalRule(
-                    buildString {
-                        append(plugin.displayName)
-                        if (plugin.id != plugin.displayName) append(" (id: ${plugin.id})")
-                    },
-                    "-"
-                )
-            )
+            echo(HorizontalRule(plugin.displayName))
             echo()
-            echo(plugin.description)
+
+            echo("ID: ${plugin.id}")
+            echo()
+
+            echo("Description: ${plugin.description}")
             echo()
 
             if (plugin.options.isNotEmpty()) {
-                echo("Configuration options:")
-
+                echo("Options:")
                 echo(
                     UnorderedList(
                         listEntries = plugin.options.map { option ->
@@ -92,7 +86,9 @@ class PluginsCommand(descriptor: PluginDescriptor = PluginsCommandFactory.descri
                         bulletText = "*"
                     )
                 )
-
+                echo()
+            } else {
+                echo("Options: None")
                 echo()
             }
         }

@@ -29,10 +29,10 @@ import javax.xml.transform.TransformerFactory
 import org.ossreviewtoolkit.model.OrtResult
 import org.ossreviewtoolkit.reporter.HowToFixTextProvider
 import org.ossreviewtoolkit.reporter.ReporterInput
-import org.ossreviewtoolkit.utils.ort.Environment
-import org.ossreviewtoolkit.utils.test.getAssetFile
-import org.ossreviewtoolkit.utils.test.matchExpectedResult
+import org.ossreviewtoolkit.utils.ort.ORT_VERSION
+import org.ossreviewtoolkit.utils.test.patchExpectedResult
 import org.ossreviewtoolkit.utils.test.readOrtResult
+import org.ossreviewtoolkit.utils.test.readResource
 
 private val HOW_TO_FIX_TEXT_PROVIDER = HowToFixTextProvider {
     """
@@ -53,12 +53,12 @@ class StaticHtmlReporterFunTest : WordSpec({
 
         "successfully export to a static HTML page" {
             val timeStampPattern = Regex("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z")
-            val ortResult = readOrtResult("src/funTest/assets/reporter-test-input.yml")
+            val ortResult = readOrtResult("/reporter-test-input.yml")
             val actualReport = generateReport(ortResult).replaceFirst(timeStampPattern, "<REPLACE_TIMESTAMP>")
 
-            val expectedReport = matchExpectedResult(
-                getAssetFile("static-html-reporter-test-expected-output.html"),
-                custom = mapOf("<REPLACE_ORT_VERSION>" to Environment.ORT_VERSION)
+            val expectedReport = patchExpectedResult(
+                readResource("/static-html-reporter-test-expected-output.html"),
+                custom = mapOf("<REPLACE_ORT_VERSION>" to ORT_VERSION)
             )
 
             actualReport shouldBe expectedReport

@@ -20,11 +20,8 @@
 package org.ossreviewtoolkit.plugins.packagemanagers.maven.tycho
 
 import java.io.File
-import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicReference
 import java.util.jar.Manifest
-
-import kotlin.io.path.invariantSeparatorsPathString
 
 import org.apache.logging.log4j.kotlin.logger
 import org.apache.maven.AbstractMavenLifecycleParticipant
@@ -37,6 +34,7 @@ import org.codehaus.plexus.PlexusContainer
 import org.codehaus.plexus.classworlds.ClassWorld
 
 import org.eclipse.aether.artifact.Artifact
+import org.eclipse.aether.graph.DefaultDependencyNode
 import org.eclipse.aether.graph.DependencyNode
 
 import org.ossreviewtoolkit.analyzer.PackageManager
@@ -93,7 +91,7 @@ import org.ossreviewtoolkit.utils.ort.createOrtTempFile
     description = "The Tycho package manager for Maven projects.",
     factory = PackageManagerFactory::class
 )
-class Tycho(override val descriptor: PluginDescriptor = TychoFactory.Companion.descriptor) : PackageManager("Tycho") {
+class Tycho(override val descriptor: PluginDescriptor = TychoFactory.descriptor) : PackageManager("Tycho") {
     override val globsForDefinitionFiles = listOf("pom.xml")
 
     /**
@@ -102,8 +100,11 @@ class Tycho(override val descriptor: PluginDescriptor = TychoFactory.Companion.d
      */
     private lateinit var graphBuilder: DependencyGraphBuilder<DependencyNode>
 
-    override fun mapDefinitionFiles(analysisRoot: File, definitionFiles: List<File>): List<File> =
-        definitionFiles.filter(::isTychoProject)
+    override fun mapDefinitionFiles(
+        analysisRoot: File,
+        definitionFiles: List<File>,
+        analyzerConfig: AnalyzerConfiguration
+    ): List<File> = definitionFiles.filter(::isTychoProject)
 
     override fun resolveDependencies(
         analysisRoot: File,
@@ -116,21 +117,22 @@ class Tycho(override val descriptor: PluginDescriptor = TychoFactory.Companion.d
 
         val repositoryHelper = LocalRepositoryHelper()
         val collector = TychoProjectsCollector()
-        val (exitCode, buildLog) = runBuild(
-            analysisRoot,
-            collector,
-            definitionFile.parentFile,
-            excludes,
-            analyzerConfig.skipExcluded
-        )
+        val (exitCode, buildLog) = runBuild(collector, definitionFile.parentFile)
 
-        val resolver = P2ArtifactResolver.create(definitionFile.parentFile, collector.mavenProjects.values)
+        val targetHandler = TargetHandler.create(definitionFile.parentFile)
+        val resolver = P2ArtifactResolver.create(targetHandler, collector.mavenProjects.values)
 
         val resolvedProjects = createMavenSupport(collector).use { mavenSupport ->
-            graphBuilder = createGraphBuilder(mavenSupport, collector.mavenProjects, resolver, repositoryHelper)
+            graphBuilder = createGraphBuilder(
+                mavenSupport,
+                collector.mavenProjects,
+                resolver,
+                targetHandler,
+                repositoryHelper
+            )
 
             buildLog.inputStream().use { stream ->
-                parseDependencyTree(stream, collector.mavenProjects.values).map { projectNode ->
+                parseDependencyTree(stream, collector.mavenProjects.values, resolver::isFeature).map { projectNode ->
                     val project = collector.mavenProjects.getValue(projectNode.artifact.identifier())
                     processProjectDependencies(graphBuilder, project, projectNode.children, excludes)
                     project
@@ -180,16 +182,22 @@ class Tycho(override val descriptor: PluginDescriptor = TychoFactory.Companion.d
 
     /**
      * Create the [DependencyGraphBuilder] for constructing the dependency graph of the analyzed Tycho project using
-     * the given [mavenSupport], the encountered [mavenProjects], and the given [resolver] and [repositoryHelper].
+     * the given [mavenSupport], the encountered [mavenProjects], and the given [resolver], [targetHandler], and
+     * [repositoryHelper].
      */
     internal fun createGraphBuilder(
         mavenSupport: MavenSupport,
         mavenProjects: Map<String, MavenProject>,
         resolver: P2ArtifactResolver,
+        targetHandler: TargetHandler,
         repositoryHelper: LocalRepositoryHelper
     ): DependencyGraphBuilder<DependencyNode> {
-        val resolverFun =
-            tychoPackageResolverFun(mavenSupport.defaultPackageResolverFun(), repositoryHelper, resolver)
+        val resolverFun = tychoPackageResolverFun(
+            mavenSupport.defaultPackageResolverFun(),
+            repositoryHelper,
+            resolver,
+            targetHandler
+        )
         val dependencyHandler = MavenDependencyHandler(descriptor.displayName, projectType, mavenProjects, resolverFun)
         return DependencyGraphBuilder(dependencyHandler)
     }
@@ -198,13 +206,7 @@ class Tycho(override val descriptor: PluginDescriptor = TychoFactory.Companion.d
      * Run a Maven build on the Tycho project in [projectRoot] utilizing the given [collector]. Return a pair with the
      * exit code of the Maven project and a [File] that contains the output generated during the build.
      */
-    private fun runBuild(
-        analysisRoot: File,
-        collector: TychoProjectsCollector,
-        projectRoot: File,
-        excludes: Excludes,
-        skipExcluded: Boolean
-    ): Pair<Int, File> {
+    private fun runBuild(collector: TychoProjectsCollector, projectRoot: File): Pair<Int, File> {
         // The Maven CLI seems to change the context class loader. This has side effects on ORT's plugin mechanism.
         // To prevent this, store the class loader and restore it at the end of this function.
         val tccl = Thread.currentThread().contextClassLoader
@@ -219,7 +221,7 @@ class Tycho(override val descriptor: PluginDescriptor = TychoFactory.Companion.d
             System.setProperty(MavenCli.MULTIMODULE_PROJECT_DIRECTORY, projectRoot.absolutePath)
 
             val exitCode = cli.doMain(
-                generateMavenOptions(analysisRoot, projectRoot, buildLog, excludes, skipExcluded),
+                generateMavenOptions(buildLog),
                 projectRoot.path,
                 null,
                 null
@@ -291,16 +293,9 @@ class Tycho(override val descriptor: PluginDescriptor = TychoFactory.Companion.d
     }
 
     /**
-     * Generate the command line options to be passed to the Maven CLI for the given [analysisRoot] and [root] folders
-     * and the [dependencyTreeFile].
+     * Generate the command line options to be passed to the Maven CLI for the given [dependencyTreeFile].
      */
-    private fun generateMavenOptions(
-        analysisRoot: File,
-        root: File,
-        dependencyTreeFile: File,
-        excludes: Excludes,
-        skipExcluded: Boolean
-    ): Array<String> =
+    private fun generateMavenOptions(dependencyTreeFile: File): Array<String> =
         buildList {
             // The "package" goal is required; otherwise the Tycho extension is not activated.
             add("package")
@@ -309,33 +304,7 @@ class Tycho(override val descriptor: PluginDescriptor = TychoFactory.Companion.d
             add("-DoutputFile=${dependencyTreeFile.absolutePath}")
             add("-DappendOutput=true")
             add("-Dverbose=true")
-
-            generateModuleExcludes(analysisRoot, root, excludes, skipExcluded)?.takeUnless { it.isEmpty() }
-                ?.let { excludedModules ->
-                    add("-pl")
-                    add(excludedModules)
-                }
         }.toTypedArray()
-
-    /**
-     * Generate a list of submodules to be excluded for the Maven build with the given [rootProject] folder based on
-     * the configured exclusions. The resulting string (if any) is used as the value of Maven's `-pl` option.
-     */
-    private fun generateModuleExcludes(
-        analysisRoot: File,
-        rootProject: File,
-        excludes: Excludes,
-        skipExcluded: Boolean
-    ): String? {
-        if (!skipExcluded) return null
-
-        val analysisRootPath = analysisRoot.toPath()
-        val rootProjectPath = rootProject.toPath()
-        return rootProject.walk().filter { it.name == "pom.xml" }
-            .map { it.toPath().parent }
-            .filter { excludes.isPathExcluded(analysisRootPath.relativeSubPath(it)) }
-            .joinToString(",") { "!${rootProjectPath.relativeSubPath(it)}" }
-    }
 }
 
 /**
@@ -349,11 +318,6 @@ private const val DEPENDENCY_PLUGIN_VERSION = "3.8.1"
 /** The goal to invoke the Maven Dependency Plugin to generate a dependency tree. */
 private const val DEPENDENCY_TREE_GOAL =
     "org.apache.maven.plugins:maven-dependency-plugin:$DEPENDENCY_PLUGIN_VERSION:tree"
-
-/**
- * Return the relative path of [other] to this [Path].
- */
-private fun Path.relativeSubPath(other: Path): String = relativize(other).invariantSeparatorsPathString
 
 /**
  * A special exception class to indicate that a Tycho build failed completely.
@@ -396,17 +360,27 @@ internal class TychoProjectsCollector : AbstractMavenLifecycleParticipant() {
  * it tries to obtain metadata from the OSGi manifest of the bundle. This approach is partly inspired by
  * https://github.com/OpenNTF/p2-layout-provider. Additional metadata for creating [RemoteArtifact] objects is
  * obtained from the given [resolver].
+ * There is another option that the artifact is a regular Maven artifact, but referenced by Tycho with an alternative
+ * identifier because it is part of a Tycho target platform. This can be checked with the help of the given
+ * [targetHandler]. In this case, a resolve operation for the original Maven artifact is attempted.
  */
 internal fun tychoPackageResolverFun(
     delegate: PackageResolverFun,
     repositoryHelper: LocalRepositoryHelper,
-    resolver: P2ArtifactResolver
+    resolver: P2ArtifactResolver,
+    targetHandler: TargetHandler
 ): PackageResolverFun =
     { dependency ->
         runCatching {
             delegate(dependency)
         }.recoverCatching { exception ->
-            createPackageFromLocalArtifact(dependency.artifact, repositoryHelper, resolver)
+            targetHandler.mapToMavenDependency(dependency.artifact)?.let { artifact ->
+                val mappedDependency = DefaultDependencyNode(artifact).apply {
+                    repositories = dependency.repositories
+                }
+
+                delegate(mappedDependency)
+            } ?: createPackageFromLocalArtifact(dependency.artifact, repositoryHelper, resolver)
                 ?: throw exception
         }.getOrThrow()
     }
@@ -453,7 +427,10 @@ private fun createPackageFromLocalArtifact(
     artifact: Artifact,
     repositoryHelper: LocalRepositoryHelper,
     resolver: P2ArtifactResolver
-): Package? = repositoryHelper.osgiManifest(artifact)?.let { createPackageFromManifest(artifact, it, resolver) }
+): Package? =
+    repositoryHelper.osgiManifest(artifact, resolver.isBinary(artifact))?.let {
+        createPackageFromManifest(artifact, it, resolver)
+    }
 
 /**
  * An enumeration that defines the properties to be extracted from a source reference manifest header.

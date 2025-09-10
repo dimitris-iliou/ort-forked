@@ -17,14 +17,19 @@
  * License-Filename: LICENSE
  */
 
+@file:Suppress("TooManyFunctions")
+
 package org.ossreviewtoolkit.plugins.packagemanagers.swiftpm
 
 import java.io.File
+
+import org.apache.logging.log4j.kotlin.logger
 
 import org.ossreviewtoolkit.analyzer.PackageManager
 import org.ossreviewtoolkit.analyzer.PackageManagerFactory
 import org.ossreviewtoolkit.downloader.VcsHost
 import org.ossreviewtoolkit.downloader.VersionControlSystem
+import org.ossreviewtoolkit.model.Hash
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.Issue
 import org.ossreviewtoolkit.model.Package
@@ -44,11 +49,13 @@ import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.utils.common.CommandLineTool
 import org.ossreviewtoolkit.utils.common.Os
+import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.toUri
 import org.ossreviewtoolkit.utils.ort.normalizeVcsUrl
 
 private const val PACKAGE_SWIFT_NAME = "Package.swift"
 private const val PACKAGE_RESOLVED_NAME = "Package.resolved"
+private const val REGISTRY_CONFIGURATION_PATH = ".swiftpm/configuration/registries.json"
 
 private const val PACKAGE_TYPE = "Swift"
 
@@ -72,8 +79,12 @@ internal object SwiftCommand : CommandLineTool {
 class SwiftPm(override val descriptor: PluginDescriptor = SwiftPmFactory.descriptor) : PackageManager("SwiftPM") {
     override val globsForDefinitionFiles = listOf(PACKAGE_SWIFT_NAME, PACKAGE_RESOLVED_NAME)
 
-    override fun mapDefinitionFiles(analysisRoot: File, definitionFiles: List<File>): List<File> {
-        return definitionFiles.filterNot { file -> file.path.contains(".build/checkouts") }
+    override fun mapDefinitionFiles(
+        analysisRoot: File,
+        definitionFiles: List<File>,
+        analyzerConfig: AnalyzerConfiguration
+    ): List<File> {
+        return definitionFiles.filterNot { file -> ".build/checkouts" in file.path }
     }
 
     override fun resolveDependencies(
@@ -89,9 +100,22 @@ class SwiftPm(override val descriptor: PluginDescriptor = SwiftPmFactory.descrip
             }
         }
 
+        val localSwiftPackageRegistryConfiguration =
+            readSwiftPackageRegistryConfiguration(definitionFile.parentFile / REGISTRY_CONFIGURATION_PATH)
+                ?: readSwiftPackageRegistryConfiguration(analysisRoot / REGISTRY_CONFIGURATION_PATH)
+
         return when (definitionFile.name) {
-            PACKAGE_SWIFT_NAME -> resolveDefinitionFileDependencies(analysisRoot, definitionFile)
-            else -> resolveLockfileDependencies(analysisRoot, definitionFile)
+            PACKAGE_SWIFT_NAME -> resolveDefinitionFileDependencies(
+                analysisRoot = analysisRoot,
+                packageSwiftFile = definitionFile,
+                localSwiftPackageRegistryConfiguration = localSwiftPackageRegistryConfiguration
+            )
+
+            else -> resolveLockfileDependencies(
+                analysisRoot = analysisRoot,
+                packageResolvedFile = definitionFile,
+                localSwiftPackageRegistryConfiguration = localSwiftPackageRegistryConfiguration
+            )
         }
     }
 
@@ -101,25 +125,31 @@ class SwiftPm(override val descriptor: PluginDescriptor = SwiftPmFactory.descrip
      */
     private fun resolveLockfileDependencies(
         analysisRoot: File,
-        packageResolvedFile: File
+        packageResolvedFile: File,
+        localSwiftPackageRegistryConfiguration: SwiftPackageRegistryConfiguration?
     ): List<ProjectAnalyzerResult> {
         val issues = mutableListOf<Issue>()
         val packages = mutableSetOf<Package>()
         val scopeDependencies = mutableSetOf<Scope>()
 
-        parseLockfile(packageResolvedFile).onSuccess { pins ->
-            pins.mapTo(packages) { it.toPackage() }
-            scopeDependencies += Scope(
-                name = DEPENDENCIES_SCOPE_NAME,
-                dependencies = packages.mapTo(mutableSetOf()) { it.toReference(linkage = PackageLinkage.DYNAMIC) }
-            )
-        }.onFailure {
-            issues += createAndLogIssue(it.message.orEmpty())
-        }
+        parseLockfile(packageResolvedFile)
+            .onSuccess { pins ->
+                pins.mapTo(packages) { it.toPackage(localSwiftPackageRegistryConfiguration) }
+                scopeDependencies += Scope(
+                    name = DEPENDENCIES_SCOPE_NAME,
+                    dependencies = packages.mapTo(mutableSetOf()) { it.toReference(linkage = PackageLinkage.DYNAMIC) }
+                )
+            }.onFailure {
+                issues += createAndLogIssue(it.message.orEmpty())
+            }
 
         return listOf(
             ProjectAnalyzerResult(
-                project = projectFromDefinitionFile(analysisRoot, packageResolvedFile, scopeDependencies),
+                project = projectFromDefinitionFile(
+                    analysisRoot = analysisRoot,
+                    definitionFile = packageResolvedFile,
+                    scopeDependencies = scopeDependencies
+                ),
                 packages = packages,
                 issues = issues
             )
@@ -133,7 +163,8 @@ class SwiftPm(override val descriptor: PluginDescriptor = SwiftPmFactory.descrip
      */
     private fun resolveDefinitionFileDependencies(
         analysisRoot: File,
-        packageSwiftFile: File
+        packageSwiftFile: File,
+        localSwiftPackageRegistryConfiguration: SwiftPackageRegistryConfiguration?
     ): List<ProjectAnalyzerResult> {
         val swiftPackage = getSwiftPackage(packageSwiftFile)
 
@@ -153,10 +184,21 @@ class SwiftPm(override val descriptor: PluginDescriptor = SwiftPmFactory.descrip
             }
         }
 
-        swiftPackage.getTransitiveDependencies().mapTo(packages) { it.toPackage(pinsByIdentity) }
+        swiftPackage.getTransitiveDependencies().mapTo(packages) {
+            it.toPackage(
+                pinsByIdentity = pinsByIdentity,
+                localSwiftPackageRegistryConfiguration = localSwiftPackageRegistryConfiguration
+            )
+        }
+
         scopeDependencies += Scope(
             name = DEPENDENCIES_SCOPE_NAME,
-            dependencies = swiftPackage.dependencies.mapTo(mutableSetOf()) { it.toPackageReference(pinsByIdentity) }
+            dependencies = swiftPackage.dependencies.mapTo(mutableSetOf()) {
+                it.toPackageReference(
+                    pinsByIdentity = pinsByIdentity,
+                    localSwiftPackageRegistryConfiguration = localSwiftPackageRegistryConfiguration
+                )
+            }
         )
 
         return listOf(
@@ -218,13 +260,37 @@ private fun SwiftPackage.toId(pinsByIdentity: Map<String, PinV2>): Identifier =
 private fun SwiftPackage.toVcsInfo(pinsByIdentity: Map<String, PinV2>): VcsInfo =
     pinsByIdentity[identity]?.toVcsInfo() ?: VcsHost.parseUrl(url)
 
-private fun SwiftPackage.toPackage(pinsByIdentity: Map<String, PinV2>): Package =
-    createPackage(toId(pinsByIdentity), toVcsInfo(pinsByIdentity))
+private fun SwiftPackage.sourceArtifact(
+    pinsByIdentity: Map<String, PinV2>,
+    localSwiftPackageRegistryConfiguration: SwiftPackageRegistryConfiguration?
+): RemoteArtifact =
+    pinsByIdentity[identity]?.sourceArtifact(localSwiftPackageRegistryConfiguration) ?: RemoteArtifact.EMPTY
 
-private fun SwiftPackage.toPackageReference(pinsByIdentity: Map<String, PinV2>): PackageReference =
+private fun SwiftPackage.toPackage(
+    pinsByIdentity: Map<String, PinV2>,
+    localSwiftPackageRegistryConfiguration: SwiftPackageRegistryConfiguration?
+): Package =
+    createPackage(
+        id = toId(pinsByIdentity),
+        vcsInfo = toVcsInfo(pinsByIdentity),
+        sourceArtifact = sourceArtifact(
+            pinsByIdentity = pinsByIdentity,
+            localSwiftPackageRegistryConfiguration = localSwiftPackageRegistryConfiguration
+        )
+    )
+
+private fun SwiftPackage.toPackageReference(
+    pinsByIdentity: Map<String, PinV2>,
+    localSwiftPackageRegistryConfiguration: SwiftPackageRegistryConfiguration?
+): PackageReference =
     PackageReference(
         id = toId(pinsByIdentity),
-        dependencies = dependencies.mapTo(mutableSetOf()) { it.toPackageReference(pinsByIdentity) }
+        dependencies = dependencies.mapTo(mutableSetOf()) {
+            it.toPackageReference(
+                pinsByIdentity = pinsByIdentity,
+                localSwiftPackageRegistryConfiguration = localSwiftPackageRegistryConfiguration
+            )
+        }
     )
 
 private fun SwiftPackage.getTransitiveDependencies(): Set<SwiftPackage> {
@@ -244,7 +310,12 @@ private fun PinV2.toId(): Identifier =
     Identifier(
         type = PACKAGE_TYPE,
         namespace = "",
-        name = getCanonicalName(location),
+        // For SPM registry dependencies the `location` field is blank, so use the `identity` field instead.
+        name = if (kind == PinV2.Kind.REGISTRY) {
+            identity
+        } else {
+            getCanonicalName(location)
+        },
         version = state?.run {
             when {
                 !version.isNullOrBlank() -> version
@@ -265,15 +336,54 @@ private fun PinV2.toVcsInfo(): VcsInfo {
     )
 }
 
-private fun PinV2.toPackage(): Package = createPackage(toId(), toVcsInfo())
+private fun PinV2.sourceArtifact(
+    localSwiftPackageRegistryConfiguration: SwiftPackageRegistryConfiguration?
+): RemoteArtifact =
+    if (kind == PinV2.Kind.REGISTRY) {
+        val userLevelSwiftPackageRegistryConfiguration =
+            readSwiftPackageRegistryConfiguration(Os.userHomeDirectory / REGISTRY_CONFIGURATION_PATH)
 
-private fun createPackage(id: Identifier, vcsInfo: VcsInfo) =
+        // Identifier for registry entries have the following format: <SCOPE>.<NAME>.
+        val (scope, name) = identity.split('.', limit = 2)
+
+        val registry = localSwiftPackageRegistryConfiguration?.let { it.registries[scope] }
+            ?: userLevelSwiftPackageRegistryConfiguration?.let { it.registries[scope] }
+
+        if (registry != null) {
+            // The "registry.url" only contains the base URL of the registry.
+            // We need to append the identity and replace all dots with slashes to get the correct path.
+            var url = registry.url
+            if (!registry.url.endsWith("/")) {
+                url += "/"
+            }
+
+            url += identity.replace(".", "/")
+            url += "/"
+            url += "$name-${state?.version}.zip"
+
+            RemoteArtifact(url = url, hash = Hash.NONE)
+        } else {
+            logger.warn { "Unable to determine Swift PM registry for: '$identity'" }
+            RemoteArtifact.EMPTY
+        }
+    } else {
+        RemoteArtifact.EMPTY
+    }
+
+private fun PinV2.toPackage(localSwiftPackageRegistryConfiguration: SwiftPackageRegistryConfiguration?) =
+    createPackage(
+        id = toId(),
+        vcsInfo = toVcsInfo(),
+        sourceArtifact = sourceArtifact(localSwiftPackageRegistryConfiguration)
+    )
+
+private fun createPackage(id: Identifier, vcsInfo: VcsInfo, sourceArtifact: RemoteArtifact) =
     Package(
         vcs = vcsInfo,
         description = "",
         id = id,
         binaryArtifact = RemoteArtifact.EMPTY,
-        sourceArtifact = RemoteArtifact.EMPTY,
+        sourceArtifact = sourceArtifact,
         declaredLicenses = emptySet(), // SPM files do not declare any licenses.
         homepageUrl = ""
     )

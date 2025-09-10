@@ -52,6 +52,7 @@ complete -c ort -n "__fish_seen_subcommand_from compare" -l method -s m -r -fa "
 complete -c ort -n "__fish_seen_subcommand_from compare" -l context-size -s C -r -d 'The number of unmodified lines to display in the context of a modified line. Only applies to unified diff output.'
 complete -c ort -n "__fish_seen_subcommand_from compare" -l ignore-time -s t -d 'Ignore time differences.'
 complete -c ort -n "__fish_seen_subcommand_from compare" -l ignore-environment -s e -d 'Ignore environment differences.'
+complete -c ort -n "__fish_seen_subcommand_from compare" -l ignore-tool-versions -s v -d 'Ignore tool version differences.'
 complete -c ort -n "__fish_seen_subcommand_from compare" -l ignore-tmp-dir -s d -d 'Ignore temporary directory differences.'
 complete -c ort -n "__fish_seen_subcommand_from compare" -s h -l help -d 'Show this message and exit'
 
@@ -151,7 +152,7 @@ complete -c ort -n "__fish_seen_subcommand_from report" -l ort-file -s i -r -F -
 complete -c ort -n "__fish_seen_subcommand_from report" -l output-dir -s o -r -F -d 'The output directory to store the generated reports in.'
 complete -c ort -n "__fish_seen_subcommand_from report" -l report-formats -s f -r -d 'A comma-separated list of report formats to generate, any of [AOSD2.0, AOSD2.1, CtrlXAutomation, CycloneDX, DocBookTemplate, EvaluatedModel, FossID, FossIdSnippet, HtmlTemplate, ManPageTemplate, Opossum, PdfTemplate, PlainTextTemplate, SpdxDocument, StaticHTML, TrustSource, WebApp].'
 complete -c ort -n "__fish_seen_subcommand_from report" -l copyright-garbage-file -r -F -d 'A file containing copyright statements which are marked as garbage. This can make the output inconsistent with the evaluator output but is useful when testing copyright garbage.'
-complete -c ort -n "__fish_seen_subcommand_from report" -l custom-license-texts-dir -r -F -d 'A directory which maps custom license IDs to license texts. It should contain one text file per license with the license ID as the filename. A custom license text is used only if its ID has a \'LicenseRef-\' prefix and if the respective license text is not known by ORT.'
+complete -c ort -n "__fish_seen_subcommand_from report" -l custom-license-texts-dir -r -F -d 'A directory which contains custom license texts. It must contain one text file per license with the license ID as the filename. The license texts from this directory will take priority over the license texts provided by the license fact providers configured in the config.yml.'
 complete -c ort -n "__fish_seen_subcommand_from report" -l how-to-fix-text-provider-script -r -F -d 'The path to a Kotlin script which returns an instance of a \'HowToFixTextProvider\'. That provider injects how-to-fix texts in Markdown format for ORT issues.'
 complete -c ort -n "__fish_seen_subcommand_from report" -l license-classifications-file -r -F -d 'A file containing the license classifications. This can make the output inconsistent with the evaluator output but is useful when testing license classifications.'
 complete -c ort -n "__fish_seen_subcommand_from report" -l package-configurations-dir -r -F -d 'A directory that is searched recursively for package configuration files. Each file must only contain a single package configuration. This can make the output inconsistent with the evaluator output but is useful when testing package configurations.'

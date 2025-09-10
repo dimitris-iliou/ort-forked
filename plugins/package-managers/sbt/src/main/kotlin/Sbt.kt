@@ -21,8 +21,6 @@ package org.ossreviewtoolkit.plugins.packagemanagers.sbt
 
 import java.io.File
 import java.nio.file.StandardCopyOption
-import java.util.Properties
-import java.util.SortedSet
 
 import kotlin.io.path.moveTo
 
@@ -39,21 +37,33 @@ import org.ossreviewtoolkit.plugins.packagemanagers.maven.Maven
 import org.ossreviewtoolkit.utils.common.CommandLineTool
 import org.ossreviewtoolkit.utils.common.Os
 import org.ossreviewtoolkit.utils.common.collectMessages
+import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.getCommonParentFile
-import org.ossreviewtoolkit.utils.common.searchUpwardsForSubdirectory
+import org.ossreviewtoolkit.utils.common.searchUpwardFor
 import org.ossreviewtoolkit.utils.common.suppressInput
+import org.ossreviewtoolkit.utils.common.withoutPrefix
 import org.ossreviewtoolkit.utils.ort.JavaBootstrapper
-import org.ossreviewtoolkit.utils.ort.createOrtTempDir
 
-import org.semver4j.Semver
-
-// We need at least sbt version 0.13.0 to be able to use "makePom" instead of the deprecated hyphenated
-// form "make-pom" and to support declaring Maven-style repositories, see
-// http://www.scala-sbt.org/0.13/docs/Publishing.html#Modifying+the+generated+POM.
-const val LOWEST_SUPPORTED_SBT_VERSION = "0.13.0"
+import org.semver4j.range.RangeList
+import org.semver4j.range.RangeListFactory
 
 internal object SbtCommand : CommandLineTool {
     override fun command(workingDir: File?) = if (Os.isWindows) "sbt.bat" else "sbt"
+
+    // Require at least version 1.3.3 which adds "--version" to SBT launcher scripts.
+    override fun getVersionRequirement(): RangeList = RangeListFactory.create(">=1.3.3")
+
+    override fun transformVersion(output: String): String {
+        val lines = output.lines()
+
+        // See the expected test output here:
+        // https://github.com/sbt/sbt-launcher-package/pull/285/files#diff-25311dcba3a7ac9d113cb964bd15cff334450620b35fdd1361a45b9bf249c10eR102
+        // https://github.com/sbt/sbt-launcher-package/pull/288/files#diff-25311dcba3a7ac9d113cb964bd15cff334450620b35fdd1361a45b9bf249c10eR91
+        val projectVersion = lines.firstNotNullOfOrNull { it.withoutPrefix("sbt version in this project: ") }
+        val scriptVersion = lines.firstNotNullOfOrNull { it.withoutPrefix("sbt script version: ") }
+
+        return checkNotNull(projectVersion ?: scriptVersion)
+    }
 }
 
 data class SbtConfig(
@@ -88,35 +98,17 @@ class Sbt(override val descriptor: PluginDescriptor = SbtFactory.descriptor, pri
     PackageManager("SBT") {
     override val globsForDefinitionFiles = listOf("build.sbt", "build.scala")
 
-    override fun mapDefinitionFiles(analysisRoot: File, definitionFiles: List<File>): List<File> {
+    override fun mapDefinitionFiles(
+        analysisRoot: File,
+        definitionFiles: List<File>,
+        analyzerConfig: AnalyzerConfiguration
+    ): List<File> {
         // Some SBT projects do not have a build file in their root, but they still require "sbt" to be run from the
         // project's root directory. In order to determine the root directory, use the common prefix of all
         // definition file paths.
         val workingDir = getCommonParentFile(definitionFiles)
 
         logger.info { "Determined '$workingDir' as the $projectType project root directory." }
-
-        val sbtVersions = getBuildSbtVersions(workingDir)
-        when {
-            config.sbtVersion != null -> logger.info {
-                "Using configured custom $projectType version ${config.sbtVersion}."
-            }
-
-            sbtVersions.isEmpty() ->
-                logger.info { "The build does not configure any $projectType version to be used." }
-
-            sbtVersions.size == 1 ->
-                logger.info { "The build configures $projectType version ${sbtVersions.first()} to be used." }
-
-            else ->
-                logger.warn { "The build configures multiple different $projectType versions to be used: $sbtVersions" }
-        }
-
-        val lowestSbtVersion =
-            config.sbtVersion?.let { Semver(it) } ?: sbtVersions.firstOrNull() ?: getGlobalSbtVersion()
-        require(lowestSbtVersion?.isLowerThan(Semver(LOWEST_SUPPORTED_SBT_VERSION)) != true) {
-            "Build $projectType version $lowestSbtVersion is lower than version $LOWEST_SUPPORTED_SBT_VERSION."
-        }
 
         // TODO: Consider auto-detecting the Java version based on the SBT version. See:
         //       https://docs.scala-lang.org/overviews/jdk-compatibility/overview.html#build-tool-compatibility-table
@@ -172,7 +164,7 @@ class Sbt(override val descriptor: PluginDescriptor = SbtFactory.descriptor, pri
         }
 
         if (pomFiles.isEmpty()) {
-            val targetDir = workingDir.resolve("target")
+            val targetDir = workingDir / "target"
 
             logger.info {
                 "No POM locations found in the output of SBT's 'makePom' command. Falling back to look for POMs in " +
@@ -187,43 +179,6 @@ class Sbt(override val descriptor: PluginDescriptor = SbtFactory.descriptor, pri
                 logger.error { "Moving the POM file failed: ${it.message}" }
             }.getOrDefault(pomFile)
         }
-    }
-
-    private fun getBuildSbtVersions(workingDir: File): SortedSet<Semver> {
-        // Determine the SBT version(s) being used.
-        val propertiesFiles = workingDir.walkBottomUp().filterTo(mutableListOf()) {
-            it.isFile && it.name == "build.properties"
-        }
-
-        val versions = sortedSetOf<Semver>()
-
-        propertiesFiles.forEach { file ->
-            val props = Properties()
-            file.reader().use { props.load(it) }
-            props.getProperty("sbt.version")?.let { versions += Semver(it) }
-        }
-
-        return versions
-    }
-
-    private fun getGlobalSbtVersion(): Semver? {
-        // Avoid newer Sbt versions to warn about "Neither build.sbt nor a 'project' directory in the current directory"
-        // and prompt the user to continue or quit on Windows where the "-batch" option is not supported.
-        val dummyProjectDir = createOrtTempDir(descriptor.id).apply {
-            resolve("project").mkdir()
-        }
-
-        val process = SbtCommand.run(
-            dummyProjectDir,
-            *DEFAULT_SBT_OPTIONS.toTypedArray(),
-            "sbtVersion"
-        )
-
-        val versions = process.stdout.lines().mapNotNull { line ->
-            VERSION_REGEX.matchEntire(line)?.groupValues?.getOrNull(1)
-        }
-
-        return versions.firstOrNull()?.let { Semver(it) }
     }
 
     override fun resolveDependencies(
@@ -252,10 +207,6 @@ class Sbt(override val descriptor: PluginDescriptor = SbtFactory.descriptor, pri
     ) = throw NotImplementedError() // This is not implemented in favor of overriding [resolveDependencies].
 }
 
-// See https://github.com/sbt/sbt/blob/v1.5.1/launcher-package/integration-test/src/test/scala/RunnerTest.scala#L9.
-private const val SBT_VERSION_PATTERN = "\\d(\\.\\d+){2}(-\\w+)?"
-
-private val VERSION_REGEX = Regex("\\[info]\\s+($SBT_VERSION_PATTERN)")
 private val PROJECT_REGEX = Regex("\\[info] \t [ *] (\\S+)")
 private val POM_REGEX = Regex("\\[info] Wrote (.+\\.pom)")
 
@@ -283,10 +234,10 @@ private val DEFAULT_SBT_OPTIONS = listOfNotNull(
 }
 
 private fun moveGeneratedPom(pomFile: File): Result<File> {
-    val targetDirParent = pomFile.parentFile.searchUpwardsForSubdirectory("target")
+    val targetDirParent = pomFile.parentFile.searchUpwardFor(dirPath = "target")
         ?: return Result.failure(IllegalArgumentException("No target subdirectory found for '$pomFile'."))
     val targetFilename = pomFile.relativeTo(targetDirParent).invariantSeparatorsPath.replace('/', '-')
-    val targetFile = targetDirParent.resolve(targetFilename)
+    val targetFile = targetDirParent / targetFilename
 
     return runCatching { pomFile.toPath().moveTo(targetFile.toPath(), StandardCopyOption.ATOMIC_MOVE).toFile() }
 }

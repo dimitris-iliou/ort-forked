@@ -23,8 +23,10 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.core.test.TestCase
 import io.kotest.engine.spec.tempdir
 import io.kotest.matchers.file.aFile
+import io.kotest.matchers.file.containFile
 import io.kotest.matchers.file.exist
 import io.kotest.matchers.file.shouldContainNFiles
+import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNot
 
@@ -34,6 +36,7 @@ import org.ossreviewtoolkit.model.RepositoryProvenance
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.FileArchiverConfiguration
+import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.safeMkdirs
 import org.ossreviewtoolkit.utils.ort.storage.LocalFileStorage
 import org.ossreviewtoolkit.utils.test.createDefault
@@ -60,10 +63,10 @@ class FileArchiverTest : StringSpec() {
         storage = FileProvenanceFileStorage(LocalFileStorage(storageDir), FileArchiverConfiguration.ARCHIVE_FILENAME)
     }
 
-    private fun createFile(path: String) {
-        val file = workingDir.resolve(path)
+    private fun createFile(path: String, write: File.() -> Unit = { writeText(path) }) {
+        val file = workingDir / path
         file.parentFile.safeMkdirs()
-        file.writeText(path)
+        file.write()
     }
 
     /**
@@ -126,7 +129,7 @@ class FileArchiverTest : StringSpec() {
             targetDir.shouldContainFileWithContent("d/a")
 
             fun shouldNotContainFile(path: String) {
-                val file = storageDir.resolve("save/$path")
+                val file = storageDir / "save" / path
                 file shouldNot exist()
             }
 
@@ -161,6 +164,28 @@ class FileArchiverTest : StringSpec() {
 
             archiver.unarchive(targetDir, PROVENANCE) shouldBe true
             targetDir shouldContainNFiles 0
+        }
+
+        "exclude basic binary license file" {
+            createFile("License") { writeBytes(byteArrayOf(0xFF.toByte(), 0xD8.toByte())) }
+
+            val archiver = FileArchiver.createDefault()
+            archiver.archive(workingDir, PROVENANCE)
+            val result = archiver.unarchive(targetDir, PROVENANCE)
+
+            result shouldBe true
+            targetDir shouldNot containFile("License")
+        }
+
+        "include utf8 file with japanese chars" {
+            createFile("License") { writeText("ぁあぃいぅうぇえぉおかが") }
+
+            val archiver = FileArchiver.createDefault()
+            archiver.archive(workingDir, PROVENANCE)
+            val result = archiver.unarchive(targetDir, PROVENANCE)
+
+            result shouldBe true
+            targetDir should containFile("License")
         }
     }
 }

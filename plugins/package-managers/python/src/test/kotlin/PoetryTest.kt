@@ -26,18 +26,19 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 
 import org.ossreviewtoolkit.plugins.packagemanagers.python.Poetry.Companion.PYPROJECT_FILENAME
+import org.ossreviewtoolkit.utils.common.div
 
 class PoetryTest : WordSpec({
     "parseScopeNamesFromPyProject()" should {
         "return the 'main' scope even for a non-existing file" {
-            val pyprojectFile = tempdir().resolve(PYPROJECT_FILENAME)
+            val pyprojectFile = tempdir() / PYPROJECT_FILENAME
 
             pyprojectFile shouldNotBe aFile()
             parseScopeNamesFromPyproject(pyprojectFile) shouldBe setOf("main")
         }
 
         "parse scope names with different syntax" {
-            val pyprojectFile = tempdir().resolve(PYPROJECT_FILENAME)
+            val pyprojectFile = tempdir() / PYPROJECT_FILENAME
 
             pyprojectFile.writeText(
                 """
@@ -50,7 +51,7 @@ class PoetryTest : WordSpec({
         }
 
         "not return empty scope names" {
-            val pyprojectFile = tempdir().resolve(PYPROJECT_FILENAME)
+            val pyprojectFile = tempdir() / PYPROJECT_FILENAME
 
             pyprojectFile.writeText(
                 """
@@ -62,23 +63,25 @@ class PoetryTest : WordSpec({
         }
     }
 
-    "getPythonVersion()" should {
-        "return the expected python version" {
-            getPythonVersion("~3.10") shouldBe "3.10"
-            getPythonVersion("^3.10,<3.11") shouldBe "3.10"
-            getPythonVersion("^3.10") shouldBe "3.11"
-            getPythonVersion("^3.11,<4.0") shouldBe "3.11"
-            getPythonVersion("^3.10,<4.0") shouldBe "3.11"
-        }
-
-        "return null if constraint cannot be satisfied" {
-            getPythonVersion("^3.10,<3.10") shouldBe null
-        }
-    }
-
     "getPythonVersionConstraint()" should {
-        "return the Python version constraint from the pyproject.toml" {
-            val pyprojectFile = tempdir().resolve(PYPROJECT_FILENAME)
+        "return a global Python version constraint with precedence" {
+            val pyprojectFile = tempdir() / PYPROJECT_FILENAME
+
+            pyprojectFile.writeText(
+                """
+                    [project]
+                    requires-python = "~3.11"
+
+                    [tool.poetry.dependencies]
+                    python = ">=3.8,<4.0"
+                """.trimIndent()
+            )
+
+            getPythonVersionConstraint(pyprojectFile) shouldBe "~3.11"
+        }
+
+        "return the tool Python version constraint" {
+            val pyprojectFile = tempdir() / PYPROJECT_FILENAME
 
             pyprojectFile.writeText(
                 """
@@ -92,8 +95,8 @@ class PoetryTest : WordSpec({
             getPythonVersionConstraint(pyprojectFile) shouldBe "~3.10"
         }
 
-        "return null if there is no such constraint in pyproject.toml" {
-            val pyprojectFile = tempdir().resolve(PYPROJECT_FILENAME)
+        "return null if there is no Python constraint" {
+            val pyprojectFile = tempdir() / PYPROJECT_FILENAME
 
             pyprojectFile.writeText(
                 """

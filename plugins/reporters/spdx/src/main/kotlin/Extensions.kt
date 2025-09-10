@@ -23,6 +23,8 @@ package org.ossreviewtoolkit.plugins.reporters.spdx
 
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.logging.log4j.kotlin.logger
+
 import org.ossreviewtoolkit.model.ArtifactProvenance
 import org.ossreviewtoolkit.model.Hash
 import org.ossreviewtoolkit.model.Identifier
@@ -36,23 +38,22 @@ import org.ossreviewtoolkit.model.ScanResult
 import org.ossreviewtoolkit.model.SourceCodeOrigin
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
-import org.ossreviewtoolkit.model.config.LicenseFilePatterns
 import org.ossreviewtoolkit.model.licenses.Findings
 import org.ossreviewtoolkit.model.licenses.LicenseInfoResolver
 import org.ossreviewtoolkit.model.licenses.LicenseView
 import org.ossreviewtoolkit.model.licenses.ResolvedLicenseInfo
 import org.ossreviewtoolkit.model.utils.FindingCurationMatcher
-import org.ossreviewtoolkit.model.utils.PathLicenseMatcher
 import org.ossreviewtoolkit.model.utils.prependedPath
-import org.ossreviewtoolkit.reporter.LicenseTextProvider
+import org.ossreviewtoolkit.plugins.licensefactproviders.api.LicenseFactProvider
 import org.ossreviewtoolkit.utils.common.replaceCredentialsInUri
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
 import org.ossreviewtoolkit.utils.spdx.SpdxExpression
 import org.ossreviewtoolkit.utils.spdx.SpdxLicense
-import org.ossreviewtoolkit.utils.spdx.andOrNull
 import org.ossreviewtoolkit.utils.spdx.calculatePackageVerificationCode
 import org.ossreviewtoolkit.utils.spdx.nullOrBlankToSpdxNoassertionOrNone
 import org.ossreviewtoolkit.utils.spdx.toSpdxId
+import org.ossreviewtoolkit.utils.spdxdocument.model.SPDX_VERSION_2_2
+import org.ossreviewtoolkit.utils.spdxdocument.model.SPDX_VERSION_2_3
 import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxChecksum
 import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxDocument
 import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxExternalReference
@@ -65,13 +66,15 @@ import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxPackageVerificationCode
  * Convert an ORT [Hash] to an [SpdxChecksum], or return null if a conversion is not possible.
  */
 private fun Hash.toSpdxChecksum(): SpdxChecksum? =
-    // The SPDX checksum algorithm names are simple and assumed to be part of ORT's HashAlgorithm aliases.
-    SpdxChecksum.Algorithm.entries.find { it.name in algorithm.aliases }?.let {
-        SpdxChecksum(
-            algorithm = it,
-            checksumValue = value
-        )
-    }
+    SpdxChecksum.Algorithm.entries
+        // The SPDX checksum algorithm names are simple and assumed to be part of ORT's HashAlgorithm aliases.
+        .find { it.name in algorithm.aliases }
+        ?.let {
+            SpdxChecksum(
+                algorithm = it,
+                checksumValue = value
+            )
+        }
 
 /**
  * Convert an [Identifier]'s coordinates to an SPDX reference ID with the specified [infix] and [suffix].
@@ -141,8 +144,7 @@ internal enum class SpdxPackageType(val infix: String, val suffix: String = "") 
 /**
  * Convert this ORT package to an SPDX package. As an ORT package can hold more metadata about its associated artifacts
  * and origin than an SPDX package, the [type] is used to specify which kind of SPDX package should be created from the
- * respective ORT package metadata. [licenseInfoResolver] is used to obtain license and copyright information and
- * [ortResult] is used to obtain data which is not contained in this [Package] instance.
+ * respective ORT package metadata.
  */
 internal fun Package.toSpdxPackage(
     type: SpdxPackageType,
@@ -153,30 +155,9 @@ internal fun Package.toSpdxPackage(
         SpdxPackageVerificationCode(packageVerificationCodeValue = it)
     }
 
-    val resolvedLicenseExpressions = licenseInfoResolver.resolveLicenseInfo(id).filterExcluded()
+    val resolvedLicenseInfo = licenseInfoResolver.resolveLicenseInfo(id).filterExcluded()
         .applyChoices(ortResult.getPackageLicenseChoices(id))
         .applyChoices(ortResult.getRepositoryLicenseChoices())
-
-    val declaredPackageLicenses = resolvedLicenseExpressions.filter(LicenseView.ONLY_DECLARED)
-
-    val matcher = PathLicenseMatcher(LicenseFilePatterns.getInstance())
-    val licensePaths = resolvedLicenseExpressions.flatMap { licenseInfo ->
-        licenseInfo.locations.map { it.location.path }
-    }
-
-    val packageRootPath = vcsProcessed.path.takeIf { type == SpdxPackageType.VCS_PACKAGE }.orEmpty()
-    val applicableLicensePaths = matcher.getApplicableLicenseFilesForDirectories(licensePaths, listOf(packageRootPath))
-    val applicableLicenseFiles = applicableLicensePaths[packageRootPath].orEmpty()
-
-    val detectedPackageLicenses = resolvedLicenseExpressions.filterTo(mutableSetOf()) { licenseInfo ->
-        licenseInfo.locations.any {
-            it.location.path in applicableLicenseFiles
-        }
-    }
-
-    val packageLicenseExpressions = (declaredPackageLicenses.licenses + detectedPackageLicenses)
-        .flatMap { it.originalExpressions }
-        .map { it.expression }
 
     return SpdxPackage(
         spdxId = id.toSpdxId(type),
@@ -204,8 +185,7 @@ internal fun Package.toSpdxPackage(
             SpdxPackageType.PROJECT -> concludedLicense.nullOrBlankToSpdxNoassertionOrNone()
             else -> concludedLicense.nullOrBlankToSpdxNoassertionOrNone()
         },
-        licenseDeclared = packageLicenseExpressions
-            .andOrNull()
+        licenseDeclared = resolvedLicenseInfo.mainLicense()
             ?.simplify()
             ?.sorted()
             ?.nullOrBlankToSpdxNoassertionOrNone()
@@ -213,7 +193,7 @@ internal fun Package.toSpdxPackage(
         licenseInfoFromFiles = if (packageVerificationCode == null) {
             emptyList()
         } else {
-            resolvedLicenseExpressions.filter(LicenseView.ONLY_DETECTED)
+            resolvedLicenseInfo.filter(LicenseView.ONLY_DETECTED)
                 .mapTo(mutableSetOf()) { it.license.nullOrBlankToSpdxNoassertionOrNone() }
                 .sorted()
         },
@@ -222,7 +202,13 @@ internal fun Package.toSpdxPackage(
         packageVerificationCode = packageVerificationCode,
         supplier = authors.takeUnless { it.isEmpty() }?.joinToString(prefix = "${SpdxConstants.PERSON} "),
         versionInfo = id.version
-    )
+    ).also { spdxPackage ->
+        runCatching {
+            spdxPackage.validate()
+        }.onFailure {
+            logger.error { "Validation failed for '${spdxPackage.spdxId}': ${it.message}" }
+        }
+    }
 }
 
 private fun OrtResult.getVcsScanResult(id: Identifier): ScanResult? =
@@ -244,7 +230,7 @@ private fun OrtResult.getPackageVerificationCode(id: Identifier, type: SpdxPacka
 /**
  * Use [licenseTextProvider] to add the license texts for all packages to the [SpdxDocument].
  */
-internal fun SpdxDocument.addExtractedLicenseInfo(licenseTextProvider: LicenseTextProvider): SpdxDocument {
+internal fun SpdxDocument.addExtractedLicenseInfo(licenseFactProvider: LicenseFactProvider): SpdxDocument {
     val allLicenses = buildSet {
         packages.forEach {
             add(it.licenseConcluded)
@@ -256,7 +242,7 @@ internal fun SpdxDocument.addExtractedLicenseInfo(licenseTextProvider: LicenseTe
     val nonSpdxLicenses = allLicenses.filter { SpdxConstants.isPresent(it) && SpdxLicense.forId(it) == null }
 
     val extractedLicenseInfo = nonSpdxLicenses.sorted().mapNotNull { license ->
-        licenseTextProvider.getLicenseText(license)?.let { text ->
+        licenseFactProvider.getLicenseText(license)?.takeIf { it.isNotBlank() }?.let { text ->
             SpdxExtractedLicenseInfo(
                 licenseId = license,
                 extractedText = text
@@ -313,12 +299,15 @@ internal fun OrtResult.getSpdxFiles(
             ),
             filename = fileFindings.path,
             licenseConcluded = SpdxConstants.NOASSERTION,
-            licenseInfoInFiles = fileFindings.licenses.takeIf { it.isNotEmpty() }?.map { it.toString() }
-                ?: listOf(SpdxConstants.NONE),
-            copyrightText = fileFindings.copyrights.sorted().joinToString("\n").takeUnless {
-                it.isBlank()
-            } ?: SpdxConstants.NONE
-        )
+            licenseInfoInFiles = fileFindings.licenses.map { it.toString() }.ifEmpty { listOf(SpdxConstants.NONE) },
+            copyrightText = fileFindings.copyrights.sorted().joinToString("\n").ifBlank { SpdxConstants.NONE }
+        ).also { spdxFile ->
+            runCatching {
+                spdxFile.validate()
+            }.onFailure {
+                logger.error { "Validation failed for '${spdxFile.spdxId}': ${it.message}" }
+            }
+        }
     }
 
 /**
@@ -439,5 +428,11 @@ private fun Provenance.matches(sourceCodeOrigin: SourceCodeOrigin): Boolean =
     when (sourceCodeOrigin) {
         SourceCodeOrigin.VCS -> this is RepositoryProvenance
         SourceCodeOrigin.ARTIFACT -> this is ArtifactProvenance
-        else -> false
+    }
+
+internal val SpdxDocumentReporterConfig.wantSpdx23: Boolean
+    get() = when (spdxVersion) {
+        SPDX_VERSION_2_2 -> false
+        SPDX_VERSION_2_3 -> true
+        else -> throw IllegalArgumentException("Unsupported SPDX version '$spdxVersion'.")
     }

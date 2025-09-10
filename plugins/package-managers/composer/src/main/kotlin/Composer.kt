@@ -47,12 +47,13 @@ import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.utils.common.CommandLineTool
 import org.ossreviewtoolkit.utils.common.Os
 import org.ossreviewtoolkit.utils.common.collectMessages
+import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.splitOnWhitespace
 import org.ossreviewtoolkit.utils.common.stashDirectories
 import org.ossreviewtoolkit.utils.ort.showStackTrace
 
-import org.semver4j.RangesList
-import org.semver4j.RangesListFactory
+import org.semver4j.range.RangeList
+import org.semver4j.range.RangeListFactory
 
 private const val COMPOSER_PHAR_BINARY = "composer.phar"
 private const val SCOPE_NAME_REQUIRE = "require"
@@ -71,15 +72,13 @@ internal object ComposerCommand : CommandLineTool {
             }
         }
 
-    override fun getVersionArguments() = "--no-ansi --version"
-
     override fun transformVersion(output: String) =
         // The version string can be something like:
         // Composer version 1.5.1 2017-08-09 16:07:22
         // Composer version @package_branch_alias_version@ (1.0.0-beta2) 2016-03-27 16:00:34
         output.splitOnWhitespace().dropLast(2).last().removeSurrounding("(", ")")
 
-    override fun getVersionRequirement(): RangesList = RangesListFactory.create(">=1.5")
+    override fun getVersionRequirement(): RangeList = RangeListFactory.create(">=1.5")
 }
 
 /**
@@ -107,7 +106,11 @@ class Composer(override val descriptor: PluginDescriptor = ComposerFactory.descr
         ComposerCommand.checkVersion()
     }
 
-    override fun mapDefinitionFiles(analysisRoot: File, definitionFiles: List<File>): List<File> {
+    override fun mapDefinitionFiles(
+        analysisRoot: File,
+        definitionFiles: List<File>,
+        analyzerConfig: AnalyzerConfiguration
+    ): List<File> {
         val projectFiles = definitionFiles.toMutableList()
 
         // Ignore definition files from vendor directories that reside next to other definition files, to avoid the
@@ -141,7 +144,7 @@ class Composer(override val descriptor: PluginDescriptor = ComposerFactory.descr
             return listOf(result)
         }
 
-        val lockfile = stashDirectories(workingDir.resolve("vendor")).use { _ ->
+        val lockfile = stashDirectories(workingDir / "vendor").use { _ ->
             val lockfileProvider = LockfileProvider(definitionFile)
 
             requireLockfile(analysisRoot, workingDir, analyzerConfig.allowDynamicVersions) {

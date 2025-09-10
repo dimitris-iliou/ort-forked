@@ -20,12 +20,12 @@
 package org.ossreviewtoolkit.utils.spdx.parser
 
 import org.ossreviewtoolkit.utils.common.nextOrNull
-import org.ossreviewtoolkit.utils.spdx.SpdxCompoundExpression
 import org.ossreviewtoolkit.utils.spdx.SpdxExpression
 import org.ossreviewtoolkit.utils.spdx.SpdxLicenseIdExpression
 import org.ossreviewtoolkit.utils.spdx.SpdxLicenseReferenceExpression
 import org.ossreviewtoolkit.utils.spdx.SpdxLicenseWithExceptionExpression
 import org.ossreviewtoolkit.utils.spdx.SpdxOperator
+import org.ossreviewtoolkit.utils.spdx.toExpression
 
 /**
  * A parser for SPDX expressions. It consumes a sequence of [Token]s and produces an [SpdxExpression].
@@ -98,14 +98,11 @@ class SpdxExpressionParser(
         val children = mutableListOf(parseAndExpression())
 
         while (next is Token.OR) {
-            consume<Token.OR>()
+            next = iterator.nextOrNull()
             children.add(parseAndExpression())
         }
 
-        return when {
-            children.size > 1 -> SpdxCompoundExpression(SpdxOperator.OR, children)
-            else -> children.first()
-        }
+        return checkNotNull(children.toExpression(SpdxOperator.OR))
     }
 
     /**
@@ -115,14 +112,11 @@ class SpdxExpressionParser(
         val children = mutableListOf(parsePrimary())
 
         while (next is Token.AND) {
-            consume<Token.AND>()
+            next = iterator.nextOrNull()
             children.add(parsePrimary())
         }
 
-        return when {
-            children.size > 1 -> SpdxCompoundExpression(SpdxOperator.AND, children)
-            else -> children.first()
-        }
+        return checkNotNull(children.toExpression(SpdxOperator.AND))
     }
 
     /**
@@ -130,7 +124,7 @@ class SpdxExpressionParser(
      */
     private fun parsePrimary(): SpdxExpression {
         if (next is Token.OPEN) {
-            consume<Token.OPEN>()
+            next = iterator.nextOrNull()
             val expression = parseOrExpression()
             consume<Token.CLOSE>()
             return expression
@@ -149,7 +143,7 @@ class SpdxExpressionParser(
                 val identifier = consume<Token.IDENTIFIER>()
 
                 val orLaterVersion = next is Token.PLUS || identifier.value.endsWith("-or-later")
-                if (next is Token.PLUS) consume<Token.PLUS>()
+                if (next is Token.PLUS) next = iterator.nextOrNull()
 
                 SpdxLicenseIdExpression(identifier.value, orLaterVersion).apply { validate(strictness) }
             }
@@ -173,7 +167,7 @@ class SpdxExpressionParser(
         }
 
         if (next is Token.WITH) {
-            consume<Token.WITH>()
+            next = iterator.nextOrNull()
             val exception = when (next) {
                 is Token.IDENTIFIER -> consume<Token.IDENTIFIER>().value
                 is Token.LICENSEREF -> consume<Token.LICENSEREF>().value

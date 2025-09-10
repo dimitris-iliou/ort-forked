@@ -19,20 +19,17 @@
 
 package org.ossreviewtoolkit.model.utils
 
-import io.kotest.assertions.fail
+import io.kotest.assertions.AssertionErrorBuilder
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.inspectors.forAll
 import io.kotest.matchers.collections.beEmpty
 import io.kotest.matchers.collections.containExactlyInAnyOrder
-import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldContainOnly
 import io.kotest.matchers.ints.shouldBeLessThan
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldNot
 import io.kotest.matchers.types.beTheSameInstanceAs
-
-import java.io.File
 
 import org.ossreviewtoolkit.model.AnalyzerResult
 import org.ossreviewtoolkit.model.DependencyGraphNode
@@ -47,13 +44,12 @@ import org.ossreviewtoolkit.model.Scope
 import org.ossreviewtoolkit.model.config.Excludes
 import org.ossreviewtoolkit.model.config.ScopeExclude
 import org.ossreviewtoolkit.model.config.ScopeExcludeReason
-import org.ossreviewtoolkit.model.readValue
+import org.ossreviewtoolkit.utils.test.readResourceValue
 
 class DependencyGraphConverterTest : WordSpec({
     "convertToDependencyGraphs" should {
         "return the same result if no conversion is required" {
-            val resultFile = File("../model/src/test/assets/analyzer-result-with-dependency-graph.yml")
-            val ortResult = resultFile.readValue<OrtResult>()
+            val ortResult = readResourceValue<OrtResult>("/analyzer-result-with-dependency-graph.yml")
             val analyzerResult = ortResult.analyzer?.result
 
             analyzerResult shouldNotBeNull {
@@ -78,8 +74,7 @@ class DependencyGraphConverterTest : WordSpec({
         }
 
         "correctly exclude scopes if there are projects using a dependency graph" {
-            val resultFile = File("../model/src/test/assets/analyzer-result-with-dependency-graph.yml")
-            val ortResult = resultFile.readValue<OrtResult>()
+            val ortResult = readResourceValue<OrtResult>("/analyzer-result-with-dependency-graph.yml")
             val graphAnalyzerResult = ortResult.analyzer?.result!!
 
             val project = createProject("Go", index = 1)
@@ -95,7 +90,7 @@ class DependencyGraphConverterTest : WordSpec({
             val convertedResult = DependencyGraphConverter.convert(analyzerResult, excludes)
 
             val allPackagesTypes = convertedResult.packages.mapTo(mutableSetOf()) { it.id.type }
-            allPackagesTypes shouldContainExactlyInAnyOrder listOf("Maven", "Go")
+            allPackagesTypes should containExactlyInAnyOrder("Maven", "Go")
         }
 
         "convert a result with a partial dependency graph" {
@@ -231,5 +226,5 @@ private fun Project.createResult(): ProjectAnalyzerResult {
  */
 private fun AnalyzerResult.getProject(id: Identifier): Project {
     val project = projects.find { it.id == id }
-    return project ?: fail("Could not find project with ID $id.")
+    return project ?: AssertionErrorBuilder.fail("Could not find project with ID $id.")
 }

@@ -21,12 +21,19 @@ package org.ossreviewtoolkit.clients.dos
 
 import java.io.File
 
+import kotlin.coroutines.cancellation.CancellationException
+
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.asRequestBody
 
 import org.apache.logging.log4j.kotlin.logger
 
 import org.ossreviewtoolkit.utils.common.formatSizeInMib
+
+import retrofit2.HttpException
 
 /**
  * A client implementation on top of the DOS service.
@@ -41,17 +48,19 @@ class DosClient(private val service: DosService) {
             return null
         }
 
-        val requestBody = PackageConfigurationRequestBody(purl)
-        val response = service.getPackageConfiguration(requestBody)
-        val responseBody = response.body()
+        return runCatching {
+            val request = PackageConfigurationRequestBody(purl)
+            service.getPackageConfiguration(request)
+        }.onFailure {
+            when (it) {
+                is CancellationException -> currentCoroutineContext().ensureActive()
+                is HttpException -> logger.error {
+                    "Error getting the package configuration for purl $purl: ${it.response()?.errorBody()?.string()}"
+                }
 
-        return if (response.isSuccessful && responseBody != null) {
-            responseBody
-        } else {
-            logger.error { "Error getting the package configuration for purl $purl: ${response.errorBody()?.string()}" }
-
-            null
-        }
+                else -> throw it
+            }
+        }.getOrNull()
     }
 
     /**
@@ -64,16 +73,21 @@ class DosClient(private val service: DosService) {
             return null
         }
 
-        val requestBody = UploadUrlRequestBody(key)
-        val response = service.getUploadUrl(requestBody)
-        val responseBody = response.body()
+        return runCatching {
+            val request = UploadUrlRequestBody(key)
+            service.getUploadUrl(request)
+        }.map {
+            it.presignedUrl
+        }.onFailure {
+            when (it) {
+                is CancellationException -> currentCoroutineContext().ensureActive()
+                is HttpException -> logger.error {
+                    "Unable to get a pre-signed URL for $key: ${it.response()?.errorBody()?.string()}"
+                }
 
-        return if (response.isSuccessful && responseBody != null && responseBody.success) {
-            response.body()?.presignedUrl
-        } else {
-            logger.error { "Unable to get a pre-signed URL for $key: ${response.errorBody()?.string()}" }
-            null
-        }
+                else -> throw it
+            }
+        }.getOrNull()
     }
 
     /**
@@ -83,16 +97,21 @@ class DosClient(private val service: DosService) {
     suspend fun uploadFile(file: File, presignedUrl: String): Boolean {
         logger.info { "Uploading file $file of size ${file.formatSizeInMib} to S3..." }
 
-        val contentType = "application/zip".toMediaType()
-        val response = service.uploadFile(presignedUrl, file.asRequestBody(contentType))
-
-        return if (response.isSuccessful) {
+        return runCatching {
+            val contentType = "application/zip".toMediaType()
+            service.uploadFile(presignedUrl, file.asRequestBody(contentType))
+        }.onSuccess {
             logger.info { "Successfully uploaded $file to S3." }
-            true
-        } else {
-            logger.error { "Failed to upload $file to S3: ${response.errorBody()?.string()}" }
-            false
-        }
+        }.onFailure {
+            when (it) {
+                is CancellationException -> currentCoroutineContext().ensureActive()
+                is HttpException -> logger.error {
+                    "Failed to upload $file to S3: ${it.response()?.errorBody()?.string()}"
+                }
+
+                else -> throw it
+            }
+        }.isSuccess
     }
 
     /**
@@ -104,61 +123,56 @@ class DosClient(private val service: DosService) {
             return null
         }
 
-        val requestBody = JobRequestBody(zipFileKey, packages)
-        val response = service.addScanJob(requestBody)
-        val responseBody = response.body()
+        return runCatching {
+            val request = JobRequestBody(zipFileKey, packages)
+            service.addScanJob(request)
+        }.onFailure {
+            when (it) {
+                is CancellationException -> currentCoroutineContext().ensureActive()
+                is HttpException -> logger.error {
+                    val purls = packages.map { pkg -> pkg.purl }
+                    "Error adding a new scan job for $zipFileKey and $purls: ${it.response()?.errorBody()?.string()}"
+                }
 
-        return if (response.isSuccessful && responseBody != null) {
-            responseBody
-        } else {
-            logger.error {
-                "Error adding a new scan job for $zipFileKey and ${packages.map { it.purl }}: " +
-                    "${response.errorBody()?.string()}"
+                else -> throw it
             }
-
-            null
-        }
+        }.getOrNull()
     }
 
     /**
      * Get scan results for a list of [packages]. In case multiple packages are provided, it is assumed that they all
-     * refer to the same provenance (like a monorepo). If [fetchConcluded] is true, return concluded licenses instead of
-     * detected licenses. Return either existing results, a "pending" message if the package is currently being scanned,
-     * a "no-results" message if a scan yielded no results, or null on error. If only some of the packages exist in DOS
-     * database (identified by purl), new bookmarks for the remaining packages are made (hence the need to provide the
-     * declared licenses for these packages in this request).
+     * refer to the same provenance (like a monorepo). Return either existing results, a "pending" message if the
+     * package is currently being scanned, a "no-results" message if a scan yielded no results, or null on error. If
+     * only some of the packages exist in DOS database (identified by purl), new bookmarks for the remaining packages
+     * are made (hence the need to provide the declared licenses for these packages in this request).
      */
-    suspend fun getScanResults(packages: List<PackageInfo>, fetchConcluded: Boolean): ScanResultsResponseBody? {
+    suspend fun getScanResults(packages: List<PackageInfo>): ScanResultsResponseBody? {
         if (packages.isEmpty()) {
             logger.error { "The list of PURLs to get scan results for must not be empty." }
             return null
         }
 
-        val options = ScanResultsRequestBody.ReqOptions(fetchConcluded)
-        val requestBody = ScanResultsRequestBody(packages, options)
-        val response = service.getScanResults(requestBody)
-        val responseBody = response.body()
-
-        return if (response.isSuccessful && responseBody != null) {
+        return runCatching {
+            val request = ScanResultsRequestBody(packages)
+            service.getScanResults(request)
+        }.onSuccess { response ->
             val purls = packages.map { it.purl }
-            when (responseBody.state.status) {
+
+            when (response.state.status) {
                 "no-results" -> logger.info { "No scan results found for $purls." }
                 "pending" -> logger.info { "Scan pending for $purls." }
-                "ready" -> {
-                    logger.info { "Scan results ready for $purls." }
-
-                    if (fetchConcluded) {
-                        logger.info { "Returning concluded licenses instead of detected licenses." }
-                    }
-                }
+                "ready" -> logger.info { "Scan results ready for $purls." }
             }
+        }.onFailure {
+            when (it) {
+                is CancellationException -> currentCoroutineContext().ensureActive()
+                is HttpException -> logger.error {
+                    "Error getting scan results: ${it.response()?.errorBody()?.string()}"
+                }
 
-            responseBody
-        } else {
-            logger.error { "Error getting scan results: ${response.errorBody()?.string()}" }
-
-            null
-        }
+                else -> throw it
+            }
+        }.getOrNull()
     }
 
     /**
@@ -171,15 +185,17 @@ class DosClient(private val service: DosService) {
             return null
         }
 
-        val response = service.getScanJobState(id)
-        val responseBody = response.body()
+        return runCatching {
+            service.getScanJobState(id)
+        }.onFailure {
+            when (it) {
+                is CancellationException -> currentCoroutineContext().ensureActive()
+                is HttpException -> logger.error {
+                    "Error getting the scan state for job $id: ${it.response()?.errorBody()?.string()}"
+                }
 
-        return if (response.isSuccessful && responseBody != null) {
-            responseBody
-        } else {
-            logger.error { "Error getting the scan state for job $id: ${response.errorBody()?.string()}" }
-
-            null
-        }
+                else -> throw it
+            }
+        }.getOrNull()
     }
 }

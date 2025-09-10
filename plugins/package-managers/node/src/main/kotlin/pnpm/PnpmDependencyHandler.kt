@@ -26,7 +26,7 @@ import org.ossreviewtoolkit.model.Issue
 import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.PackageLinkage
 import org.ossreviewtoolkit.model.utils.DependencyHandler
-import org.ossreviewtoolkit.plugins.packagemanagers.node.GetPackageDetailsFun
+import org.ossreviewtoolkit.plugins.packagemanagers.node.ModuleInfoResolver
 import org.ossreviewtoolkit.plugins.packagemanagers.node.NodePackageManagerType
 import org.ossreviewtoolkit.plugins.packagemanagers.node.PackageJson
 import org.ossreviewtoolkit.plugins.packagemanagers.node.parsePackage
@@ -35,13 +35,12 @@ import org.ossreviewtoolkit.plugins.packagemanagers.node.pnpm.ModuleInfo.Depende
 import org.ossreviewtoolkit.utils.common.realFile
 
 internal class PnpmDependencyHandler(
-    private val projectType: String,
-    private val getPackageDetails: GetPackageDetailsFun
+    private val moduleInfoResolver: ModuleInfoResolver
 ) : DependencyHandler<Dependency> {
     private val workspaceModuleDirs = mutableSetOf<File>()
     private val packageJsonCache = mutableMapOf<File, PackageJson>()
 
-    private fun Dependency.isProject(): Boolean = isInstalled && workingDir.realFile() in workspaceModuleDirs
+    private fun Dependency.isProject(): Boolean = isInstalled && workingDir.realFile in workspaceModuleDirs
 
     fun setWorkspaceModuleDirs(dirs: Collection<File>) {
         workspaceModuleDirs.apply {
@@ -51,7 +50,7 @@ internal class PnpmDependencyHandler(
     }
 
     override fun identifierFor(dependency: Dependency): Identifier {
-        val type = if (dependency.isProject()) projectType else "NPM"
+        val type = if (dependency.isProject()) NodePackageManagerType.PNPM.projectType else "NPM"
         val namespace = dependency.from.substringBeforeLast("/", "")
         val name = dependency.from.substringAfterLast("/")
         val version = if (dependency.isProject()) {
@@ -71,11 +70,11 @@ internal class PnpmDependencyHandler(
 
     override fun createPackage(dependency: Dependency, issues: MutableCollection<Issue>): Package? =
         dependency.takeUnless { it.isProject() || !it.isInstalled }?.let {
-            parsePackage(it.packageJsonFile, getPackageDetails)
+            parsePackage(it.packageJsonFile, moduleInfoResolver)
         }
 
     private fun readPackageJson(packageJsonFile: File): PackageJson =
-        packageJsonCache.getOrPut(packageJsonFile.realFile()) { parsePackageJson(packageJsonFile) }
+        packageJsonCache.getOrPut(packageJsonFile.realFile) { parsePackageJson(packageJsonFile) }
 }
 
 private val Dependency.workingDir: File get() = File(path)

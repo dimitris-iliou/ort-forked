@@ -33,9 +33,13 @@ import io.kotest.matchers.should
 import java.io.File
 
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.config.PathExclude
 import org.ossreviewtoolkit.model.config.PathExcludeReason
+import org.ossreviewtoolkit.model.config.PathInclude
+import org.ossreviewtoolkit.model.config.PathIncludeReason
 import org.ossreviewtoolkit.plugins.api.PluginConfig
+import org.ossreviewtoolkit.utils.common.div
 
 class PackageManagerFunTest : WordSpec({
     val definitionFiles = listOf(
@@ -79,7 +83,7 @@ class PackageManagerFunTest : WordSpec({
         definitionFiles.writeFiles(projectDir)
     }
 
-    "findManagedFiles" should {
+    "findManagedFiles()" should {
         "find all managed files" {
             val managedFiles = PackageManager.findManagedFiles(projectDir, packageManagers)
 
@@ -88,7 +92,7 @@ class PackageManagerFunTest : WordSpec({
             managedFiles.keys.map { it.descriptor.id } shouldContainExactlyInAnyOrder
                 PackageManagerFactory.ALL.values.map { it.descriptor.id }.filterNot { it == "Unmanaged" }
 
-            val managedFilesById = managedFiles.groupById(projectDir)
+            val managedFilesById = managedFiles.groupById(projectDir).toSortedMap(String.CASE_INSENSITIVE_ORDER)
 
             assertSoftly {
                 managedFilesById["Bazel"] should containExactly("bazel/MODULE.bazel")
@@ -138,12 +142,12 @@ class PackageManagerFunTest : WordSpec({
         "find only files for active package managers" {
             val managedFiles = PackageManager.findManagedFiles(
                 projectDir,
-                packageManagers.filter { it.descriptor.id in setOf("GradleInspector", "PIP", "SBT") }
+                packageManagers.filter { it.descriptor.id.uppercase() in setOf("GRADLEINSPECTOR", "PIP", "SBT") }
             )
 
             managedFiles shouldHaveSize 3
 
-            val managedFilesById = managedFiles.groupById(projectDir)
+            val managedFilesById = managedFiles.groupById(projectDir).toSortedMap(String.CASE_INSENSITIVE_ORDER)
 
             managedFilesById["GradleInspector"] should containExactlyInAnyOrder(
                 "gradle-groovy/build.gradle",
@@ -173,7 +177,7 @@ class PackageManagerFunTest : WordSpec({
             val excludes = Excludes(paths = listOf(pathExclude))
 
             val managedFilesById = PackageManager.findManagedFiles(rootDir, packageManagers, excludes = excludes)
-                .groupById(rootDir)
+                .groupById(rootDir).toSortedMap(String.CASE_INSENSITIVE_ORDER)
 
             managedFilesById["GradleInspector"] should containExactlyInAnyOrder(
                 "gradle-groovy/build.gradle",
@@ -181,6 +185,26 @@ class PackageManagerFunTest : WordSpec({
             )
             managedFilesById["Maven"] should containExactly("maven/pom.xml")
             managedFilesById["SBT"] should containExactly("sbt/build.sbt")
+        }
+
+        "take path includes into account" {
+            val tempDir = "test/"
+            val definitionFilesWithExcludes = definitionFiles +
+                listOf("pom.xml", "build.gradle", "build.sbt").map { "$tempDir$it" }
+            val rootDir = tempdir()
+            definitionFilesWithExcludes.writeFiles(rootDir)
+
+            val pathInclude = PathInclude("$tempDir**", PathIncludeReason.SOURCE_OF)
+            val includes = Includes(paths = listOf(pathInclude))
+
+            val managedFilesById = PackageManager.findManagedFiles(rootDir, packageManagers, includes = includes)
+                .groupById(rootDir).toSortedMap(String.CASE_INSENSITIVE_ORDER)
+
+            managedFilesById["GradleInspector"] should containExactly(
+                "test/build.gradle"
+            )
+            managedFilesById["Maven"] should containExactly("test/pom.xml")
+            managedFilesById["SBT"] should containExactly("test/build.sbt")
         }
 
         "handle specific excluded definition files" {
@@ -195,9 +219,21 @@ class PackageManagerFunTest : WordSpec({
             )
         }
 
+        "handle specific included definition files" {
+            val pathInclude = PathInclude("gradle-groovy/build.gradle", PathIncludeReason.SOURCE_OF)
+            val includes = Includes(paths = listOf(pathInclude))
+
+            val managedFiles = PackageManager.findManagedFiles(projectDir, packageManagers, includes = includes)
+            val managedFilesById = managedFiles.groupById(projectDir)
+
+            managedFilesById["GradleInspector"] should containExactly(
+                "gradle-groovy/build.gradle"
+            )
+        }
+
         "fail if the provided file is not a directory" {
             shouldThrow<IllegalArgumentException> {
-                PackageManager.findManagedFiles(projectDir.resolve("pom.xml"), packageManagers)
+                PackageManager.findManagedFiles(projectDir / "pom.xml", packageManagers)
             }
         }
     }

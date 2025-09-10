@@ -40,6 +40,13 @@ data class FossIdConfig(
     val namingScanPattern: String?,
 
     /**
+     * If true, the repository to scan will be cloned by ORT and an archive will be sent to FossID for scanning. In this
+     * mode, no credentials are passed to FossID, and FossID does not access the repository directly.
+     */
+    @OrtPluginOption(defaultValue = "false")
+    val isArchiveMode: Boolean,
+
+    /**
      * When set to false, ORT does not wait for repositories to be downloaded nor scans to be completed. As a
      * consequence, scan results won't be available in the ORT result.
      */
@@ -92,6 +99,13 @@ data class FossIdConfig(
     val sensitivity: Int,
 
     /**
+     * If true, the FossID scanner will log all requests and responses, omitting sensitive information such as
+     * credentials. This is useful for debugging mapping errors.
+     */
+    @OrtPluginOption(defaultValue = "false")
+    val logRequests: Boolean,
+
+    /**
      * A comma-separated list of URL mappings that allow transforming the VCS URLs of repositories before they are
      * passed to the FossID service. This may be necessary if FossID uses a different mechanism to clone a repository,
      * e.g., via SSH instead of HTTP. Their values define the mapping to be applied consisting of two parts separated by
@@ -117,7 +131,18 @@ data class FossIdConfig(
 
     /** Whether to write scan results to the storage. */
     @OrtPluginOption(defaultValue = "true")
-    val writeToStorage: Boolean
+    val writeToStorage: Boolean,
+
+    /** Treat pending identifications as errors instead of hints. */
+    @OrtPluginOption(defaultValue = "false")
+    val treatPendingIdentificationsAsError: Boolean,
+
+    /**
+     * Whether to delete uploaded content after scan completion. When set to false, archives remain on the
+     * FossID server, which can help diagnose archive upload issues.
+     */
+    @OrtPluginOption(defaultValue = "true")
+    val deleteUploadedArchiveAfterScan: Boolean
 ) {
     init {
         require(deltaScanLimit > 0) {

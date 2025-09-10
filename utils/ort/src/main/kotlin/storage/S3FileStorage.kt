@@ -29,6 +29,8 @@ import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
 import org.apache.commons.compress.compressors.xz.XZCompressorOutputStream
 import org.apache.logging.log4j.kotlin.logger
 
+import org.ossreviewtoolkit.utils.common.collectMessages
+
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.core.sync.RequestBody
@@ -56,35 +58,42 @@ class S3FileStorage(
     /** The name of the S3 bucket used to store files in. */
     private val bucketName: String,
 
-    /** Whether to use compression for storing files or not. Defaults to true. */
+    /** Whether to use compression for storing files or not. Defaults to false. */
     private val compression: Boolean = false,
 
     /** Custom endpoint to perform AWS API Requests */
     private val customEndpoint: String? = null,
 
+    /** Whether to enable path style access or not. Required for many non-AWS S3 providers. Defaults to false. */
+    private val pathStyleAccess: Boolean = false,
+
     /** The AWS secret for the access key. */
     private val secretAccessKey: String? = null
 ) : FileStorage {
     private val s3Client: S3Client by lazy {
-        val provider = if (accessKeyId != null && secretAccessKey != null) {
-            StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKeyId, secretAccessKey))
-        } else {
-            null
-        }
-
-        if (awsRegion != null && provider != null) {
-            S3Client.builder()
-                .region(Region.of(awsRegion))
-                .credentialsProvider(provider)
-                .endpointOverride(if (customEndpoint != null) URI(customEndpoint) else null)
-                .build()
-        } else {
+        S3Client.builder().apply {
             if (awsRegion != null) {
-                S3Client.builder().region(Region.of(awsRegion)).build()
-            } else {
-                S3Client.create()
+                region(Region.of(awsRegion))
             }
-        }
+
+            if (accessKeyId != null && secretAccessKey != null) {
+                credentialsProvider(
+                    StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(
+                            accessKeyId,
+                            secretAccessKey
+                        )
+                    )
+                )
+            }
+
+            if (customEndpoint != null) {
+                endpointOverride(URI(customEndpoint))
+                serviceConfiguration {
+                    it.pathStyleAccessEnabled(pathStyleAccess)
+                }
+            }
+        }.build()
     }
 
     override fun exists(path: String): Boolean {
@@ -95,7 +104,7 @@ class S3FileStorage(
 
         return runCatching { s3Client.headObject(request) }.onFailure { exception ->
             if (exception !is NoSuchKeyException) {
-                logger.warn { "Unable to retrieve status for S3 key $path. Error: ${exception.message}" }
+                logger.warn { "Unable to read '$path' from S3 bucket '$bucketName': ${exception.collectMessages()}" }
             }
         }.isSuccess
     }
@@ -134,7 +143,9 @@ class S3FileStorage(
         runCatching {
             s3Client.putObject(request, body)
         }.onFailure { exception ->
-            if (exception is S3Exception) logger.warn { "Can not write '$path' to S3 bucket '$bucketName'." }
+            if (exception is S3Exception) {
+                logger.warn { "Can not write '$path' to S3 bucket '$bucketName': ${exception.collectMessages()}" }
+            }
         }
     }
 

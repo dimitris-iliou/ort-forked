@@ -30,6 +30,7 @@ import nl.adaptivity.xmlutil.serialization.XmlSerialName
 
 import org.apache.logging.log4j.kotlin.logger
 
+import org.eclipse.jgit.api.Git as JGit
 import org.eclipse.jgit.lib.SymbolicRef
 
 import org.ossreviewtoolkit.downloader.VersionControlSystem
@@ -44,16 +45,17 @@ import org.ossreviewtoolkit.utils.common.CommandLineTool
 import org.ossreviewtoolkit.utils.common.Os
 import org.ossreviewtoolkit.utils.common.ProcessCapture
 import org.ossreviewtoolkit.utils.common.collectMessages
+import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.isSymbolicLink
 import org.ossreviewtoolkit.utils.common.realFile
-import org.ossreviewtoolkit.utils.common.searchUpwardsForSubdirectory
+import org.ossreviewtoolkit.utils.common.searchUpwardFor
 import org.ossreviewtoolkit.utils.common.withoutPrefix
 import org.ossreviewtoolkit.utils.ort.showStackTrace
 
 /**
  * The branch or tag of git-repo to use. This allows to override git-repo's default of using the "stable" branch.
  */
-private const val GIT_REPO_REV = "v2.39"
+private const val GIT_REPO_REV = "v2.53"
 
 /**
  * The minimal manifest structure as used by the wrapping "manifest.xml" file as of repo version 2.4. For the full
@@ -103,12 +105,12 @@ class GitRepo(
     override fun getVersion() = GitRepoCommand.getVersion()
 
     override fun getDefaultBranchName(url: String): String {
-        val refs = org.eclipse.jgit.api.Git.lsRemoteRepository().setRemote(url).callAsMap()
+        val refs = JGit.lsRemoteRepository().setRemote(url).callAsMap()
         return (refs["HEAD"] as? SymbolicRef)?.target?.name?.removePrefix("refs/heads/") ?: "master"
     }
 
     override fun getWorkingTree(vcsDirectory: File): WorkingTree {
-        val repoRoot = vcsDirectory.searchUpwardsForSubdirectory(".repo")
+        val repoRoot = vcsDirectory.searchUpwardFor(dirPath = ".repo")
 
         return if (repoRoot == null) {
             object : GitWorkingTree(vcsDirectory, type) {
@@ -118,20 +120,20 @@ class GitRepo(
             // GitRepo is special in that the workingDir points to the Git working tree of the manifest files, yet
             // the root path is the directory containing the ".repo" directory. This way Git operations work on a valid
             // Git repository, but path operations work relative to the path GitRepo was initialized in.
-            object : GitWorkingTree(repoRoot.resolve(".repo/manifests"), type) {
+            object : GitWorkingTree(repoRoot / ".repo" / "manifests", type) {
                 // Return the path to the manifest as part of the VCS information, as that is required to recreate the
                 // working tree.
                 override fun getInfo(): VcsInfo {
-                    val manifestWrapper = getRootPath().resolve(".repo/manifest.xml")
+                    val manifestWrapper = getRootPath() / ".repo" / "manifest.xml"
 
-                    val manifestFile = if (manifestWrapper.isSymbolicLink()) {
-                        manifestWrapper.realFile()
+                    val manifestFile = if (manifestWrapper.isSymbolicLink) {
+                        manifestWrapper.realFile
                     } else {
                         // As of repo 2.4, the active manifest is a real file with an include directive instead of a
                         // symbolic link, see https://gerrit-review.googlesource.com/c/git-repo/+/256313.
                         val manifestText = manifestWrapper.readText()
                         val manifest = XML().decodeFromString<Manifest>(manifestText)
-                        workingDir.resolve(manifest.include.name)
+                        workingDir / manifest.include.name
                     }
 
                     val manifestPath = manifestFile.relativeTo(workingDir).invariantSeparatorsPath
@@ -144,7 +146,7 @@ class GitRepo(
 
                     paths.forEach { path ->
                         // Add the nested Repo project.
-                        val workingTree = Git(config = config).getWorkingTree(getRootPath().resolve(path))
+                        val workingTree = Git(config = config).getWorkingTree(getRootPath() / path)
                         nested[path] = workingTree.getInfo()
 
                         // Add the Git submodules of the nested Repo project.

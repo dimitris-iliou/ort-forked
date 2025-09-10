@@ -50,4 +50,13 @@ dependencies {
     testImplementation(libs.mockk)
 
     funTestImplementation(testFixtures(projects.analyzer))
+    funTestImplementation(projects.plugins.packageManagers.conanPackageManager)
+}
+
+tasks.named<Test>("funTest") {
+    val conanPackageManagerProject = project.project(projects.plugins.packageManagers.conanPackageManager.path)
+    val conanPackageManagerFunTestTask = conanPackageManagerProject.tasks.named<Test>("funTest")
+
+    // Prevent conflicts with the Conan configuration database by running after the Conan package manager tests.
+    mustRunAfter(conanPackageManagerFunTestTask)
 }

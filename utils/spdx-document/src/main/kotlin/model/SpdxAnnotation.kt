@@ -25,7 +25,7 @@ import org.ossreviewtoolkit.utils.spdx.SpdxConstants
 
 /**
  * An annotation which can relate to [SpdxDocument]s, [SpdxFile]s, or [SpdxPackage]s.
- * See https://spdx.github.io/spdx-spec/v2.2.2/annotations/.
+ * See https://spdx.github.io/spdx-spec/v2.3/annotations/.
  */
 data class SpdxAnnotation(
     /**
@@ -67,10 +67,15 @@ data class SpdxAnnotation(
     }
 
     init {
-        val validPrefixes = listOf(SpdxConstants.PERSON, SpdxConstants.ORGANIZATION, SpdxConstants.TOOL)
-
-        require(validPrefixes.any { annotator.startsWith(it) }) {
-            "The annotator has to start with any of $validPrefixes."
-        }
+        validate()
     }
+
+    fun validate(): SpdxAnnotation =
+        apply {
+            val validPrefixes = listOf(SpdxConstants.PERSON, SpdxConstants.ORGANIZATION, SpdxConstants.TOOL)
+
+            require(validPrefixes.any { annotator.startsWith(it) }) {
+                "The annotator has to start with any of $validPrefixes."
+            }
+        }
 }

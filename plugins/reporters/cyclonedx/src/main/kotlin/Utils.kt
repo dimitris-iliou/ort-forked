@@ -25,9 +25,9 @@ import kotlin.collections.filter
 
 import org.cyclonedx.Format
 import org.cyclonedx.model.AttachmentText
-import org.cyclonedx.model.ExtensibleType
 import org.cyclonedx.model.Hash
 import org.cyclonedx.model.License
+import org.cyclonedx.model.Property
 
 import org.ossreviewtoolkit.model.LicenseSource
 import org.ossreviewtoolkit.model.licenses.ResolvedLicenseInfo
@@ -41,14 +41,15 @@ import org.ossreviewtoolkit.utils.spdx.SpdxLicense
 internal fun Collection<String>.mapNamesToLicenses(origin: String, input: ReporterInput): List<License> =
     map { licenseName ->
         val spdxId = SpdxLicense.forId(licenseName)?.id
-        val licenseText = input.licenseTextProvider.getLicenseText(licenseName)
+        val licenseText = input.licenseFactProvider.getLicenseText(licenseName)
 
         // Prefer to set the id in case of an SPDX "core" license and only use the name as a fallback, also
         // see https://github.com/CycloneDX/cyclonedx-core-java/issues/8.
         License().apply {
             id = spdxId
             name = licenseName.takeIf { spdxId == null }
-            extensibleTypes = listOf(ExtensibleType(ORT_NAME, "origin", origin))
+
+            addProperty(Property("$ORT_NAME:origin", origin))
 
             if (licenseText != null) {
                 setLicenseText(

@@ -1,17 +1,15 @@
 package main
 
 import (
-    "context"
-
-    "go.mongodb.org/mongo-driver/mongo"
-    "go.mongodb.org/mongo-driver/mongo/options"
+    "github.com/gliderlabs/ssh"
+    "io"
+    "log"
 )
 
-
 func main() {
-    clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
-    _, err := mongo.Connect(context.TODO(), clientOptions)
-    print(err)
+    ssh.Handle(func(s ssh.Session) {
+        io.WriteString(s, "Hello world\n")
+    })
+
+    log.Fatal(ssh.ListenAndServe(":2222", nil))
 }
-
-

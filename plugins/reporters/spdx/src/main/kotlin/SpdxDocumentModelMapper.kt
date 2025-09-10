@@ -28,9 +28,9 @@ import org.ossreviewtoolkit.model.OrtResult
 import org.ossreviewtoolkit.model.SourceCodeOrigin.ARTIFACT
 import org.ossreviewtoolkit.model.SourceCodeOrigin.VCS
 import org.ossreviewtoolkit.model.licenses.LicenseInfoResolver
-import org.ossreviewtoolkit.reporter.LicenseTextProvider
-import org.ossreviewtoolkit.utils.ort.Environment
+import org.ossreviewtoolkit.plugins.licensefactproviders.api.LicenseFactProvider
 import org.ossreviewtoolkit.utils.ort.ORT_NAME
+import org.ossreviewtoolkit.utils.ort.ORT_VERSION
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
 import org.ossreviewtoolkit.utils.spdx.SpdxLicense
 import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxCreationInfo
@@ -43,20 +43,11 @@ import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxRelationship
  * A class for mapping [OrtResult]s to [SpdxDocument]s.
  */
 internal object SpdxDocumentModelMapper {
-    data class SpdxDocumentParams(
-        val documentName: String,
-        val documentComment: String,
-        val creationInfoComment: String,
-        val creationInfoPerson: String,
-        val creationInfoOrganization: String,
-        val fileInformationEnabled: Boolean
-    )
-
     fun map(
         ortResult: OrtResult,
         licenseInfoResolver: LicenseInfoResolver,
-        licenseTextProvider: LicenseTextProvider,
-        params: SpdxDocumentParams
+        licenseFactProvider: LicenseFactProvider,
+        config: SpdxDocumentReporterConfig
     ): SpdxDocument {
         val nextFileIndex = AtomicInteger(1)
         val packages = mutableListOf<SpdxPackage>()
@@ -65,7 +56,7 @@ internal object SpdxDocumentModelMapper {
 
         val projects = ortResult.getProjects(omitExcluded = true, includeSubProjects = false).sortedBy { it.id }
         val projectPackages = projects.map { project ->
-            val filesForProject = if (params.fileInformationEnabled) {
+            val filesForProject = if (config.fileInformationEnabled) {
                 ortResult.getSpdxFiles(project.id, licenseInfoResolver, VCS, nextFileIndex)
             } else {
                 emptyList()
@@ -116,7 +107,7 @@ internal object SpdxDocumentModelMapper {
             packages += binaryPackage
 
             if (pkg.vcsProcessed.url.isNotBlank()) {
-                val filesForPackage = if (params.fileInformationEnabled) {
+                val filesForPackage = if (config.fileInformationEnabled) {
                     ortResult.getSpdxFiles(pkg.id, licenseInfoResolver, VCS, nextFileIndex)
                 } else {
                     emptyList()
@@ -141,7 +132,7 @@ internal object SpdxDocumentModelMapper {
             }
 
             if (pkg.sourceArtifact.url.isNotBlank()) {
-                val filesForPackage = if (params.fileInformationEnabled) {
+                val filesForPackage = if (config.fileInformationEnabled) {
                     ortResult.getSpdxFiles(pkg.id, licenseInfoResolver, ARTIFACT, nextFileIndex)
                 } else {
                     emptyList()
@@ -167,25 +158,32 @@ internal object SpdxDocumentModelMapper {
         }
 
         val creators = listOfNotNull(
-            params.creationInfoPerson.takeUnless { it.isEmpty() }?.let { "${SpdxConstants.PERSON} $it" },
-            params.creationInfoOrganization.takeUnless { it.isEmpty() }?.let { "${SpdxConstants.ORGANIZATION} $it" },
-            "${SpdxConstants.TOOL} $ORT_NAME-${Environment.ORT_VERSION}"
+            config.creationInfoPerson?.takeUnless { it.isEmpty() }?.let { "${SpdxConstants.PERSON} $it" },
+            config.creationInfoOrganization?.takeUnless { it.isEmpty() }?.let { "${SpdxConstants.ORGANIZATION} $it" },
+            "${SpdxConstants.TOOL} $ORT_NAME-$ORT_VERSION"
         )
 
         return SpdxDocument(
-            comment = params.documentComment,
+            comment = config.documentComment.orEmpty(),
             creationInfo = SpdxCreationInfo(
-                comment = params.creationInfoComment,
+                comment = config.creationInfoComment.orEmpty(),
                 created = Instant.now().truncatedTo(ChronoUnit.SECONDS),
                 creators = creators,
                 licenseListVersion = SpdxLicense.LICENSE_LIST_VERSION.split('.').take(2).joinToString(".")
             ),
             documentNamespace = "spdx://${UUID.randomUUID()}",
             documentDescribes = projectPackages.map { it.spdxId },
-            name = params.documentName,
+            name = config.documentName,
             packages = projectPackages + packages,
             relationships = relationships.sortedBy { it.spdxElementId },
             files = files
-        ).addExtractedLicenseInfo(licenseTextProvider)
+        ).addExtractedLicenseInfo(licenseFactProvider)
+            .filterChecksums(config.wantSpdx23)
     }
 }
+
+private fun SpdxDocument.filterChecksums(wantSpdx23: Boolean): SpdxDocument =
+    takeIf { wantSpdx23 } ?: copy(packages = packages.map { it.filterChecksums(wantSpdx23) })
+
+private fun SpdxPackage.filterChecksums(wantSpdx23: Boolean): SpdxPackage =
+    takeIf { wantSpdx23 } ?: copy(checksums = checksums.filterNot { it.algorithm.isSpdx23 })

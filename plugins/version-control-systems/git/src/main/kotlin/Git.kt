@@ -28,7 +28,6 @@ import java.security.PublicKey
 import org.apache.logging.log4j.kotlin.logger
 
 import org.eclipse.jgit.api.Git as JGit
-import org.eclipse.jgit.api.LsRemoteCommand
 import org.eclipse.jgit.api.errors.GitAPIException
 import org.eclipse.jgit.errors.UnsupportedCredentialItem
 import org.eclipse.jgit.lib.Constants
@@ -55,12 +54,13 @@ import org.ossreviewtoolkit.utils.common.CommandLineTool
 import org.ossreviewtoolkit.utils.common.Os
 import org.ossreviewtoolkit.utils.common.collectMessages
 import org.ossreviewtoolkit.utils.common.safeMkdirs
+import org.ossreviewtoolkit.utils.common.toUri
 import org.ossreviewtoolkit.utils.common.withoutPrefix
 import org.ossreviewtoolkit.utils.ort.requestPasswordAuthentication
 import org.ossreviewtoolkit.utils.ort.showStackTrace
 
-import org.semver4j.RangesList
-import org.semver4j.RangesListFactory
+import org.semver4j.range.RangeList
+import org.semver4j.range.RangeListFactory
 
 // Replace prefixes of Git submodule repository URLs.
 private val REPOSITORY_URL_PREFIX_REPLACEMENTS = listOf(
@@ -73,7 +73,7 @@ object GitCommand : CommandLineTool {
     override fun command(workingDir: File?) = "git"
 
     // Require at least Git 2.29 on the client side as it has protocol "v2" enabled by default.
-    override fun getVersionRequirement(): RangesList = RangesListFactory.create(">=2.29")
+    override fun getVersionRequirement(): RangeList = RangeListFactory.create(">=2.29")
 
     override fun transformVersion(output: String): String =
         versionRegex.matchEntire(output.lineSequence().first())?.let { match ->
@@ -81,6 +81,8 @@ object GitCommand : CommandLineTool {
             match.groups["version"]!!.value
         }.orEmpty()
 }
+
+private val SHA1_REGEX = Regex("^[0-9a-fA-F]{40}$")
 
 /**
  * This class provides functionality for interacting with Git repositories, utilizing either
@@ -148,7 +150,7 @@ class Git(
 
     override fun isApplicableUrlInternal(vcsUrl: String): Boolean =
         runCatching {
-            LsRemoteCommand(null).setRemote(vcsUrl).call().isNotEmpty()
+            JGit.lsRemoteRepository().setRemote(vcsUrl).call().isNotEmpty()
         }.onFailure {
             logger.debug { "Failed to check whether $type is applicable for $vcsUrl: ${it.collectMessages()}" }
         }.isSuccess
@@ -207,7 +209,7 @@ class Git(
      * configured [historyDepth][GitConfig.historyDepth] is respected.
      */
     private fun updateWorkingTreeWithoutSubmodules(
-        workingTree: WorkingTree,
+        workingTree: GitWorkingTree,
         git: JGit,
         revision: String
     ): Result<String> =
@@ -218,16 +220,22 @@ class Git(
 
             // See https://git-scm.com/docs/gitrevisions#_specifying_revisions for how Git resolves ambiguous
             // names. In particular, tag names have higher precedence than branch names.
-            runCatching {
-                fetch.setRefSpecs(revision).call()
-            }.recoverCatching {
-                // Note that in contrast to branches / heads, Git does not namespace tags per remote.
-                val tagRefSpec = "+${Constants.R_TAGS}$revision:${Constants.R_TAGS}$revision"
-                fetch.setRefSpecs(tagRefSpec).call()
-            }.recoverCatching {
-                val branchRefSpec = "+${Constants.R_HEADS}$revision:${Constants.R_REMOTES}origin/$revision"
-                fetch.setRefSpecs(branchRefSpec).call()
-            }.getOrThrow()
+            val refSpec = if (SHA1_REGEX.matches(revision)) {
+                revision
+            } else {
+                val refs = git.lsRemote().call()
+                refs.find { it.name == "${Constants.R_TAGS}$revision" }?.let {
+                    "+${Constants.R_TAGS}$revision:${Constants.R_TAGS}$revision"
+                } ?: refs.find { it.name == "${Constants.R_HEADS}$revision" }?.let {
+                    "+${Constants.R_HEADS}$revision:${Constants.R_REMOTES}origin/$revision"
+                }
+            }
+
+            requireNotNull(refSpec) { "No ref spec found for revision '$revision'." }
+
+            fetch.setRefSpecs(refSpec).call().also {
+                logger.info { "Done fetching ref spec $refSpec." }
+            }
         }.recoverCatching {
             it.showStackTrace()
 
@@ -263,7 +271,7 @@ class Git(
         }.mapCatching { fetchResult ->
             // TODO: Migrate this to JGit once sparse checkout (https://bugs.eclipse.org/bugs/show_bug.cgi?id=383772) is
             //       implemented. Also see the "reset" call below.
-            GitCommand.run("checkout", revision, workingDir = workingTree.getRootPath()).requireSuccess()
+            workingTree.runGit("checkout", revision)
 
             // In case of a non-fixed revision (branch or tag) reset the working tree to ensure that the previously
             // fetched changes are applied.
@@ -287,8 +295,7 @@ class Git(
                     "Requested revision '$revision' not found in refs advertised by the server."
                 }
 
-                GitCommand.run("reset", "--hard", resolvedRevision, workingDir = workingTree.getRootPath())
-                    .requireSuccess()
+                workingTree.runGit("reset", "--hard", resolvedRevision)
             }
 
             revision
@@ -299,7 +306,7 @@ class Git(
      * [historyDepth][GitConfig.historyDepth]. If [updateNestedSubmodules][GitConfig.updateNestedSubmodules] is true,
      * submodules are initialized / updated recursively.
      */
-    private fun updateSubmodules(workingTree: WorkingTree) {
+    private fun updateSubmodules(workingTree: GitWorkingTree) {
         if (!workingTree.getRootPath().resolve(".gitmodules").isFile) return
 
         val recursive = "--recursive".takeIf { config.updateNestedSubmodules }
@@ -346,9 +353,11 @@ internal object AuthenticatorCredentialsProvider : CredentialsProvider() {
         }
 
     override fun get(uri: URIish, vararg items: CredentialItem): Boolean {
-        logger.debug { "JGit queries credentials ${items.map { it.javaClass.simpleName }} for '${uri.host}'." }
+        logger.debug { "JGit queries credentials ${items.map { it.javaClass.simpleName }} for '$uri'." }
 
-        val auth = requestPasswordAuthentication(uri.host, uri.port, uri.scheme) ?: return false
+        val url = uri.toString().toUri { it.toURL() }.getOrNull()
+        val auth = requestPasswordAuthentication(uri.host.orEmpty(), uri.port, uri.scheme.orEmpty(), url)
+            ?: return false
 
         logger.debug { "Passing credentials for '${uri.host}' to JGit." }
 

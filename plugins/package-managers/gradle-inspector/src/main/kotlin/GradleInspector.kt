@@ -51,6 +51,8 @@ import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.utils.common.Os
 import org.ossreviewtoolkit.utils.common.collectMessages
+import org.ossreviewtoolkit.utils.common.div
+import org.ossreviewtoolkit.utils.common.extractResource
 import org.ossreviewtoolkit.utils.common.safeMkdirs
 import org.ossreviewtoolkit.utils.common.splitOnWhitespace
 import org.ossreviewtoolkit.utils.common.unquote
@@ -116,28 +118,13 @@ class GradleInspector(
     private val initScriptFile by lazy { extractInitScript() }
 
     private fun extractInitScript(): File {
-        fun extractResource(name: String, target: File) =
-            target.apply {
-                val resource = checkNotNull(GradleInspector::class.java.getResource(name)) {
-                    "Resource '$name' not found."
-                }
-
-                logger.debug { "Extracting resource '${resource.path.substringAfterLast('/')}' to '$target'..." }
-
-                resource.openStream().use { inputStream ->
-                    outputStream().use { outputStream ->
-                        inputStream.copyTo(outputStream)
-                    }
-                }
-            }
-
         val toolsDir = ortToolsDirectory.resolve(descriptor.id).apply { safeMkdirs() }
-        val pluginJar = extractResource("/gradle-plugin.jar", toolsDir.resolve("gradle-plugin.jar"))
+        val pluginJar = extractResource("/gradle-plugin.jar", toolsDir / "gradle-plugin.jar")
 
         val initScriptText = javaClass.getResource("/template.init.gradle").readText()
             .replace("<REPLACE_PLUGIN_JAR>", pluginJar.invariantSeparatorsPath)
 
-        val initScript = toolsDir.resolve("init.gradle")
+        val initScript = toolsDir / "init.gradle"
 
         logger.debug { "Extracting Gradle init script to '$initScript'..." }
 
@@ -285,13 +272,12 @@ private fun readGradleProperties(projectDir: File): Map<String, String> {
         val propertiesFile = currentDir?.resolve("gradle.properties")
 
         if (propertiesFile?.isFile == true) {
-            propertiesFile.inputStream().use {
-                val properties = Properties().apply { load(it) }
-
-                properties.mapNotNullTo(gradleProperties) { (key, value) ->
-                    ((key as String) to (value as String)).takeUnless { key.startsWith("systemProp.") }
+            propertiesFile
+                .inputStream()
+                .use { Properties().apply { load(it) } }
+                .mapNotNullTo(gradleProperties) { (key, value) ->
+                    key.toString().takeUnless { it.startsWith("systemProp.") }?.let { it to value.toString() }
                 }
-            }
 
             break
         }

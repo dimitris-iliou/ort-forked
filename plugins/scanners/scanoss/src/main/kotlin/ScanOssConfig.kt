@@ -25,38 +25,24 @@ import org.ossreviewtoolkit.plugins.api.OrtPluginOption
 import org.ossreviewtoolkit.plugins.api.Secret
 
 data class ScanOssConfig(
-    /** The URL of the ScanOSS server. */
+    /** The URL of the SCANOSS server. */
     @OrtPluginOption(defaultValue = ScanApi.DEFAULT_BASE_URL)
     val apiUrl: String,
 
-    /** The API key used to authenticate with the ScanOSS server. */
+    /** The API key used to authenticate with the SCANOSS server. */
     @OrtPluginOption(defaultValue = "")
     val apiKey: Secret,
-
-    /**
-     * A regular expression to match the scanner name when looking up scan results in the storage.
-     */
-    val regScannerName: String?,
-
-    /**
-     * The minimum version of stored scan results to use.
-     */
-    val minVersion: String?,
-
-    /**
-     * The maximum version of stored scan results to use.
-     */
-    val maxVersion: String?,
-
-    /**
-     * Whether to read scan results from the storage.
-     */
-    @OrtPluginOption(defaultValue = "true")
-    val readFromStorage: Boolean,
 
     /**
      * Whether to write scan results to the storage.
      */
     @OrtPluginOption(defaultValue = "true")
-    val writeToStorage: Boolean
+    val writeToStorage: Boolean,
+
+    /**
+     * Whether to enable path obfuscation when sending file paths to the SCANOSS server.
+     * When enabled, the actual file paths will be obfuscated in the requests to protect sensitive information.
+     */
+    @OrtPluginOption(defaultValue = "false")
+    val enablePathObfuscation: Boolean
 )

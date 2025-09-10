@@ -22,15 +22,16 @@ package org.ossreviewtoolkit.plugins.packagemanagers.maven.tycho
 import io.kotest.core.TestConfiguration
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.engine.spec.tempdir
+import io.kotest.inspectors.forAll
+import io.kotest.matchers.collections.containExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
+import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkAll
-
-import java.io.File
 
 import org.apache.maven.artifact.repository.MavenArtifactRepository
 import org.apache.maven.project.MavenProject
@@ -63,32 +64,32 @@ class P2ArtifactResolverTest : WordSpec({
             val project3 = createMavenProject(listOf(createRepository("default", "https://repo1.maven.org/maven2/")))
             val project4 = createMavenProject(listOf(createRepository("p2", repositoryUrl3)))
 
+            val targetHandler = mockk<TargetHandler> {
+                every { repositoryUrls } returns emptySet()
+            }
+
             val repositories = P2ArtifactResolver.collectP2Repositories(
-                tempdir(),
+                targetHandler,
                 listOf(project1, project2, project3, project4)
             )
 
-            repositories shouldContainExactlyInAnyOrder listOf(repositoryUrl1, repositoryUrl2, repositoryUrl3)
+            repositories should containExactlyInAnyOrder(repositoryUrl1, repositoryUrl2, repositoryUrl3)
         }
 
         "collect P2 repositories from target files" {
-            val root = tempdir()
-            val targetFile1 = File("src/test/assets/tycho.target")
-            val targetFile2 = File("src/test/assets/tycho.other.target")
-            val module1 = root.resolve("module1").also { it.mkdirs() }
-            val module2 = root.resolve("module2").also { it.mkdirs() }
-            val subModule = module2.resolve("subModule.target").also { it.mkdirs() }
-            targetFile1.copyTo(module1.resolve("tycho.target"))
-            targetFile2.copyTo(subModule.resolve("tycho.other.target"))
-
-            val repositories = P2ArtifactResolver.collectP2Repositories(root, emptyList())
-
-            repositories shouldContainExactlyInAnyOrder listOf(
+            val targetRepositories = setOf(
                 "https://p2.example.com/repo/download.eclipse.org/modeling/tmf/xtext/updates/releases/2.37.0/",
                 "https://p2.example.org/repo/download.eclipse.org/modeling/emft/mwe/updates/releases/2.20.0/",
                 "https://p2.example.com/repository/download.eclipse.org/releases/2024-12",
                 "https://p2.other.example.com/repo/other/test/"
             )
+            val targetHandler = mockk<TargetHandler> {
+                every { repositoryUrls } returns targetRepositories
+            }
+
+            val repositories = P2ArtifactResolver.collectP2Repositories(targetHandler, emptyList())
+
+            repositories shouldContainExactlyInAnyOrder targetRepositories
         }
     }
 
@@ -104,7 +105,7 @@ class P2ArtifactResolverTest : WordSpec({
         "return a correct RemoteArtifact" {
             val repositoryContent = P2RepositoryContent(
                 REPOSITORY_URL,
-                mapOf(TEST_ARTIFACT_KEY to TEST_HASH),
+                mapOf(P2Identifier(TEST_ARTIFACT_KEY) to TEST_HASH),
                 emptySet()
             )
 
@@ -113,6 +114,21 @@ class P2ArtifactResolverTest : WordSpec({
             val artifact = resolver.getBinaryArtifactFor(testArtifact)
 
             artifact.url shouldBe ARTIFACT_URL
+            artifact.hash shouldBe TEST_HASH
+        }
+
+        "return a correct RemoteArtifact for a Tycho binary artifact" {
+            val repositoryContent = P2RepositoryContent(
+                REPOSITORY_URL,
+                mapOf(P2Identifier(TEST_ARTIFACT_KEY, "binary") to TEST_HASH),
+                emptySet()
+            )
+
+            val resolver = createResolver(listOf(repositoryContent))
+
+            val artifact = resolver.getBinaryArtifactFor(testArtifact)
+
+            artifact.url shouldBe "$REPOSITORY_URL/binary/${TEST_ARTIFACT_ID}_${TEST_ARTIFACT_VERSION}"
             artifact.hash shouldBe TEST_HASH
         }
     }
@@ -132,8 +148,8 @@ class P2ArtifactResolverTest : WordSpec({
             val repositoryContent = P2RepositoryContent(
                 REPOSITORY_URL,
                 mapOf(
-                    TEST_ARTIFACT_KEY to otherHash,
-                    "$TEST_ARTIFACT_ID.source:$TEST_ARTIFACT_VERSION" to TEST_HASH
+                    P2Identifier(TEST_ARTIFACT_KEY) to otherHash,
+                    P2Identifier("$TEST_ARTIFACT_ID.source:$TEST_ARTIFACT_VERSION") to TEST_HASH
                 ),
                 emptySet()
             )
@@ -157,6 +173,154 @@ class P2ArtifactResolverTest : WordSpec({
             val resolver = createResolver(emptyList(), issues)
 
             resolver.resolverIssues shouldContainExactlyInAnyOrder issues
+        }
+    }
+
+    "isFeature()" should {
+        "return false if the artifact cannot be resolved" {
+            val resolver = createResolver(emptyList())
+
+            val isFeature = resolver.isFeature(testArtifact)
+
+            isFeature shouldBe false
+        }
+
+        "return true for an artifact having only the feature classifier" {
+            val repositoryContent = P2RepositoryContent(
+                REPOSITORY_URL,
+                mapOf(P2Identifier(TEST_ARTIFACT_KEY, "org.eclipse.update.feature") to TEST_HASH),
+                emptySet()
+            )
+
+            val resolver = createResolver(listOf(repositoryContent))
+            val isFeature = resolver.isFeature(testArtifact)
+
+            isFeature shouldBe true
+        }
+
+        "return false for an artifact with a different classifier" {
+            val repositoryContent = P2RepositoryContent(
+                REPOSITORY_URL,
+                mapOf(P2Identifier(TEST_ARTIFACT_KEY) to TEST_HASH),
+                emptySet()
+            )
+
+            val resolver = createResolver(listOf(repositoryContent))
+            val isFeature = resolver.isFeature(testArtifact)
+
+            isFeature shouldBe false
+        }
+
+        "return false for an artifact that includes a feature classifier, but has no matching group ID" {
+            val repositoryContent1 = P2RepositoryContent(
+                REPOSITORY_URL,
+                mapOf(P2Identifier(TEST_ARTIFACT_KEY) to TEST_HASH),
+                emptySet()
+            )
+            val repositoryContent2 = P2RepositoryContent(
+                "${REPOSITORY_URL}_other",
+                mapOf(P2Identifier(TEST_ARTIFACT_KEY, "org.eclipse.update.feature") to TEST_HASH),
+                emptySet()
+            )
+
+            val resolver = createResolver(listOf(repositoryContent1, repositoryContent2))
+            val isFeature = resolver.isFeature(testArtifact)
+
+            isFeature shouldBe false
+        }
+
+        "return true for an artifact that includes a feature classifier and has a matching group ID" {
+            val repositoryContent1 = P2RepositoryContent(
+                REPOSITORY_URL,
+                mapOf(P2Identifier(TEST_ARTIFACT_KEY) to TEST_HASH),
+                emptySet()
+            )
+            val repositoryContent2 = P2RepositoryContent(
+                "${REPOSITORY_URL}_other",
+                mapOf(P2Identifier(TEST_ARTIFACT_KEY, "org.eclipse.update.feature") to TEST_HASH),
+                emptySet()
+            )
+            val featureGroupIds = listOf(
+                "p2.eclipse.feature",
+                "feature.eclipse.p2",
+                "some.feature.group"
+            )
+            val resolver = createResolver(listOf(repositoryContent1, repositoryContent2))
+
+            featureGroupIds.forAll { groupId ->
+                val featureArtifact = DefaultArtifact(groupId, TEST_ARTIFACT_ID, "jar", TEST_ARTIFACT_VERSION)
+                val isFeature = resolver.isFeature(featureArtifact)
+
+                isFeature shouldBe true
+            }
+        }
+
+        "return false for an artifact that includes 'feature' in its group ID, but not as a component" {
+            val repositoryContent1 = P2RepositoryContent(
+                REPOSITORY_URL,
+                mapOf(P2Identifier(TEST_ARTIFACT_KEY) to TEST_HASH),
+                emptySet()
+            )
+            val repositoryContent2 = P2RepositoryContent(
+                "${REPOSITORY_URL}_other",
+                mapOf(P2Identifier(TEST_ARTIFACT_KEY, "org.eclipse.update.feature") to TEST_HASH),
+                emptySet()
+            )
+            val artifact = DefaultArtifact("my.crazy-features.group", TEST_ARTIFACT_ID, "jar", TEST_ARTIFACT_VERSION)
+
+            val resolver = createResolver(listOf(repositoryContent1, repositoryContent2))
+            val isFeature = resolver.isFeature(artifact)
+
+            isFeature shouldBe false
+        }
+
+        "return true for an artifact referencing a feature declared in a target file" {
+            val targetHandler = TargetHandler(
+                featureIds = setOf(TEST_ARTIFACT_ID),
+                repositoryUrls = emptySet(),
+                mavenDependencies = emptyMap()
+            )
+
+            val resolver = createResolver(emptyList(), targetHandler = targetHandler)
+            val isFeature = resolver.isFeature(testArtifact)
+
+            isFeature shouldBe true
+        }
+    }
+
+    "isBinary()" should {
+        "return false if the artifact cannot be resolved" {
+            val resolver = createResolver(emptyList())
+
+            val isBinary = resolver.isBinary(testArtifact)
+
+            isBinary shouldBe false
+        }
+
+        "return false if the artifact does not have the binary classifier" {
+            val repositoryContent = P2RepositoryContent(
+                REPOSITORY_URL,
+                mapOf(P2Identifier(TEST_ARTIFACT_KEY, "org.eclipse.update.feature") to TEST_HASH),
+                emptySet()
+            )
+
+            val resolver = createResolver(listOf(repositoryContent))
+            val isBinary = resolver.isBinary(testArtifact)
+
+            isBinary shouldBe false
+        }
+
+        "return true if the artifact has the binary classifier" {
+            val repositoryContent = P2RepositoryContent(
+                REPOSITORY_URL,
+                mapOf(P2Identifier(TEST_ARTIFACT_KEY, "binary") to TEST_HASH),
+                emptySet()
+            )
+
+            val resolver = createResolver(listOf(repositoryContent))
+            val isBinary = resolver.isBinary(testArtifact)
+
+            isBinary shouldBe true
         }
     }
 })
@@ -206,11 +370,13 @@ private fun createMavenProject(repositories: List<MavenArtifactRepository>): Mav
     }
 
 /**
- * Create a [P2ArtifactResolver] object that is initialized with the given [contents] and [issues].
+ * Create a [P2ArtifactResolver] object that is initialized with the given [contents] and [issues]. Optionally,
+ * a [targetHandler] can be provided; otherwise, a dummy instance is created.
  */
 private fun TestConfiguration.createResolver(
     contents: List<P2RepositoryContent>,
-    issues: List<Issue> = emptyList()
+    issues: List<Issue> = emptyList(),
+    targetHandler: TargetHandler? = null
 ): P2ArtifactResolver {
     val repositoryUrl = "https://p2.example1.com/repo"
     val repository = createRepository("p2", repositoryUrl)
@@ -220,5 +386,7 @@ private fun TestConfiguration.createResolver(
         P2RepositoryContentLoader.loadAllRepositoryContents(setOf(repositoryUrl))
     } returns (contents to issues)
 
-    return P2ArtifactResolver.create(tempdir(), listOf(createMavenProject(listOf(repository))))
+    val handler = targetHandler ?: TargetHandler.create(tempdir())
+
+    return P2ArtifactResolver.create(handler, listOf(createMavenProject(listOf(repository))))
 }

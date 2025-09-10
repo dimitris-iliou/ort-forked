@@ -45,7 +45,7 @@ class FossIdClientNewProjectTest : StringSpec({
     val server = WireMockServer(
         WireMockConfiguration.options()
             .dynamicPort()
-            .usingFilesUnderDirectory("src/test/assets/new-project")
+            .usingFilesUnderClasspath("new-project")
     )
     lateinit var service: FossIdServiceWithVersion
 
@@ -95,7 +95,7 @@ class FossIdClientNewProjectTest : StringSpec({
             SCAN_CODE,
             "https://github.com/gundy/semver4j.git",
             "671aa533f7e33c773bf620b9f466650c3b9ab26e"
-        ).shouldNotBeNull().data.shouldNotBeNull() shouldContain("scan_id" to "4920")
+        ).shouldNotBeNull().data?.value?.scanId shouldBe "4920"
     }
 
     "Download from Git can be triggered" {
@@ -107,7 +107,7 @@ class FossIdClientNewProjectTest : StringSpec({
     "Download status can be queried" {
         service.checkDownloadStatus("", "", SCAN_CODE) shouldNotBeNull {
             checkResponse("check download status")
-            data shouldBe DownloadStatus.FINISHED
+            data?.value shouldBe DownloadStatus.FINISHED
         }
     }
 

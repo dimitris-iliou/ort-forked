@@ -25,12 +25,13 @@ import io.kotest.engine.spec.tempdir
 
 import java.time.LocalDateTime
 
+import org.ossreviewtoolkit.plugins.licensefactproviders.spdx.SpdxLicenseFactProviderFactory
 import org.ossreviewtoolkit.reporter.ReporterInput
 import org.ossreviewtoolkit.utils.common.unpackZip
-import org.ossreviewtoolkit.utils.test.getAssetFile
 import org.ossreviewtoolkit.utils.test.patchActualResult
 import org.ossreviewtoolkit.utils.test.patchExpectedResult
 import org.ossreviewtoolkit.utils.test.readOrtResult
+import org.ossreviewtoolkit.utils.test.readResource
 
 class OpossumReporterFunTest : WordSpec({
     val replacements = mapOf(
@@ -40,18 +41,17 @@ class OpossumReporterFunTest : WordSpec({
 
     "The generated report" should {
         "match the expected result" {
-            val ortResult = readOrtResult("src/funTest/assets/reporter-test-input.yml")
-            val input = ReporterInput(ortResult)
-
+            val ortResult = readOrtResult("/reporter-test-input.yml")
+            val input = ReporterInput(ortResult, licenseFactProvider = SpdxLicenseFactProviderFactory.create())
             val outputDir = tempdir()
-            val expectedFile = getAssetFile("reporter-test-output.json")
+            val expectedResult = readResource("/reporter-test-output.json")
 
             OpossumReporterFactory.create().generateReport(input, outputDir).single().getOrThrow().unpackZip(outputDir)
 
             val actualResult = outputDir.resolve("input.json").readText()
             val patchedActualResult = patchActualResult(actualResult, custom = replacements)
             patchedActualResult shouldEqualSpecifiedJsonIgnoringOrder patchExpectedResult(
-                expectedFile,
+                expectedResult,
                 custom = replacements
             )
         }

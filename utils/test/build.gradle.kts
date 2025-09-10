@@ -27,7 +27,7 @@ dependencies {
     api(projects.plugins.versionControlSystems.gitVersionControlSystem)
 
     api(libs.kotest.assertions.core)
-    api(libs.kotest.framework.api)
+    api(libs.kotest.extensions)
     api(libs.logbackClassic) {
         because("Transitively export this to consumers so they do not have to declare a logger implementation.")
     }
@@ -36,7 +36,8 @@ dependencies {
     implementation(projects.utils.ortUtils)
 
     implementation(libs.diffUtils)
-    implementation(libs.jackson.module.kotlin)
+    implementation(jacksonLibs.jacksonModuleKotlin)
+    implementation(libs.jsonSchemaValidator)
     implementation(libs.kotest.extensions.junitXml)
     implementation(libs.kotest.framework.engine)
     implementation(libs.postgresEmbedded)

@@ -22,16 +22,27 @@ plugins {
     id("com.vanniktech.maven.publish")
 }
 
-mavenPublishing {
-    fun getGroupId(parent: Project?): String =
-        parent?.let { "${getGroupId(it.parent)}.${it.name.replace("-", "")}" }.orEmpty()
+runCatching {
+    components["java"] as AdhocComponentWithVariants
+}.onSuccess {
+    it.withVariantsFromConfiguration(configurations["funTestApiElements"]) { skip() }
+    it.withVariantsFromConfiguration(configurations["funTestRuntimeElements"]) { skip() }
+}
 
-    coordinates(groupId = "org${getGroupId(parent)}")
+fun getGroupId(parent: Project?): String =
+    parent?.let { "${getGroupId(it.parent)}.${it.name.replace("-", "")}" }.orEmpty()
+
+group = "org${getGroupId(parent)}"
+
+mavenPublishing {
     publishToMavenCentral()
 
     pom {
         name = project.name
-        description = "Part of the OSS Review Toolkit (ORT), a suite to automate software compliance checks."
+        description = provider {
+            project.description
+                ?: "Part of the OSS Review Toolkit (ORT), a suite to automate software compliance checks."
+        }
         url = "https://oss-review-toolkit.org/"
 
         developers {

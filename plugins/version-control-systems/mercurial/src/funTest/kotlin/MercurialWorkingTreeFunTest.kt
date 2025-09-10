@@ -21,6 +21,7 @@ package org.ossreviewtoolkit.plugins.versioncontrolsystems.mercurial
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.engine.spec.tempdir
+import io.kotest.engine.spec.tempfile
 import io.kotest.matchers.maps.beEmpty as beEmptyMap
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
@@ -29,23 +30,23 @@ import io.kotest.matchers.string.beEmpty
 
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
+import org.ossreviewtoolkit.utils.common.div
+import org.ossreviewtoolkit.utils.common.extractResource
 import org.ossreviewtoolkit.utils.common.unpack
 import org.ossreviewtoolkit.utils.ort.ortDataDirectory
-import org.ossreviewtoolkit.utils.test.getAssetFile
 
 class MercurialWorkingTreeFunTest : StringSpec({
     val hg = Mercurial()
     val zipContentDir = tempdir()
 
     beforeSpec {
-        val zipFile = getAssetFile("lz4revlog-2018-01-03-hg.zip")
-        println("Extracting '$zipFile' to '$zipContentDir'...")
+        val zipFile = extractResource("/lz4revlog-2018-01-03-hg.zip", tempfile(suffix = ".zip"))
         zipFile.unpack(zipContentDir)
     }
 
     "Detected Mercurial version is not empty" {
         val version = hg.getVersion()
-        println("Mercurial version $version detected.")
+
         version shouldNot beEmpty()
     }
 
@@ -70,7 +71,7 @@ class MercurialWorkingTreeFunTest : StringSpec({
         )
         workingTree.getNested() should beEmptyMap()
         workingTree.getRootPath() shouldBe zipContentDir
-        workingTree.getPathToRoot(zipContentDir.resolve("tests")) shouldBe "tests"
+        workingTree.getPathToRoot(zipContentDir / "tests") shouldBe "tests"
     }
 
     // TODO: Find an alternative to Bitbucket that hosts public Mercurial repositories.

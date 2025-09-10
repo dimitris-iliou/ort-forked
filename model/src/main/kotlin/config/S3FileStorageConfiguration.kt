@@ -32,11 +32,14 @@ data class S3FileStorageConfiguration(
     /** The name of the S3 bucket used to store files in. */
     val bucketName: String,
 
-    /** Whether to use compression for storing files or not. Defaults to true. */
+    /** Whether to use compression for storing files or not. Defaults to false. */
     val compression: Boolean = false,
 
     /** Custom endpoint to perform AWS API Requests */
     val customEndpoint: String? = null,
+
+    /** Whether to enable path style access or not. Required for many non-AWS S3 providers. Defaults to false. */
+    val pathStyleAccess: Boolean = false,
 
     /** The AWS secret for the access key. */
     val secretAccessKey: String? = null

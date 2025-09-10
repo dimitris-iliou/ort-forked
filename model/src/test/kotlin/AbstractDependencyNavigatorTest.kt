@@ -26,7 +26,6 @@ import io.kotest.matchers.collections.containAll
 import io.kotest.matchers.collections.containExactly
 import io.kotest.matchers.collections.containExactlyInAnyOrder
 import io.kotest.matchers.collections.haveSize
-import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.maps.containExactly as containExactlyEntries
 import io.kotest.matchers.nulls.shouldNotBeNull
@@ -37,11 +36,11 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNot
 import io.kotest.matchers.shouldNotBe
 
-import java.io.File
 import java.time.Instant
 
 import org.ossreviewtoolkit.model.DependencyNavigator.Companion.MATCH_SUB_PROJECTS
 import org.ossreviewtoolkit.utils.test.readOrtResult
+import org.ossreviewtoolkit.utils.test.readResourceValue
 
 /**
  * A base class for tests of concrete [DependencyNavigator] implementations.
@@ -193,7 +192,7 @@ abstract class AbstractDependencyNavigatorTest : WordSpec() {
                     "akka" in node.id.namespace
                 }
 
-                akkaDependencies.shouldContainExactlyInAnyOrder(
+                akkaDependencies should containExactlyInAnyOrder(
                     Identifier("Maven:com.typesafe.akka:akka-actor_2.12:2.5.6"),
                     Identifier("Maven:com.typesafe.akka:akka-stream_2.12:2.5.6")
                 )
@@ -323,7 +322,7 @@ abstract class AbstractDependencyNavigatorTest : WordSpec() {
 
         "projectIssues" should {
             "return the issues of a project" {
-                val ortResultWithIssues = File(resultWithIssuesFileName).readValue<OrtResult>()
+                val ortResultWithIssues = readResourceValue<OrtResult>(resultWithIssuesFileName)
                 val navigator = ortResultWithIssues.dependencyNavigator
                 val projectIdWithIssues = Identifier("SBT:com.pbassiner:common_2.12:0.1-SNAPSHOT")
                 val project = ortResultWithIssues.getProject(projectIdWithIssues)

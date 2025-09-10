@@ -19,13 +19,18 @@
 
 package org.ossreviewtoolkit.model.config
 
+import com.fasterxml.jackson.annotation.JsonAlias
 import com.fasterxml.jackson.annotation.JsonInclude
+
+import com.sksamuel.hoplite.ConfigAlias
 
 import org.ossreviewtoolkit.plugins.api.PluginConfig
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 
 /**
- * The base configuration model of the advisor.
+ * The configuration model of the advisor. This class is (de-)serialized in the following places:
+ * - Deserialized from "config.yml" as part of [OrtConfiguration] (via Hoplite).
+ * - (De-)Serialized as part of [org.ossreviewtoolkit.model.OrtResult] (via Jackson).
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 data class AdvisorConfiguration(
@@ -37,5 +42,7 @@ data class AdvisorConfiguration(
     /**
      * A map with [configuration][PluginConfig] for advice providers using the [plugin id][PluginDescriptor.id] as key.
      */
-    val config: Map<String, PluginConfig>? = null
+    @ConfigAlias("config")
+    @JsonAlias("config")
+    val advisors: Map<String, PluginConfig>? = null
 )

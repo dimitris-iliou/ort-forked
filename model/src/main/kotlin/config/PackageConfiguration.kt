@@ -23,20 +23,29 @@ import com.fasterxml.jackson.annotation.JsonInclude
 
 import org.ossreviewtoolkit.model.ArtifactProvenance
 import org.ossreviewtoolkit.model.Identifier
+import org.ossreviewtoolkit.model.Package
+import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.Provenance
 import org.ossreviewtoolkit.model.RepositoryProvenance
-import org.ossreviewtoolkit.model.UnknownProvenance
+import org.ossreviewtoolkit.model.SourceCodeOrigin
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
+import org.ossreviewtoolkit.model.utils.isApplicableIvyVersion
+import org.ossreviewtoolkit.model.utils.isVersionRange
 import org.ossreviewtoolkit.utils.common.replaceCredentialsInUri
 
 /**
- * A configuration for a specific package and provenance. It allows to set up [PathExclude]s and
- * [LicenseFindingCuration]s, similar to how it is done via the [RepositoryConfiguration] for projects.
+ * A class used in the [OrtConfiguration] to configure [PathExclude]s and [LicenseFindingCuration]s for a specific
+ * [Package]'s [Identifier] (and [Provenance]).
+ * Note that [PathExclude]s and [LicenseFindingCuration]s for [Project]s are configured by a [RepositoryConfiguration]'s
+ * [excludes][RepositoryConfiguration.excludes] and [curations][RepositoryConfiguration.curations] properties instead.
  */
 data class PackageConfiguration(
     /**
-     * The identifier of the package this configuration applies to.
+     * The [Identifier] which must match with the identifier of the package in order for this package curation to apply.
+     * The [version][Identifier.version] can be either a plain version string matched for equality, or an
+     * [Ivy-style version matchers](https://ant.apache.org/ivy/history/2.5.0/settings/version-matchers.html).
+     * The other components of the [identifier][id] are matched by equality.
      */
     val id: Identifier,
 
@@ -53,6 +62,12 @@ data class PackageConfiguration(
     val vcs: VcsMatcher? = null,
 
     /**
+     * The source code origin this configuration applies to.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    val sourceCodeOrigin: SourceCodeOrigin? = null,
+
+    /**
      * Path excludes.
      */
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
@@ -65,8 +80,16 @@ data class PackageConfiguration(
     val licenseFindingCurations: List<LicenseFindingCuration> = emptyList()
 ) {
     init {
-        require((sourceArtifactUrl == null) xor (vcs == null)) {
-            "A package configuration must either set the 'sourceArtifactUrl' or the 'vcs' property."
+        require(
+            listOfNotNull(sourceArtifactUrl, vcs, sourceCodeOrigin).size <= 1
+        ) {
+            "A package configuration must contain at most one of 'sourceArtifactUrl', 'vcs' or 'sourceCodeOrigin'."
+        }
+
+        if (id.isVersionRange()) {
+            require(vcs == null && sourceArtifactUrl == null) {
+                "A package configuration cannot have a version range and a 'vcs' or 'sourceArtifactUrl'."
+            }
         }
     }
 
@@ -75,16 +98,27 @@ data class PackageConfiguration(
         if (!id.type.equals(otherId.type, ignoreCase = true) ||
             id.namespace != otherId.namespace ||
             id.name != otherId.name ||
-            id.version != otherId.version
+            !id.isApplicableIvyVersion(otherId)
         ) {
             return false
         }
 
-        return when (provenance) {
-            is UnknownProvenance -> false
-            is ArtifactProvenance -> sourceArtifactUrl != null && sourceArtifactUrl == provenance.sourceArtifact.url
-            is RepositoryProvenance -> vcs != null && vcs.matches(provenance)
+        if (sourceCodeOrigin != null) {
+            return when (sourceCodeOrigin) {
+                SourceCodeOrigin.VCS -> provenance is RepositoryProvenance
+                SourceCodeOrigin.ARTIFACT -> provenance is ArtifactProvenance
+            }
         }
+
+        if (sourceArtifactUrl != null) {
+            return provenance is ArtifactProvenance && sourceArtifactUrl == provenance.sourceArtifact.url
+        }
+
+        if (vcs != null) {
+            return provenance is RepositoryProvenance && vcs.matches(provenance)
+        }
+
+        return true
     }
 }
 

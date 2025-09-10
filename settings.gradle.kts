@@ -17,6 +17,9 @@
  * License-Filename: LICENSE
  */
 
+import dev.aga.gradle.versioncatalogs.Generator.generate
+import dev.aga.gradle.versioncatalogs.GeneratorConfig
+
 // Enable type-safe project accessors, see:
 // https://docs.gradle.org/current/userguide/declaring_dependencies.html#sec:type-safe-project-accessors
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
@@ -26,9 +29,12 @@ rootProject.name = "oss-review-toolkit"
 include(":advisor")
 include(":analyzer")
 include(":cli")
+include(":cli-helper")
+include(":cli-test-launcher")
 include(":clients:bazel-module-registry")
 include(":clients:clearly-defined")
 include(":clients:dos")
+include(":clients:foojay")
 include(":clients:fossid-webapp")
 include(":clients:oss-index")
 include(":clients:osv")
@@ -36,7 +42,6 @@ include(":clients:vulnerable-code")
 include(":detekt-rules")
 include(":downloader")
 include(":evaluator")
-include(":helper-cli")
 include(":model")
 include(":notifier")
 include(":reporter")
@@ -48,6 +53,7 @@ include(":utils:scripting")
 include(":utils:spdx")
 include(":utils:spdx-document")
 include(":utils:test")
+include(":version-catalog")
 
 project(":clients:bazel-module-registry").name = "bazel-module-registry-client"
 project(":clients:clearly-defined").name = "clearly-defined-client"
@@ -96,5 +102,19 @@ pluginManagement {
 
 plugins {
     // Gradle cannot access the version catalog from here, so hard-code the dependency.
-    id("org.gradle.toolchains.foojay-resolver-convention").version("0.9.0")
+    id("dev.aga.gradle.version-catalog-generator").version("3.3.0")
+    id("org.gradle.toolchains.foojay-resolver-convention").version("1.0.0")
+}
+
+dependencyResolutionManagement {
+    @Suppress("UnstableApiUsage")
+    repositories {
+        mavenCentral()
+    }
+
+    generate("jacksonLibs") {
+        fromToml("jackson-bom") {
+            aliasPrefixGenerator = GeneratorConfig.NO_PREFIX
+        }
+    }
 }

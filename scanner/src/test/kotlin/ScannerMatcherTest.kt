@@ -20,7 +20,6 @@
 package org.ossreviewtoolkit.scanner
 
 import io.kotest.core.spec.style.WordSpec
-import io.kotest.matchers.maps.shouldContainExactly
 import io.kotest.matchers.shouldBe
 
 import org.ossreviewtoolkit.model.ScannerDetails
@@ -34,17 +33,17 @@ class ScannerMatcherTest : WordSpec({
 
             matcher.regScannerName shouldBe SCANNER_NAME
             matcher.minVersion.version shouldBe SCANNER_VERSION
-            matcher.maxVersion shouldBe Semver(SCANNER_VERSION).nextMinor()
+            matcher.maxVersion.version shouldBe SCANNER_DEFAULT_MAX_VERSION
             matcher.configuration shouldBe SCANNER_CONFIGURATION
         }
 
         "obtain values from the configuration" {
-            val config = ScannerMatcherConfig(
-                regScannerName = "foo",
-                minVersion = "1.2.3",
-                maxVersion = "4.5.6",
-                configuration = "config"
-            )
+            val config = object : ScannerMatcherCriteria {
+                override val regScannerName = "foo"
+                override val minVersion = "1.2.3"
+                override val maxVersion = "4.5.6"
+                override val configuration = "config"
+            }
 
             val matcher = ScannerMatcher.create(testDetails, config)
 
@@ -55,12 +54,14 @@ class ScannerMatcherTest : WordSpec({
         }
 
         "parse versions in a lenient way" {
-            val options = ScannerMatcherConfig(
-                minVersion = "1",
-                maxVersion = "3.7"
-            )
+            val config = object : ScannerMatcherCriteria {
+                override val regScannerName = null
+                override val minVersion = "1"
+                override val maxVersion = "3.7"
+                override val configuration = null
+            }
 
-            val matcher = ScannerMatcher.create(testDetails, options)
+            val matcher = ScannerMatcher.create(testDetails, config)
 
             matcher.minVersion.version shouldBe "1.0.0"
             matcher.maxVersion.version shouldBe "3.7.0"
@@ -72,7 +73,7 @@ class ScannerMatcherTest : WordSpec({
             matchingCriteria.matches(testDetails) shouldBe true
         }
 
-        "detect a different name" {
+        "reject a different name" {
             val matcher = matchingCriteria.copy(regScannerName = testDetails.name + "_other")
 
             matcher.matches(testDetails) shouldBe false
@@ -84,7 +85,7 @@ class ScannerMatcherTest : WordSpec({
             matcher.matches(testDetails) shouldBe true
         }
 
-        "detect a scanner version that is too old" {
+        "reject a scanner version that is too old" {
             val matcher = matchingCriteria.copy(
                 minVersion = matchingCriteria.maxVersion,
                 maxVersion = Semver("4.0.0")
@@ -93,7 +94,7 @@ class ScannerMatcherTest : WordSpec({
             matcher.matches(testDetails) shouldBe false
         }
 
-        "detect a scanner version that is too new" {
+        "reject a scanner version that is too new" {
             val matcher = matchingCriteria.copy(
                 minVersion = Semver("1.0.0"),
                 maxVersion = Semver(testDetails.version)
@@ -102,52 +103,17 @@ class ScannerMatcherTest : WordSpec({
             matcher.matches(testDetails) shouldBe false
         }
 
-        "detect a scanner configuration that does not match" {
+        "reject a scanner configuration that does not match" {
             val matcher = matchingCriteria.copy(configuration = "${testDetails.configuration}_other")
 
             matcher.matches(testDetails) shouldBe false
-        }
-
-        "ignore the scanner configuration if it is null" {
-            val matcher = matchingCriteria.copy(configuration = null)
-
-            matcher.matches(testDetails) shouldBe true
-        }
-    }
-
-    "ScannerMatcherConfig.create()" should {
-        "obtain values from the options" {
-            val options = mapOf(
-                ScannerMatcherConfig.PROP_CRITERIA_NAME to "foo",
-                ScannerMatcherConfig.PROP_CRITERIA_MIN_VERSION to "1.2.3",
-                ScannerMatcherConfig.PROP_CRITERIA_MAX_VERSION to "4.5.6",
-                ScannerMatcherConfig.PROP_CRITERIA_CONFIGURATION to "config"
-            )
-
-            with(ScannerMatcherConfig.create(options).first) {
-                regScannerName shouldBe "foo"
-                minVersion shouldBe "1.2.3"
-                maxVersion shouldBe "4.5.6"
-                configuration shouldBe "config"
-            }
-        }
-
-        "filter matcher properties from the options" {
-            val options = mapOf(
-                ScannerMatcherConfig.PROP_CRITERIA_NAME to "foo",
-                ScannerMatcherConfig.PROP_CRITERIA_MIN_VERSION to "1.2.3",
-                ScannerMatcherConfig.PROP_CRITERIA_MAX_VERSION to "4.5.6",
-                ScannerMatcherConfig.PROP_CRITERIA_CONFIGURATION to "config",
-                "other" to "value"
-            )
-
-            ScannerMatcherConfig.create(options).second shouldContainExactly mapOf("other" to "value")
         }
     }
 })
 
 private const val SCANNER_NAME = "ScannerMatcherTest"
 private const val SCANNER_VERSION = "3.2.1-rc2"
+private const val SCANNER_DEFAULT_MAX_VERSION = "4.0.0"
 private const val SCANNER_CONFIGURATION = "--command-line-option"
 
 /** Test details to match against. */

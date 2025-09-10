@@ -34,6 +34,17 @@ ort:
   # Force overwriting of any existing output files.
   forceOverwrite: true
 
+  # License fact providers, ordered from highest to lowest priority.
+  licenseFactProviders:
+    SPDX: {}
+    ScanCode:
+      options:
+        scanCodeLicenseTextDir: '/path/to/scancode/license/text/dir'
+    DefaultDir: {}
+    Dir:
+      options:
+        licenseTextDir: '/path/to/license/text/dir'
+
   licenseFilePatterns:
     licenseFilenames: ['license*']
     patentFilenames: ['patents']
@@ -117,10 +128,13 @@ ort:
           disableRegistryCertificateVerification: false
 
       Conan:
-        # Holds a name of the lockfile. Required if allowDynamicVersions = false.
-        # The lockfile should be located in the same directory as the conanfile.py or conanfile.txt.
         options:
+          # Holds a name of the lockfile. Required if allowDynamicVersions = false.
+          # The lockfile should be located in the same directory as the conanfile.py or conanfile.txt.
           lockfileName: "lockfile.lock"
+
+          # If true, the Conan package manager with call a command called "conan2" instead of "conan".
+          useConan2: true
 
   advisor:
     # A flag to control whether excluded scopes and paths should be skipped when giving the advice.
@@ -132,15 +146,6 @@ ort:
           serverUrl: 'server-url'
         secrets:
           apiToken: 'token'
-
-      GitHubDefects:
-        options:
-          endpointUrl: 'https://api.github.com/graphql'
-          labelFilter: '!duplicate, !enhancement, !invalid, !question, !documentation, *'
-          maxNumberOfIssuesPerRepository: 50
-          parallelRequests: 5
-        secrets:
-          token: githubAccessToken
 
       OssIndex:
         options:
@@ -272,6 +277,10 @@ ort:
 
           sensitivity: 10
 
+          treatPendingIdentificationsAsError: false
+
+          deleteUploadedArchiveAfterScan: true
+
         secrets:
           user: user
           apiKey: XYZ
@@ -306,6 +315,7 @@ ort:
             bucketName: "ort-scan-results"
             compression: false
             customEndpoint: "http://localhost:4567"
+            pathStyleAccess: false # Required for some non-AWS S3 providers that do not support DNS style access.
             secretAccessKey: "secret"
 
       clearlyDefined:

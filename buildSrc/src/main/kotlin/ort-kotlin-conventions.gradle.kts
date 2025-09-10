@@ -75,22 +75,22 @@ kotlin.target.compilations.apply {
     getByName("funTest").associateWith(getByName(KotlinCompilation.MAIN_COMPILATION_NAME))
 }
 
-configurations.all {
-    resolutionStrategy {
-        // Ensure all transitive JRuby versions match ORT's version to avoid Psych YAML library issues.
-        force(libs.jruby)
-
-        // Ensure that all transitive versions of Kotlin libraries match ORT's version of Kotlin.
-        force("org.jetbrains.kotlin:kotlin-reflect:${libs.versions.kotlinPlugin.get()}")
-    }
-}
-
 dependencies {
     detektPlugins(project(":detekt-rules"))
 
     detektPlugins(libs.plugin.detekt.formatting)
 
     implementation(libs.log4j.api.kotlin)
+
+    constraints {
+        implementation("org.jetbrains.kotlin:kotlin-reflect:${libs.versions.kotlinPlugin.get()}") {
+            because("All transitive versions of Kotlin reflect need to match ORT's version of Kotlin.")
+        }
+
+        implementation(libs.jruby) {
+            because("JRuby used by Bundler directly and by AsciidoctorJ transitively must match.")
+        }
+    }
 }
 
 detekt {
@@ -104,6 +104,12 @@ detekt {
 }
 
 java {
+    // Register functional tests as a feature of the main library, see
+    // https://docs.gradle.org/current/userguide/how_to_create_feature_variants_of_a_library.html.
+    registerFeature("funTest") {
+        usingSourceSet(sourceSets["funTest"])
+    }
+
     toolchain {
         // Note that Gradle currently matches the Java language version exactly and does not consider (backward)
         // compatibility between versions, see https://github.com/gradle/gradle/issues/16256.
@@ -182,7 +188,12 @@ tasks.withType<KotlinCompile>().configureEach {
 
     compilerOptions {
         allWarningsAsErrors = true
-        freeCompilerArgs = listOf("-Xconsistent-data-class-copy-visibility")
+        freeCompilerArgs = listOf(
+            "-Xannotation-default-target=param-property",
+            "-Xconsistent-data-class-copy-visibility",
+            // Work-around for https://youtrack.jetbrains.com/issue/KT-78352.
+            "-Xwarning-level=IDENTITY_SENSITIVE_OPERATIONS_WITH_VALUE_TYPE:disabled"
+        )
         jvmTarget = maxKotlinJvmTarget
         optIn = optInRequirements
     }

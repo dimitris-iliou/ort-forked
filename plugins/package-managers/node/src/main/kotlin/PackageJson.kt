@@ -60,8 +60,8 @@ internal fun parsePackageJson(element: JsonElement): PackageJson {
 }
 
 /**
- * Transform the root element of a 'package.json' by reducing various representations of the 'license' and 'licenses'
- * property to a single JSON array of strings. See also See https://docs.npmjs.com/files/package.json#license.
+ * Transform the root element of a 'package.json' by reducing various representations of the 'license', 'licenses' and
+ * 'repository' property to a single JSON array of strings. See also https://docs.npmjs.com/files/package.json#license.
  *
  * Note: This function can be turned as-is into a JsonTransformingSerializer once this works with annotations on the
  * class.
@@ -79,6 +79,11 @@ private fun transformPackageJson(element: JsonElement): JsonElement {
 
     // Readd licenses as plain primitives.
     content["licenses"] = JsonArray(licenses.map { JsonPrimitive(it) })
+
+    // Remove invalid "*dependencies" nodes which are empty array nodes instead of objects.
+    listOf("dependencies", "devDependencies", "optionalDependencies")
+        .filter { (content[it] as? JsonArray)?.isEmpty() == true }
+        .forEach { content.remove(it) }
 
     (content["repository"] as? JsonObject)?.also {
         // A repository object node without a `url` does not make sense. However, some packages use 'repository: {}'
@@ -119,6 +124,7 @@ data class PackageJson(
     val packageManager: String? = null,
     val dependencies: Map<String, String> = emptyMap(),
     val devDependencies: Map<String, String> = emptyMap(),
+    val optionalDependencies: Map<String, String> = emptyMap(),
     /** This property does not belong to package.json but to the JSON returned by 'npm info'. */
     val dist: Distribution? = null
 ) {

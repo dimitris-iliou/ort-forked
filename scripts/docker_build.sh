@@ -26,7 +26,7 @@ DOCKER_IMAGE_ROOT="${DOCKER_IMAGE_ROOT:-ghcr.io/oss-review-toolkit}"
 echo "Setting ORT_VERSION to $ORT_VERSION."
 
 # shellcheck disable=SC2046
-export $(sed "s/^ARG //" "$GIT_ROOT/docker/versions.dockerfile" | xargs)
+export $(cat "$GIT_ROOT/.env.versions" | xargs)
 
 # ---------------------------
 # image_build function
@@ -65,6 +65,7 @@ image_build base ort/base "${JAVA_VERSION}-jdk-${UBUNTU_VERSION}" \
 image_build python ort/python "$PYTHON_VERSION" \
     --build-arg PYTHON_VERSION="$PYTHON_VERSION" \
     --build-arg CONAN_VERSION="$CONAN_VERSION" \
+    --build-arg CONAN2_VERSION="$CONAN2_VERSION" \
     --build-arg PYTHON_INSPECTOR_VERSION="$PYTHON_INSPECTOR_VERSION" \
     --build-arg PYTHON_PIPENV_VERSION="$PYTHON_PIPENV_VERSION" \
     --build-arg PYTHON_POETRY_VERSION="$PYTHON_POETRY_VERSION" \

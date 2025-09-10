@@ -30,6 +30,8 @@ import org.gradle.accessors.dm.LibrariesForLibs
 private val Project.libs: LibrariesForLibs
     get() = extensions.getByType()
 
+val javaLanguageVersion: String by project
+
 plugins {
     // Apply core plugins.
     application
@@ -63,63 +65,30 @@ graalvmNative {
             imageName = provider { application.applicationName }
 
             val initializeAtBuildTime = listOf(
-                "ch.qos.logback.classic.Level",
+                "ch.qos.logback",
                 "ch.qos.logback.classic.Logger",
-                "ch.qos.logback.classic.LoggerContext",
-                "ch.qos.logback.classic.PatternLayout",
-                "ch.qos.logback.classic.encoder.PatternLayoutEncoder",
-                "ch.qos.logback.classic.joran.JoranConfigurator",
-                "ch.qos.logback.classic.model.ConfigurationModel",
-                "ch.qos.logback.classic.model.LoggerModel",
-                "ch.qos.logback.classic.model.RootLoggerModel",
-                "ch.qos.logback.classic.model.processor.LoggerModelHandler",
-                "ch.qos.logback.classic.model.processor.RootLoggerModelHandler",
-                "ch.qos.logback.classic.pattern.DateConverter",
-                "ch.qos.logback.classic.pattern.LevelConverter",
-                "ch.qos.logback.classic.pattern.LineSeparatorConverter",
-                "ch.qos.logback.classic.pattern.LoggerConverter",
-                "ch.qos.logback.classic.pattern.MessageConverter",
-                "ch.qos.logback.classic.pattern.NamedConverter\$CacheMissCalculator",
-                "ch.qos.logback.classic.pattern.NamedConverter\$NameCache",
-                "ch.qos.logback.classic.pattern.ThreadConverter",
-                "ch.qos.logback.classic.pattern.ThrowableProxyConverter",
-                "ch.qos.logback.classic.spi.LoggerContextVO",
-                "ch.qos.logback.classic.spi.TurboFilterList",
-                "ch.qos.logback.classic.util.ContextInitializer",
-                "ch.qos.logback.classic.util.ContextInitializer\$1",
-                "ch.qos.logback.classic.util.LogbackMDCAdapter",
-                "ch.qos.logback.core.BasicStatusManager",
-                "ch.qos.logback.core.ConsoleAppender",
-                "ch.qos.logback.core.helpers.CyclicBuffer",
-                "ch.qos.logback.core.joran.spi.ConfigurationWatchList",
-                "ch.qos.logback.core.joran.spi.ConsoleTarget\$1",
-                "ch.qos.logback.core.model.AppenderModel",
-                "ch.qos.logback.core.model.AppenderRefModel",
-                "ch.qos.logback.core.model.ImplicitModel",
-                "ch.qos.logback.core.model.processor.AppenderModelHandler",
-                "ch.qos.logback.core.model.processor.AppenderRefModelHandler",
-                "ch.qos.logback.core.model.processor.DefaultProcessor",
-                "ch.qos.logback.core.model.processor.ImplicitModelHandler",
-                "ch.qos.logback.core.pattern.FormatInfo",
-                "ch.qos.logback.core.pattern.LiteralConverter",
-                "ch.qos.logback.core.pattern.parser.Parser",
-                "ch.qos.logback.core.spi.AppenderAttachableImpl",
-                "ch.qos.logback.core.spi.ContextAwareImpl",
-                "ch.qos.logback.core.spi.FilterAttachableImpl",
-                "ch.qos.logback.core.spi.LogbackLock",
-                "ch.qos.logback.core.status.InfoStatus",
-                "ch.qos.logback.core.util.COWArrayList",
-                "ch.qos.logback.core.util.CachingDateFormatter",
-                "ch.qos.logback.core.util.CachingDateFormatter\$CacheTuple",
-                "com.github.ajalt.mordant.internal.nativeimage.NativeImagePosixMppImpls",
-                "org.apache.sshd.common.file.root.RootedFileSystemProvider"
+                "org.apache.sshd.common.file.root.RootedFileSystemProvider",
+                "org.xml.sax.helpers"
             ).joinToString(separator = ",", prefix = "--initialize-at-build-time=")
 
             buildArgs.addAll(
                 initializeAtBuildTime,
-                "--report-unsupported-elements-at-runtime",
                 "--parallelism=8",
-                "-J-Xmx16g"
+                "-J-Xmx16g",
+                "-Os"
+            )
+
+            excludeConfig.putAll(
+                mapOf(
+                    // JLine is shaded into kotlin-compiler-embeddable, rendering the configuration invalid. See
+                    // https://youtrack.jetbrains.com/issue/KT-68829.
+                    "org.jetbrains.kotlin:kotlin-compiler-embeddable:${libs.plugin.kotlin.get().version}" to
+                        listOf("^/META-INF/native-image/org.jline/.*"),
+                    // The contained "reflect-config.json" does not match the code of the AWS flavor of the Apache HTTP
+                    // client.
+                    "software.amazon.awssdk:apache-client:2.33.2" to
+                        listOf("^/META-INF/native-image/software.amazon.awssdk/apache-client/.*")
+                )
             )
         }
     }
@@ -136,37 +105,53 @@ dependencies {
 }
 
 tasks.named<BuildNativeImageTask>("nativeCompile") {
-    // Gradle's "Copy" task cannot handle symbolic links, see https://github.com/gradle/gradle/issues/3982. That is why
-    // links contained in the GraalVM distribution archive get broken during provisioning and are replaced by empty
-    // files. Address this by recreating the links in the toolchain directory.
-    val toolchainDir = System.getenv("GRAALVM_HOME")?.let { File(it) }
-        ?: options.get().javaLauncher.get().executablePath.asFile.parentFile.run {
-            if (name == "bin") parentFile else this
+    doFirst {
+        // Gradle's "Copy" task cannot handle symbolic links, see https://github.com/gradle/gradle/issues/3982. That is
+        // why links contained in the GraalVM distribution archive get broken during provisioning and are replaced by
+        // empty files. Address this by recreating the links in the toolchain directory.
+        val graalvmHomeDir = System.getenv("GRAALVM_HOME")?.let { File(it) }
+        val toolchainDir = graalvmHomeDir ?: run {
+            val nativeImageLauncher = javaToolchains.launcherFor {
+                languageVersion = JavaLanguageVersion.of(javaLanguageVersion)
+                nativeImageCapable = true
+            }
+
+            options.get().javaLauncher = nativeImageLauncher
+
+            nativeImageLauncher.get().executablePath.asFile.parentFile.run {
+                if (name == "bin") parentFile else this
+            }
         }
 
-    val toolchainFiles = toolchainDir.walkTopDown().filter { it.isFile }
-    val emptyFiles = toolchainFiles.filter { it.length() == 0L }
+        val toolchainFiles = toolchainDir.walkTopDown().filter { it.isFile }
+        val emptyFiles = toolchainFiles.filter { it.length() == 0L }
 
-    // Find empty toolchain files that are named like other toolchain files and assume these should have been links.
-    val links = toolchainFiles.mapNotNull { file ->
-        emptyFiles.singleOrNull { it != file && it.name == file.name }?.let {
-            file to it
+        // Find empty toolchain files that are named like other toolchain files and assume these should have been links.
+        val links = toolchainFiles.mapNotNull { file ->
+            emptyFiles.singleOrNull { it != file && it.name == file.name }?.let {
+                file to it
+            }
         }
-    }
 
-    // Fix up symbolic links.
-    links.forEach { (target, link) ->
-        logger.quiet("Fixing up '$link' to link to '$target'.")
+        // Fix up symbolic links.
+        links.forEach { (target, link) ->
+            logger.quiet("Fixing up '$link' to link to '$target'.")
 
-        if (link.delete()) {
-            Files.createSymbolicLink(link.toPath(), target.toPath())
-        } else {
-            logger.warn("Unable to delete '$link'.")
+            if (link.delete()) {
+                Files.createSymbolicLink(link.toPath(), target.toPath())
+            } else {
+                logger.warn("Unable to delete '$link'.")
+            }
         }
     }
 }
 
-val jar by tasks.getting(Jar::class)
+val appJar = tasks.named<Jar>("jar") {
+    manifest {
+        // Work around https://github.com/gradle/gradle/issues/32263.
+        attributes["Main-Class"] = application.mainClass
+    }
+}
 
 val pathingJar by tasks.registering(Jar::class) {
     archiveClassifier = "pathing"
@@ -174,12 +159,12 @@ val pathingJar by tasks.registering(Jar::class) {
     manifest {
         // Work around the command line length limit on Windows when passing the classpath to Java, see
         // https://github.com/gradle/gradle/issues/1989.
-        attributes["Class-Path"] = configurations.runtimeClasspath.get().joinToString(" ") { it.name }
+        attributes["Class-Path"] = configurations.runtimeClasspath.get().sorted().joinToString(" ") { it.name }
     }
 }
 
 tasks.named<CreateStartScripts>("startScripts") {
-    classpath = jar.outputs.files + pathingJar.get().outputs.files
+    classpath = appJar.get().outputs.files + pathingJar.get().outputs.files
 
     doLast {
         // Append the plugin directory to the Windows classpath.
@@ -228,6 +213,9 @@ signing {
 }
 
 tasks.named<JavaExec>("run") {
+    // Work around https://github.com/graalvm/native-build-tools/issues/743.
+    doNotTrackState("The 'run' task is never supposed to be UP-TO-DATE.")
+
     System.getenv("TERM")?.also {
         val mode = it.substringAfter('-', "16color")
         environment("FORCE_COLOR" to mode)

@@ -50,12 +50,13 @@ import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.packagemanagers.go.utils.Graph
 import org.ossreviewtoolkit.utils.common.CommandLineTool
+import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.splitOnWhitespace
 import org.ossreviewtoolkit.utils.common.stashDirectories
 import org.ossreviewtoolkit.utils.ort.createOrtTempDir
 
-import org.semver4j.RangesList
-import org.semver4j.RangesListFactory
+import org.semver4j.range.RangeList
+import org.semver4j.range.RangeListFactory
 
 internal object GoCommand : CommandLineTool {
     private val goPath by lazy { createOrtTempDir() }
@@ -74,7 +75,7 @@ internal object GoCommand : CommandLineTool {
 
     override fun transformVersion(output: String) = output.removePrefix("go version go").substringBefore(' ')
 
-    override fun getVersionRequirement(): RangesList = RangesListFactory.create(">=1.21.1")
+    override fun getVersionRequirement(): RangeList = RangeListFactory.create(">=1.21.1")
 
     override fun run(vararg args: CharSequence, workingDir: File?, environment: Map<String, String>) =
         super.run(args = args, workingDir, environment + goEnvironment)
@@ -95,7 +96,11 @@ internal object GoCommand : CommandLineTool {
 class GoMod(override val descriptor: PluginDescriptor = GoModFactory.descriptor) : PackageManager("GoMod") {
     override val globsForDefinitionFiles = listOf("go.mod")
 
-    override fun mapDefinitionFiles(analysisRoot: File, definitionFiles: List<File>): List<File> =
+    override fun mapDefinitionFiles(
+        analysisRoot: File,
+        definitionFiles: List<File>,
+        analyzerConfig: AnalyzerConfiguration
+    ): List<File> =
         definitionFiles.filterNot { definitionFile ->
             "vendor" in definitionFile
                 .parentFile
@@ -113,7 +118,7 @@ class GoMod(override val descriptor: PluginDescriptor = GoModFactory.descriptor)
     ): List<ProjectAnalyzerResult> {
         val projectDir = definitionFile.parentFile
 
-        stashDirectories(projectDir.resolve("vendor")).use { _ ->
+        stashDirectories(projectDir / "vendor").use { _ ->
             val moduleInfoForModuleName = getModuleInfos(projectDir, "all").associateBy { it.path }
             val graph = getModuleGraph(projectDir, moduleInfoForModuleName)
             val packages = graph.nodes.mapNotNullTo(mutableSetOf()) {

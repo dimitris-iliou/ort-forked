@@ -30,7 +30,7 @@ import org.ossreviewtoolkit.utils.spdx.isSpdxExpressionOrNotPresent
 
 /**
  * Information about a file used in an [SpdxDocument].
- * See https://spdx.github.io/spdx-spec/v2.2.2/file-information/.
+ * See https://spdx.github.io/spdx-spec/v2.3/file-information/.
  */
 @JsonIgnoreProperties("ranges") // TODO: Implement ranges which is broken in the specification examples.
 data class SpdxFile(
@@ -169,33 +169,34 @@ data class SpdxFile(
         VIDEO
     }
 
-    init {
-        require(spdxId.startsWith(REF_PREFIX)) {
-            "The SPDX ID '$spdxId' has to start with '$REF_PREFIX'."
-        }
+    fun validate(): SpdxFile =
+        apply {
+            require(spdxId.startsWith(REF_PREFIX)) {
+                "The SPDX ID '$spdxId' has to start with '$REF_PREFIX'."
+            }
 
-        require(checksums.any { it.algorithm == SpdxChecksum.Algorithm.SHA1 }) {
-            "At least one SHA1 checksum must be provided."
-        }
+            require(checksums.any { it.algorithm == SpdxChecksum.Algorithm.SHA1 }) {
+                "At least one SHA1 checksum must be provided."
+            }
 
-        require(copyrightText.isNotBlank()) { "The copyright text must not be blank." }
+            require(copyrightText.isNotBlank()) { "The copyright text must not be blank." }
 
-        require(filename.isNotBlank()) { "The filename for SPDX-ID '$spdxId' must not be blank." }
+            require(filename.isNotBlank()) { "The filename for SPDX-ID '$spdxId' must not be blank." }
 
-        require(licenseConcluded.isSpdxExpressionOrNotPresent()) {
-            "The license concluded must be either an SpdxExpression, 'NONE' or 'NOASSERTION', but was " +
-                "$licenseConcluded."
-        }
+            require(licenseConcluded.isSpdxExpressionOrNotPresent()) {
+                "The license concluded must be either an SpdxExpression, 'NONE' or 'NOASSERTION', but was " +
+                    "$licenseConcluded."
+            }
 
-        // TODO: The check for [licenseInfoInFiles] can be made more strict, but the SPDX specification is not exact
-        //       enough yet to do this safely.
-        licenseInfoInFiles.filterNot {
-            it.isSpdxExpressionOrNotPresent(ALLOW_LICENSEREF_EXCEPTIONS)
-        }.let { nonSpdxLicenses ->
-            require(nonSpdxLicenses.isEmpty()) {
-                "The entries in 'licenseInfoInFiles' must each be either an SPDX expression, 'NONE' or " +
-                    "'NOASSERTION', but found ${nonSpdxLicenses.joinToString { "'$it'" }}."
+            // TODO: The check for [licenseInfoInFiles] can be made more strict, but the SPDX specification is not exact
+            //       enough yet to do this safely.
+            licenseInfoInFiles.filterNot {
+                it.isSpdxExpressionOrNotPresent(ALLOW_LICENSEREF_EXCEPTIONS)
+            }.let { nonSpdxLicenses ->
+                require(nonSpdxLicenses.isEmpty()) {
+                    "The entries in 'licenseInfoInFiles' must each be either an SPDX expression, 'NONE' or " +
+                        "'NOASSERTION', but found ${nonSpdxLicenses.joinToString { "'$it'" }}."
+                }
             }
         }
-    }
 }

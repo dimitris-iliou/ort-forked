@@ -19,8 +19,6 @@
 
 package org.ossreviewtoolkit.utils.test
 
-import com.fasterxml.jackson.module.kotlin.readValue
-
 import java.io.File
 import java.time.Instant
 
@@ -33,7 +31,6 @@ import org.ossreviewtoolkit.model.Hash
 import org.ossreviewtoolkit.model.HashAlgorithm
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.KnownProvenance
-import org.ossreviewtoolkit.model.OrtResult
 import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.ProvenanceResolutionResult
 import org.ossreviewtoolkit.model.RemoteArtifact
@@ -41,7 +38,6 @@ import org.ossreviewtoolkit.model.RepositoryProvenance
 import org.ossreviewtoolkit.model.ScanResult
 import org.ossreviewtoolkit.model.ScannerRun
 import org.ossreviewtoolkit.model.config.AdvisorConfiguration
-import org.ossreviewtoolkit.model.mapper
 import org.ossreviewtoolkit.model.utils.alignRevisions
 import org.ossreviewtoolkit.model.utils.clearVcsPath
 import org.ossreviewtoolkit.model.utils.toPurl
@@ -70,22 +66,17 @@ fun advisorRunOf(vararg results: Pair<Identifier, List<AdvisorResult>>): Advisor
     )
 
 /**
- * Return the content of the fun test asset file located under [path] relative to the 'assets' directory as text.
- */
-fun getAssetAsString(path: String): String = getAssetFile(path).readText()
-
-/**
  * Return the absolute file for the functional test assets at the given [path].
  */
 fun getAssetFile(path: String): File = File("src/funTest/assets", path).absoluteFile
 
 /**
- * Return a string representation of the [expectedResultFile] contents that has placeholders replaced. If a
- * [definitionFile] is provided, values that can be derived from it, like the VCS revision, are also replaced.
- * Additionally, [custom] regex replacements with substitutions can be specified.
+ * Return a string representation of the [expectedResult] contents that has placeholders replaced. If a [definitionFile]
+ * is provided, values that can be derived from it, like the VCS revision, are also replaced. Additionally, [custom]
+ * regex replacements with substitutions can be specified.
  */
 fun patchExpectedResult(
-    expectedResultFile: File,
+    expectedResult: String,
     definitionFile: File? = null,
     custom: Map<String, String> = emptyMap()
 ): String {
@@ -115,7 +106,7 @@ fun patchExpectedResult(
         putAll(custom)
     }
 
-    return replacements.entries.fold(expectedResultFile.readText()) { text, (pattern, replacement) ->
+    return replacements.entries.fold(expectedResult) { text, (pattern, replacement) ->
         text.replace(pattern.toRegex(), replacement)
     }
 }
@@ -143,10 +134,6 @@ fun patchActualResult(
         .replaceIf(patchStartAndEndTime, START_AND_END_TIME_REGEX) { "${it.groupValues[1]}: \"${Instant.EPOCH}\"" }
 }
 
-fun readOrtResult(file: String) = readOrtResult(File(file))
-
-fun readOrtResult(file: File) = file.mapper().readValue<OrtResult>(patchExpectedResult(file))
-
 /**
  * Create a [ScannerRun] with the given [pkgScanResults].
  */
@@ -164,12 +151,18 @@ fun scannerRunOf(vararg pkgScanResults: Pair<Identifier, List<ScanResult>>): Sca
         }
     }
 
-    val scanResults = pkgScanResultsWithKnownProvenance.values.flatten().mapTo(mutableSetOf()) { scanResult ->
-        scanResult.copy(
-            provenance = (scanResult.provenance as? RepositoryProvenance)?.clearVcsPath()?.alignRevisions()
-                ?: scanResult.provenance
-        )
-    }
+    val scanResults = pkgScanResultsWithKnownProvenance.values.flatten()
+        .map { scanResult ->
+            scanResult.copy(
+                provenance = (scanResult.provenance as? RepositoryProvenance)?.clearVcsPath()?.alignRevisions()
+                    ?: scanResult.provenance
+            )
+        }
+        .groupBy { it.provenance to it.scanner }
+        .values
+        .mapTo(mutableSetOf()) { scanResults ->
+            scanResults.reduce { acc, next -> acc + next }
+        }
 
     val filePathsByProvenance = scanResults.mapNotNull { scanResult ->
         val provenance = scanResult.provenance as? KnownProvenance ?: return@mapNotNull null
@@ -198,14 +191,9 @@ fun scannerRunOf(vararg pkgScanResults: Pair<Identifier, List<ScanResult>>): Sca
 
     return ScannerRun.EMPTY.copy(
         provenances = pkgScanResultsWithKnownProvenance.mapTo(mutableSetOf()) { (id, scanResultsForId) ->
-            val packageProvenance = scanResultsForId.firstOrNull()?.provenance as KnownProvenance
-
             ProvenanceResolutionResult(
                 id = id,
-                packageProvenance = packageProvenance,
-                subRepositories = emptyMap(),
-                packageProvenanceResolutionIssue = null,
-                nestedProvenanceResolutionIssue = null
+                packageProvenance = scanResultsForId.firstOrNull()?.provenance as KnownProvenance
             )
         },
         scanResults = scanResults,

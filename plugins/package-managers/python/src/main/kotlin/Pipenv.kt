@@ -31,10 +31,11 @@ import org.ossreviewtoolkit.model.config.Excludes
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.utils.common.CommandLineTool
+import org.ossreviewtoolkit.utils.common.div
 
-import org.semver4j.RangesList
-import org.semver4j.RangesListFactory
 import org.semver4j.Semver
+import org.semver4j.range.RangeList
+import org.semver4j.range.RangeListFactory
 
 /**
  * The version that introduced the requirements command.
@@ -49,7 +50,7 @@ internal object PipenvCommand : CommandLineTool {
         // pipenv, version 2018.11.26
         output.removePrefix("pipenv, version ")
 
-    override fun getVersionRequirement(): RangesList = RangesListFactory.create("[2018.10.9,)")
+    override fun getVersionRequirement(): RangeList = RangeListFactory.create("[2018.10.9,)")
 }
 
 @OrtPlugin(
@@ -83,7 +84,7 @@ class Pipenv(
         // 2. Use existing "Pip" PackageManager to do the actual dependency resolution
 
         val workingDir = definitionFile.parentFile
-        val requirementsFile = workingDir.resolve("requirements-from-pipenv.txt")
+        val requirementsFile = workingDir / "requirements-from-pipenv.txt"
 
         logger.info { "Generating '${requirementsFile.name}' file in '$workingDir' directory..." }
 

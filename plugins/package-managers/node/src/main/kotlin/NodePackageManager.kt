@@ -25,11 +25,13 @@ import org.apache.logging.log4j.kotlin.logger
 
 import org.ossreviewtoolkit.analyzer.PackageManager
 import org.ossreviewtoolkit.analyzer.PackageManagerResult
+import org.ossreviewtoolkit.analyzer.determineEnabledPackageManagers
 import org.ossreviewtoolkit.analyzer.parseAuthorString
 import org.ossreviewtoolkit.downloader.VersionControlSystem
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
+import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
 import org.ossreviewtoolkit.utils.common.realFile
 
@@ -41,8 +43,7 @@ abstract class NodePackageManager(val managerType: NodePackageManagerType) : Pac
 
         val packageJson = parsePackageJson(packageJsonFile)
 
-        val rawName = packageJson.name.orEmpty()
-        val (namespace, name) = splitNamespaceAndName(rawName)
+        val (namespace, name) = splitNamespaceAndName(packageJson.name.orEmpty())
 
         val projectName = name.ifBlank {
             getFallbackProjectName(analysisRoot, packageJsonFile).also {
@@ -50,38 +51,44 @@ abstract class NodePackageManager(val managerType: NodePackageManagerType) : Pac
             }
         }
 
-        val version = packageJson.version.orEmpty()
-        if (version.isBlank()) {
-            logger.warn { "'$packageJsonFile' does not define a version." }
-        }
-
-        val declaredLicenses = packageJson.licenses.mapLicenses()
-        val authors = packageJson.authors.flatMap { parseAuthorString(it.name) }
-            .mapNotNullTo(mutableSetOf()) { it.name }
-        val description = packageJson.description.orEmpty()
-        val homepageUrl = packageJson.homepage.orEmpty()
-        val projectDir = packageJsonFile.parentFile.realFile()
-        val vcsFromPackage = parseVcsInfo(packageJson)
+        val vcs = parseVcsInfo(packageJson)
 
         return Project(
             id = Identifier(
                 type = projectType,
                 namespace = namespace,
                 name = projectName,
-                version = version
+                version = packageJson.version.orEmpty()
             ),
-            definitionFilePath = VersionControlSystem.getPathInfo(packageJsonFile.realFile()).path,
-            authors = authors,
-            declaredLicenses = declaredLicenses,
-            vcs = vcsFromPackage,
-            vcsProcessed = processProjectVcs(projectDir, vcsFromPackage, homepageUrl),
-            description = description,
-            homepageUrl = homepageUrl
+            definitionFilePath = VersionControlSystem.getPathInfo(packageJsonFile.realFile).path,
+            authors = packageJson.authors.flatMap {
+                parseAuthorString(it.name)
+            }.mapNotNullTo(mutableSetOf()) {
+                it.name
+            },
+            declaredLicenses = packageJson.licenses.mapLicenses(),
+            vcs = vcs,
+            vcsProcessed = processProjectVcs(packageJsonFile.parentFile.realFile, vcs, packageJson.homepage.orEmpty()),
+            description = packageJson.description.orEmpty(),
+            homepageUrl = packageJson.homepage.orEmpty()
         )
     }
 
-    override fun mapDefinitionFiles(analysisRoot: File, definitionFiles: List<File>) =
-        NodePackageManagerDetection(definitionFiles).filterApplicable(managerType)
+    override fun mapDefinitionFiles(
+        analysisRoot: File,
+        definitionFiles: List<File>,
+        analyzerConfig: AnalyzerConfiguration
+    ): List<File> {
+        val enabledIds = analyzerConfig.determineEnabledPackageManagers().map { it.descriptor.id.uppercase() }
+
+        // Only keep those types for which a package manager is enabled.
+        val enabledTypes = NodePackageManagerType.entries.filter { it.name in enabledIds }
+
+        // Assume the first type to be the best candidate for the fallback.
+        val fallbackType = enabledTypes.first()
+
+        return NodePackageManagerDetection(definitionFiles).filterApplicable(managerType, fallbackType)
+    }
 
     override fun createPackageManagerResult(projectResults: Map<File, List<ProjectAnalyzerResult>>) =
         PackageManagerResult(projectResults, graphBuilder.build(), graphBuilder.packages())

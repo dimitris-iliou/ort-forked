@@ -73,14 +73,14 @@ export JAVA_OPTS="$JAVA_OPTS -Xmx8g"
 ```
 
 If ORT requires external tools to analyze a project, these tools are listed by the `ort requirements` command.
-If a package manager is not list listed there, support for it is integrated directly into ORT and does not require any external tools to be installed.
+If a package manager is not listed there, support for it is integrated directly into ORT and does not require any external tools to be installed.
 
 ## From binaries
 
 Head over to the [releases](https://github.com/oss-review-toolkit/ort/releases) page.
 From the "Assets" section of your chosen release, download the distribution archive of the desired type.
 Typically that is `.zip` for Windows and `.tgz` otherwise; but the contents of the archives are the same.
-The `ort-*` archives contain the [ORT main](./cli/) distribution, while the `orth-*` archives contain the [ORT helper](./helper-cli/) distribution.
+The `ort-*` archives contain the [ORT main](./cli/) distribution, while the `orth-*` archives contain the [ORT helper](./cli-helper/) distribution.
 Unpack the archive to an installation directory.
 The scripts to run ORT are located at `bin/ort` and `bin\ort.bat`, or `bin/orth` and `bin\orth.bat`, respectively.
 

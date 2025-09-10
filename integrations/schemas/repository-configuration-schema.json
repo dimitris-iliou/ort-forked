@@ -8,6 +8,34 @@
     "analyzer": {
       "$ref": "https://raw.githubusercontent.com/oss-review-toolkit/ort/main/integrations/schemas/repository-configurations/analyzer-configuration-schema.json"
     },
+    "includes": {
+      "type": "object",
+      "description": "Defines which parts of a repository should be included.",
+      "properties": {
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "pattern": {
+                "description": "A glob to match the path of the project definition file, relative to the root of the repository.",
+                "type": "string"
+              },
+              "reason": {
+                "$ref": "#/definitions/pathIncludeReason"
+              },
+              "comment": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "pattern",
+              "reason"
+            ]
+          }
+        }
+      }
+    },
     "excludes": {
       "type": "object",
       "description": "Defines which parts of a repository should be excluded.",
@@ -256,6 +284,11 @@
         "reason"
       ]
     },
+    "pathIncludeReason": {
+      "enum": [
+        "SOURCE_OF"
+      ]
+    },
     "pathExcludeReason": {
       "enum": [
         "BUILD_TOOL_OF",
@@ -273,6 +306,7 @@
       "enum": [
         "BUILD_DEPENDENCY_OF",
         "DEV_DEPENDENCY_OF",
+        "DOCUMENTATION_DEPENDENCY_OF",
         "PROVIDED_DEPENDENCY_OF",
         "TEST_DEPENDENCY_OF",
         "RUNTIME_DEPENDENCY_OF"

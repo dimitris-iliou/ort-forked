@@ -25,9 +25,9 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize
 
 import org.ossreviewtoolkit.model.utils.requireNotEmptyNoDuplicates
 import org.ossreviewtoolkit.model.utils.toPurl
-import org.ossreviewtoolkit.utils.common.StringSortedSetConverter
 import org.ossreviewtoolkit.utils.ort.DeclaredLicenseProcessor
 import org.ossreviewtoolkit.utils.ort.ProcessedDeclaredLicense
+import org.ossreviewtoolkit.utils.ort.StringSortedSetConverter
 import org.ossreviewtoolkit.utils.spdx.SpdxExpression
 import org.ossreviewtoolkit.utils.spdx.SpdxOperator
 
@@ -61,7 +61,7 @@ data class Package(
     /**
      * The set of authors declared for this package.
      */
-    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
     @JsonSerialize(converter = StringSortedSetConverter::class)
     val authors: Set<String> = emptySet(),
 

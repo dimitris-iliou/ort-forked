@@ -50,23 +50,27 @@ abstract class GeneratePluginDocsTask : DefaultTask() {
 
         logger.lifecycle("Generating plugin documentation.")
 
-        generatePluginDocs("advisors")
+        generatePluginDocs("advisors", "advisor")
+        generatePluginDocs("license-fact-providers")
         generatePluginDocs("package-configuration-providers")
         generatePluginDocs("package-curation-providers")
-        generatePluginDocs("package-managers")
-        generatePluginDocs("reporters")
-        generatePluginDocs("scanners")
+        generatePluginDocs("package-managers", "analyzer")
+        generatePluginDocs("reporters", "reporter")
+        generatePluginDocs("scanners", "scanner")
 
         logger.lifecycle("Found a total of ${inputFiles.count()} plugins.")
     }
 
-    private fun generatePluginDocs(pluginType: String) {
-        val plugins = inputFiles.filter { it.invariantSeparatorsPath.contains("plugins/$pluginType") }
-        val dir = outputDirectory.resolve(pluginType).also { it.mkdirs() }
+    private fun generatePluginDocs(pluginType: String, tool: String? = null) {
+        val plugins = inputFiles.filter { "plugins/$pluginType" in it.invariantSeparatorsPath }
+        val dir = outputDirectory.resolve(pluginType).apply { mkdirs() }
 
-        logger.lifecycle("Found ${plugins.count()} ${pluginType.replace('-', ' ')}.")
+        val pluginTypeParts = pluginType.split('-')
+        val pluginTypeCamelCase = pluginTypeParts.joinToString("") { it.replaceFirstChar(Char::uppercase) }
+            .replaceFirstChar(Char::lowercase)
+        logger.lifecycle("Found ${plugins.count()} ${pluginTypeParts.joinToString(" ")}:")
 
-        plugins.forEach { file ->
+        plugins.sorted().forEach { file ->
             val json = checkNotNull(jsonSlurper.parse(file) as? Map<*, *>)
             val descriptor = checkNotNull(json["descriptor"] as? Map<*, *>)
 
@@ -99,44 +103,75 @@ abstract class GeneratePluginDocsTask : DefaultTask() {
                 // Write example configuration.
                 appendLine("### Example")
                 appendLine()
-                appendLine("```json")
-                appendLine("{")
-                appendLine("  \"${descriptor["id"]}\": {")
 
-                fun appendOptions(options: List<Map<*, *>>) {
-                    options.forEachIndexed { index, option ->
-                        val defaultValue = option["default"]
-                        val type = option["type"]
-                        val isStringValue =
-                            (type == "SECRET" || type == "STRING" || type == "STRING_LIST") && defaultValue != null
+                fun appendOptionsAndSecrets(startIndent: Int, pluginType: String) {
+                    val indent = if (tool != null) {
+                        append(" ".repeat(startIndent))
+                        appendLine("$tool:")
+                        startIndent + 2
+                    } else {
+                        startIndent
+                    }
 
-                        append("      \"${option["name"]}\": ")
-                        if (isStringValue) append("\"")
-                        append(defaultValue)
-                        if (isStringValue) append("\"")
-                        if (index < options.size - 1) append(",")
-                        appendLine()
+                    val i = " ".repeat(indent)
+
+                    appendLine("$i$pluginType:")
+                    appendLine("$i  ${descriptor["id"]}:")
+
+                    fun appendOptions(options: List<Map<*, *>>) {
+                        options.forEach {
+                            val defaultValue = it["default"]
+                            val type = it["type"]
+                            val isStringValue = type == "SECRET" || type == "STRING" || type == "STRING_LIST"
+
+                            append("$i      ${it["name"]}: ")
+                            if (defaultValue != null) {
+                                if (isStringValue) append("\"")
+                                append(defaultValue)
+                                if (isStringValue) append("\"")
+                            } else {
+                                append("<OPTIONAL_$type>")
+                            }
+                            appendLine()
+                        }
+                    }
+
+                    if (options.isNotEmpty()) {
+                        appendLine("$i    options:")
+                        appendOptions(options)
+                    }
+
+                    if (secrets.isNotEmpty()) {
+                        appendLine("$i    secrets:")
+                        appendOptions(secrets)
                     }
                 }
 
-                if (options.isNotEmpty()) {
-                    appendLine("    \"options\": {")
-                    appendOptions(options)
-                    append("    }")
-                    if (secrets.isNotEmpty()) append(",")
+                appendLine("Use the following syntax to configure this plugin globally as part of `config.yml`:")
+                appendLine()
+                appendLine("```yaml")
+                appendLine("ort:")
+                appendOptionsAndSecrets(2, pluginTypeCamelCase)
+                appendLine("```")
+                appendLine()
+
+                if (tool == "analyzer") {
+                    appendLine("Use the following syntax to configure this plugin in a repository's `.ort.yml`:")
+                    appendLine()
+                    appendLine("```yaml")
+
+                    // See https://github.com/oss-review-toolkit/ort/issues/5715.
+                    appendOptionsAndSecrets(0, pluginTypeParts.joinToString("_"))
+
+                    appendLine("```")
+                    appendLine()
+                    appendLine(
+                        "If the plugin is configured in both locations, the configurations are merged, with options " +
+                            "from `.ort.yml` taking precedence over those from `config.yml`."
+                    )
                     appendLine()
                 }
 
-                if (secrets.isNotEmpty()) {
-                    appendLine("    \"secrets\": {")
-                    appendOptions(secrets)
-                    appendLine("    }")
-                }
-
-                appendLine("  }")
-                appendLine("}")
-                appendLine("```")
-                appendLine()
                 appendLine("### Options")
                 appendLine()
 

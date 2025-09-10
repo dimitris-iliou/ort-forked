@@ -114,11 +114,17 @@ internal fun SpdxPackage.extractScopeFromExternalReferences(): String? =
         }
 
 /**
- * Return the concluded license to be used in ORT's data model, which expects a not present value to be null instead
- * of NONE or NOASSERTION.
+ * Return the declared license to be used in ORT's data model, which expects a not present value to be an empty set
+ * instead of NONE or NOASSERTION.
+ */
+private fun SpdxPackage.getDeclaredLicense(): Set<String> =
+    setOfNotNull(licenseDeclared.takeIf { SpdxConstants.isPresent(it) })
+
+/**
+ * Return the concluded license to be used in ORT's data model, which uses null instead of NOASSERTION.
  */
 private fun SpdxPackage.getConcludedLicense(): SpdxExpression? =
-    licenseConcluded.takeIf { SpdxConstants.isPresent(it) }?.toSpdx()
+    licenseConcluded.takeUnless { it == SpdxConstants.NOASSERTION }?.toSpdx()
 
 /**
  * Return a [RemoteArtifact] for the artifact that the [downloadLocation][SpdxPackage.downloadLocation] points to. If
@@ -319,7 +325,7 @@ class SpdxDocumentFile(override val descriptor: PluginDescriptor = SpdxDocumentF
             purl = purl,
             cpe = locateCpe(),
             authors = originator.wrapPresentInSet(),
-            declaredLicenses = setOf(licenseDeclared),
+            declaredLicenses = getDeclaredLicense(),
             concludedLicense = getConcludedLicense(),
             description = packageDescription,
             homepageUrl = homepage.mapNotPresentToEmpty(),
@@ -489,7 +495,11 @@ class SpdxDocumentFile(override val descriptor: PluginDescriptor = SpdxDocumentF
             )
         }
 
-    override fun mapDefinitionFiles(analysisRoot: File, definitionFiles: List<File>): List<File> =
+    override fun mapDefinitionFiles(
+        analysisRoot: File,
+        definitionFiles: List<File>,
+        analyzerConfig: AnalyzerConfiguration
+    ): List<File> =
         definitionFiles.associateWith {
             spdxDocumentCache.load(it).getOrNull()
         }.filter { (_, spdxDocument) ->

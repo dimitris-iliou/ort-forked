@@ -30,6 +30,7 @@ import org.apache.logging.log4j.kotlin.loggerOf
 import org.ossreviewtoolkit.model.DependencyNavigator.Companion.MATCH_SUB_PROJECTS
 import org.ossreviewtoolkit.model.ResolvedPackageCurations.Companion.REPOSITORY_CONFIGURATION_PROVIDER_ID
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.config.IssueResolution
 import org.ossreviewtoolkit.model.config.LicenseFindingCuration
 import org.ossreviewtoolkit.model.config.PackageConfiguration
@@ -153,8 +154,12 @@ data class OrtResult(
         }
     }
 
-    private val packageConfigurationsById: Map<Identifier, List<PackageConfiguration>> by lazy {
-        resolvedConfiguration.packageConfigurations.orEmpty().groupBy { it.id }
+    /**
+     * Store all resolve package configurations by their ID for faster lookup. The version is ignored because it could
+     * be a version range.
+     */
+    private val packageConfigurationsByIdWithoutVersion: Map<Identifier, List<PackageConfiguration>> by lazy {
+        resolvedConfiguration.packageConfigurations.orEmpty().groupBy { it.id.copy(version = "") }
     }
 
     private val issuesWithExcludedAffectedPathById: Map<Identifier, Set<Issue>> by lazy {
@@ -189,9 +194,19 @@ data class OrtResult(
             { project -> project.id },
             { project ->
                 val pathExcludes = getExcludes().findPathExcludes(project, this)
+                val pathIncludes = getIncludes().findPathIncludes(project, this)
+
+                val isExcluded = if (getIncludes() == Includes.EMPTY) {
+                    // No includes are defined. It is excluded if it has path excludes.
+                    pathExcludes.isNotEmpty()
+                } else {
+                    // Some includes are defined. It is excluded if it has no path includes or has path excludes.
+                    pathIncludes.isEmpty() || pathExcludes.isNotEmpty()
+                }
+
                 ProjectEntry(
                     project = project,
-                    isExcluded = pathExcludes.isNotEmpty()
+                    isExcluded = isExcluded
                 )
             }
         )
@@ -214,7 +229,7 @@ data class OrtResult(
     /**
      * Return the list of [AdvisorResult]s for the given [id].
      */
-    @Suppress("UNUSED")
+    @Suppress("unused")
     fun getAdvisorResultsForId(id: Identifier): List<AdvisorResult> = advisorResultsById[id].orEmpty()
 
     /**
@@ -245,6 +260,9 @@ data class OrtResult(
 
         return dependencies
     }
+
+    @JsonIgnore
+    fun getIncludes(): Includes = repository.config.includes
 
     @JsonIgnore
     fun getExcludes(): Excludes = repository.config.excludes
@@ -368,14 +386,15 @@ data class OrtResult(
      * Return a list of [PackageConfiguration]s for the given [packageId] and [provenance].
      */
     fun getPackageConfigurations(packageId: Identifier, provenance: Provenance): List<PackageConfiguration> =
-        packageConfigurationsById[packageId].orEmpty().filter { it.matches(packageId, provenance) }
+        packageConfigurationsByIdWithoutVersion[packageId.copy(version = "")].orEmpty()
+            .filter { it.matches(packageId, provenance) }
 
     /**
      * Return all projects and packages that are likely to belong to one of the organizations of the given [names]. If
      * [omitExcluded] is set to true, excluded projects / packages are omitted from the result. Projects are converted
      * to packages in the result. If no analyzer result is present an empty set is returned.
      */
-    @Suppress("UNUSED") // This is intended to be mostly used via scripting.
+    @Suppress("unused") // This is intended to be mostly used via scripting.
     fun getOrgPackages(vararg names: String, omitExcluded: Boolean = false): Set<Package> {
         val vendorPackages = mutableSetOf<Package>()
 
@@ -676,18 +695,13 @@ private val logger = loggerOf(MethodHandles.lookup().lookupClass())
  * given [curations] to the packages they apply to. The given [curations] must be ordered highest-priority-first, which
  * is the inverse order of their application.
  */
-private fun applyPackageCurations(
+internal fun applyPackageCurations(
     packages: Collection<Package>,
     curations: List<PackageCuration>
 ): Set<CuratedPackage> {
-    val curationsForId = packages.associateBy(
-        keySelector = { pkg -> pkg.id },
-        valueTransform = { pkg ->
-            curations.filter { curation ->
-                curation.isApplicable(pkg.id)
-            }
-        }
-    )
+    val curationsForId = packages.associate { pkg ->
+        pkg.id to curations.filter { it.isApplicable(pkg.id) }
+    }
 
     return packages.mapTo(mutableSetOf()) { pkg ->
         curationsForId[pkg.id].orEmpty().asReversed().fold(pkg.toCuratedPackage()) { cur, packageCuration ->

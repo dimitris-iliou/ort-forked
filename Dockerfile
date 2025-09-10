@@ -1,4 +1,4 @@
-# syntax=devthefuture/dockerfile-x:v1.4.2
+# syntax=devthefuture/dockerfile-x:v1.5.0
 # The above opts-in for an extended syntax that supports e.g. "INCLUDE" statements, see
 # https://codeberg.org/devthefuture/dockerfile-x
 
@@ -19,7 +19,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # License-Filename: LICENSE
 
-INCLUDE docker/versions.dockerfile
+INCLUDE_ARGS .env.versions
 
 # Use OpenJDK Eclipe Temurin Ubuntu LTS
 FROM eclipse-temurin:$JAVA_VERSION-jdk-$UBUNTU_VERSION AS base
@@ -52,6 +52,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libffi-dev \
     libgmp-dev \
     libmagic1 \
+    libyaml-dev \
     libz-dev \
     locales \
     lzma \
@@ -136,12 +137,13 @@ ARG PYTHON_VERSION
 ARG PYENV_GIT_TAG
 
 ENV PYENV_ROOT=/opt/python
-ENV PATH=$PATH:$PYENV_ROOT/shims:$PYENV_ROOT/bin
+ENV PATH=$PATH:$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PYENV_ROOT/conan2/bin
 RUN curl -kSs https://pyenv.run | bash \
     && pyenv install -v $PYTHON_VERSION \
     && pyenv global $PYTHON_VERSION
 
 ARG CONAN_VERSION
+ARG CONAN2_VERSION
 ARG PYTHON_INSPECTOR_VERSION
 ARG PYTHON_PIPENV_VERSION
 ARG PYTHON_POETRY_VERSION
@@ -155,7 +157,7 @@ RUN ARCH=$(arch | sed s/aarch64/arm64/) \
     pip install -U scancode-toolkit-mini==$SCANCODE_VERSION; \
     else \
     curl -Os https://raw.githubusercontent.com/nexB/scancode-toolkit/v$SCANCODE_VERSION/requirements.txt; \
-    pip install -U --constraint requirements.txt scancode-toolkit==$SCANCODE_VERSION; \
+    pip install -U --constraint requirements.txt scancode-toolkit==$SCANCODE_VERSION setuptools==$PYTHON_SETUPTOOLS_VERSION; \
     rm requirements.txt; \
     fi
 
@@ -175,6 +177,12 @@ RUN pip install --no-cache-dir -U \
     poetry-plugin-export=="$PYTHON_POETRY_PLUGIN_EXPORT_VERSION" \
     python-inspector=="$PYTHON_INSPECTOR_VERSION" \
     setuptools=="$PYTHON_SETUPTOOLS_VERSION"
+RUN mkdir /tmp/conan2 && cd /tmp/conan2 \
+    && wget https://github.com/conan-io/conan/releases/download/$CONAN2_VERSION/conan-$CONAN2_VERSION-linux-x86_64.tgz \
+    && tar -xvf conan-$CONAN2_VERSION-linux-x86_64.tgz\
+    # Rename the Conan 2 executable to "conan2" to be able to call both Conan version from the package manager.
+    && mkdir $PYENV_ROOT/conan2 && mv /tmp/conan2/bin $PYENV_ROOT/conan2/ \
+    && mv $PYENV_ROOT/conan2/bin/conan $PYENV_ROOT/conan2/bin/conan2
 
 FROM scratch AS python
 COPY --from=pythonbuild /opt/python /opt/python
@@ -188,9 +196,6 @@ FROM base AS nodejsbuild
 
 ARG BOWER_VERSION
 ARG NODEJS_VERSION
-ARG NPM_VERSION
-ARG PNPM_VERSION
-ARG YARN_VERSION
 
 ENV NVM_DIR=/opt/nvm
 ENV PATH=$PATH:$NVM_DIR/versions/node/v$NODEJS_VERSION/bin
@@ -200,7 +205,8 @@ RUN . $NVM_DIR/nvm.sh \
     && nvm install "$NODEJS_VERSION" \
     && nvm alias default "$NODEJS_VERSION" \
     && nvm use default \
-    && npm install --global npm@$NPM_VERSION bower@$BOWER_VERSION pnpm@$PNPM_VERSION yarn@$YARN_VERSION
+    && npm install --global bower@$BOWER_VERSION corepack@latest \
+    && corepack enable
 
 FROM scratch AS nodejs
 COPY --from=nodejsbuild /opt/nvm /opt/nvm
@@ -393,7 +399,7 @@ ENV PATH=$PATH:$DOTNET_HOME:$DOTNET_HOME/tools:$DOTNET_HOME/bin
 # debian packages from Ubuntu and Microsoft are incomplete
 
 RUN mkdir -p $DOTNET_HOME \
-    && echo $SWIFT_VERSION \
+    && echo $DOTNET_VERSION \
     && if [ "$(arch)" = "aarch64" ]; then \
     curl -L https://aka.ms/dotnet/$DOTNET_VERSION/dotnet-sdk-linux-arm64.tar.gz | tar -C $DOTNET_HOME -xz; \
     else \
@@ -445,17 +451,17 @@ WORKDIR $HOME/src/ort
 RUN --mount=type=cache,target=/var/tmp/gradle \
     --mount=type=bind,target=$HOME/src/ort,rw \
     export GRADLE_USER_HOME=/var/tmp/gradle \
-    && sudo chown -R "$USER". $HOME/src/ort /var/tmp/gradle \
+    && sudo chown -R $USER $HOME/src/ort /var/tmp/gradle \
     && scripts/set_gradle_proxy.sh \
     && ./gradlew --no-daemon --stacktrace \
     -Pversion=$ORT_VERSION \
     :cli:installDist \
-    :helper-cli:startScripts \
+    :cli-helper:startScripts \
     && mkdir /opt/ort \
     && cp -a $HOME/src/ort/cli/build/install/ort /opt/ \
     && cp -a $HOME/src/ort/scripts/*.sh /opt/ort/bin/ \
-    && cp -a $HOME/src/ort/helper-cli/build/scripts/orth /opt/ort/bin/ \
-    && cp -a $HOME/src/ort/helper-cli/build/libs/helper-cli-*.jar /opt/ort/lib/
+    && cp -a $HOME/src/ort/cli-helper/build/scripts/orth /opt/ort/bin/ \
+    && cp -a $HOME/src/ort/cli-helper/build/libs/cli-helper-*.jar /opt/ort/lib/
 
 FROM scratch AS ortbin
 COPY --from=ortbuild /opt/ort /opt/ort
@@ -477,7 +483,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # Python
 ENV PYENV_ROOT=/opt/python
-ENV PATH=$PATH:$PYENV_ROOT/shims:$PYENV_ROOT/bin
+ENV PATH=$PATH:$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PYENV_ROOT/conan2/bin
 COPY --from=python --chown=$USER:$USER $PYENV_ROOT $PYENV_ROOT
 
 # NodeJS
@@ -600,5 +606,8 @@ WORKDIR $HOME
 
 # Ensure that these directories exist in the container to be able to mount directories from the host into them with correct permissions.
 RUN mkdir -p "$HOME/.ort" "$HOME/.gradle"
+
+# Install cargo-credential-netrc late in the build to prevent an error accessing /opt/rust/cargo/registry/.
+RUN $CARGO_HOME/bin/cargo install cargo-credential-netrc
 
 ENTRYPOINT ["/opt/ort/bin/ort"]

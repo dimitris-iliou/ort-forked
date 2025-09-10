@@ -23,7 +23,7 @@ import com.fasterxml.jackson.annotation.JsonInclude
 
 /**
  * Information about other licenses that are not found on the SPDX license list.
- * See https://spdx.github.io/spdx-spec/v2.2.2/other-licensing-information-detected/.
+ * See https://spdx.github.io/spdx-spec/v2.3/other-licensing-information-detected/.
  *
  * Note: The above specification says that several fields are mandatory only if the license is not on the SPDX license
  * list and at the same time says that instances of this class should only be created for licenses not on the SPDX
@@ -61,7 +61,17 @@ data class SpdxExtractedLicenseInfo(
     val seeAlsos: List<String> = emptyList()
 ) {
     init {
-        require(licenseId.isNotBlank()) { "The license ID must not be blank (the optional name is '$name')." }
-        require(extractedText.isNotBlank()) { "The extracted text must not be blank (the license ID is '$licenseId')." }
+        validate()
     }
+
+    fun validate(): SpdxExtractedLicenseInfo =
+        apply {
+            require(licenseId.isNotBlank()) {
+                "The license ID must not be blank (the optional name is '$name')."
+            }
+
+            require(extractedText.isNotBlank()) {
+                "The extracted text must not be blank (the license ID is '$licenseId')."
+            }
+        }
 }

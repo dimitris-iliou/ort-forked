@@ -1,83 +1,82 @@
 [versions]
-dependencyAnalysisPlugin = "2.13.0"
+buildConfigPlugin = "5.6.8"
+dependencyAnalysisPlugin = "3.0.2"
 detektPlugin = "1.23.8"
 dokkatooPlugin = "2.4.0"
 downloadPlugin = "5.6.0"
-gitSemverPlugin = "0.16.0"
-graalVmNativeImagePlugin = "0.10.6"
-ideaExtPlugin = "1.1.10"
-jakartaMigrationPlugin = "0.24.0"
-kotlinPlugin = "2.1.10"
-ksp = "2.1.10-1.0.31"
-mavenPublishPlugin = "0.31.0"
-reproducibleBuildsPlugin = "1.0"
-versionsPlugin = "0.52.0"
+gitSemverPlugin = "0.16.1"
+graalVmNativeImagePlugin = "0.11.0"
+ideaExtPlugin = "1.3"
+kotlinPlugin = "2.2.10"
+ksp = "2.2.10-2.0.2"
+mavenPublishPlugin = "0.34.0"
 
-aeSecurity = "0.135.8"
+aeSecurity = "0.144.0"
 asciidoctorj = "3.0.0"
 asciidoctorjPdf = "2.3.19"
-blackduckCommon = "67.0.5"
+blackduckCommon = "67.0.19"
 blackduckCommonApi = "2023.10.0.7"
+bouncyCastle = "1.81"
 clikt = "5.0.3"
-commonsCompress = "1.27.1"
+commonsCompress = "1.28.0"
 cyclonedx = "10.2.1"
-diffUtils = "4.15"
-discoClient = "21.0.1"
+diffUtils = "4.16"
 diskLruCache = "2.0.2"
-exposed = "0.60.0"
+exposed = "0.61.0"
 flexmark = "0.64.8"
 freemarker = "2.3.34"
-greenmail = "2.1.3"
-gson = "2.12.1"
-hikari = "6.2.1"
+greenmail = "2.1.5"
+gson = "2.13.1"
+hikari = "7.0.2"
 hoplite = "2.9.0"
-jackson = "2.18.3"
-jakartaMail = "2.0.1"
-jerseyCommon = "3.1.10"
-jgit = "7.1.0.202411261347-r"
-jiraRestClient = "6.0.2"
-jruby = "9.4.12.0"
+jackson = "2.20.0"
+jakartaMail = "2.0.2"
+jerseyCommon = "3.1.11"
+jgit = "7.3.0.202506031305-r"
+jiraRestClient = "7.0.1"
+jruby = "9.4.14.0"
 jslt = "0.1.14"
-jsonSchemaValidator = "1.5.6"
-kaml = "0.72.0"
-kotest = "5.9.1"
-kotlinPoet = "2.1.0"
-kotlinxCoroutines = "1.10.1"
+jsonSchemaValidator = "1.5.8"
+kaml = "0.94.0"
+kotest = "6.0.3"
+kotlinPoet = "2.2.0"
+kotlinxCoroutines = "1.10.2"
 kotlinxHtml = "0.12.0"
-kotlinxSerialization = "1.8.0"
+kotlinxSerialization = "1.9.0"
 ks3 = "1.0.0"
-tomlkt = "0.4.0"
-log4jApi = "2.24.3"
+tomlkt = "0.5.0"
+log4jApi = "2.25.1"
 log4jApiKotlin = "1.5.0"
 logback = "1.5.18"
-maven = "3.9.9"
-mavenResolver = "1.9.22"
-mockk = "1.13.17"
+maven = "3.9.11"
+mavenResolver = "1.9.24"
+mockk = "1.14.5"
 mordant = "3.0.2"
-okhttp = "4.12.0"
-postgres = "42.7.5"
-postgresEmbedded = "1.1.0"
+okhttp = "5.1.0"
+postgres = "42.7.7"
+postgresEmbedded = "1.1.1"
 reflections = "0.10.2"
-retrofit = "2.11.0"
-s3 = "2.31.1"
-saxonHe = "12.5"
-scanoss = "0.10.1"
-semver4j = "5.6.0"
+retrofit = "3.0.0"
+s3 = "2.33.2"
+saxonHe = "12.8"
+scanoss = "0.11.0"
+semver4j = "6.0.0"
 slf4j = "2.0.17"
-springCore = "6.2.5"
-svnkit = "1.10.11"
-sw360Client = "17.0.1-m2"
-wiremock = "3.12.1"
-xmlutil = "0.90.3"
+springCore = "6.2.10"
+svnkit = "1.10.13"
+sw360Client = "19.0.0"
+tika = "3.2.2"
+wagonHttp = "3.5.3"
+wiremock = "3.13.1"
+xmlutil = "0.91.2"
 xz = "1.10"
 
 [plugins]
+buildConfig = { id = "com.github.gmazzo.buildconfig", version.ref = "buildConfigPlugin" }
 download = { id = "de.undercouch.download", version.ref = "downloadPlugin" }
 gitSemver = { id = "com.github.jmongard.git-semver-plugin", version.ref = "gitSemverPlugin" }
 ideaExt = { id = "org.jetbrains.gradle.plugin.idea-ext", version.ref = "ideaExtPlugin" }
-jakartaMigration = { id = "com.netflix.nebula.jakartaee-migration", version.ref = "jakartaMigrationPlugin" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlinPlugin" }
-versions = { id = "com.github.ben-manes.versions", version.ref = "versionsPlugin" }
 
 [libraries]
 # These are Maven coordinates for Gradle plugins, which are required for use in precompiled plugin scripts.
@@ -89,7 +88,6 @@ plugin-graalVmNativeImage = { module = "org.graalvm.buildtools:native-gradle-plu
 plugin-kotlin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlinPlugin" }
 plugin-ksp = { module = "com.google.devtools.ksp:com.google.devtools.ksp.gradle.plugin", version.ref = "ksp" }
 plugin-mavenPublish = { module = "com.vanniktech:gradle-maven-publish-plugin", version.ref = "mavenPublishPlugin" }
-plugin-reproducibleBuilds = { module = "org.gradlex:reproducible-builds", version.ref = "reproducibleBuildsPlugin" }
 
 aeSecurity = { module = "org.metaeffekt.core:ae-security", version.ref = "aeSecurity" }
 asciidoctorj = { module = "org.asciidoctor:asciidoctorj", version.ref = "asciidoctorj" }
@@ -97,13 +95,13 @@ asciidoctorj-pdf = { module = "org.asciidoctor:asciidoctorj-pdf", version.ref = 
 awsS3 = { module = "software.amazon.awssdk:s3", version.ref = "s3" }
 blackduck-common = { module = "com.blackduck.integration:blackduck-common", version.ref = "blackduckCommon" }
 blackduck-common-api = { module = "com.blackduck.integration:blackduck-common-api", version.ref = "blackduckCommonApi" }
+bouncyCastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncyCastle" }
 clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }
 commonsCompress = { module = "org.apache.commons:commons-compress", version.ref = "commonsCompress" }
 cyclonedx = { module = "org.cyclonedx:cyclonedx-core-java", version.ref = "cyclonedx" }
 detekt-api = { module = "io.gitlab.arturbosch.detekt:detekt-api", version.ref = "detektPlugin" }
 detekt-test = { module = "io.gitlab.arturbosch.detekt:detekt-test", version.ref = "detektPlugin" }
 diffUtils = { module = "io.github.java-diff-utils:java-diff-utils", version.ref = "diffUtils" }
-discoClient = { module = "io.foojay.api:discoclient", version.ref = "discoClient" }
 diskLruCache = { module = "com.jakewharton:disklrucache", version.ref = "diskLruCache" }
 exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
 exposed-dao = { module = "org.jetbrains.exposed:exposed-dao", version.ref = "exposed" }
@@ -117,12 +115,7 @@ gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 hikari = { module = "com.zaxxer:HikariCP", version.ref = "hikari" }
 hoplite-core = { module = "com.sksamuel.hoplite:hoplite-core", version.ref = "hoplite" }
 hoplite-yaml = { module = "com.sksamuel.hoplite:hoplite-yaml", version.ref = "hoplite" }
-jackson-annotations = { module = "com.fasterxml.jackson.core:jackson-annotations", version.ref = "jackson" }
-jackson-core = { module = "com.fasterxml.jackson.core:jackson-core", version.ref = "jackson" }
-jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
-jackson-dataformat-yaml = { module = "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml", version.ref = "jackson" }
-jackson-datatype-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson" }
-jackson-module-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version.ref = "jackson" }
+jackson-bom = { module = "com.fasterxml.jackson:jackson-bom", version.ref = "jackson" }
 jakartaMail = { module = "com.sun.mail:jakarta.mail", version.ref = "jakartaMail" }
 jerseyCommon = { module = "org.glassfish.jersey.core:jersey-common", version.ref = "jerseyCommon" }
 jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version.ref = "jgit" }
@@ -135,8 +128,9 @@ jslt = { module = "com.schibsted.spt.data:jslt", version.ref = "jslt" }
 jsonSchemaValidator = { module = "com.networknt:json-schema-validator", version.ref = "jsonSchemaValidator" }
 kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
 kotest-assertions-json = { module = "io.kotest:kotest-assertions-json", version.ref = "kotest" }
+kotest-assertions-table = { module = "io.kotest:kotest-assertions-table", version.ref = "kotest" }
+kotest-extensions = { module = "io.kotest:kotest-extensions", version.ref = "kotest" }
 kotest-extensions-junitXml = { module = "io.kotest:kotest-extensions-junitxml", version.ref = "kotest" }
-kotest-framework-api = { module = "io.kotest:kotest-framework-api", version.ref = "kotest" }
 kotest-framework-datatest = { module = "io.kotest:kotest-framework-datatest", version.ref = "kotest" }
 kotest-framework-engine = { module = "io.kotest:kotest-framework-engine", version.ref = "kotest" }
 kotest-runner-junit5 = { module = "io.kotest:kotest-runner-junit5", version.ref = "kotest" }
@@ -183,8 +177,10 @@ scanoss = { module = "com.scanoss:scanoss", version.ref = "scanoss" }
 semver4j = { module = "org.semver4j:semver4j", version.ref = "semver4j" }
 slf4j = { module = "org.slf4j:slf4j-api ", version.ref = "slf4j" }
 springCore = { module = "org.springframework:spring-core", version.ref = "springCore" }
-svnkit = { module = "org.tmatesoft.svnkit:svnkit", version.ref = "svnkit" }
+svnkit = { module = "com.tmatesoft.svnkit:svnkit", version.ref = "svnkit" }
 sw360Client = { module = "org.eclipse.sw360:client", version.ref = "sw360Client" }
+tika = { module = "org.apache.tika:tika-core", version.ref = "tika" }
+wagon-http = { module = "org.apache.maven.wagon:wagon-http", version.ref = "wagonHttp" }
 wiremock = { module = "org.wiremock:wiremock", version.ref = "wiremock" }
 xz = { module = "org.tukaani:xz", version.ref = "xz" }
 

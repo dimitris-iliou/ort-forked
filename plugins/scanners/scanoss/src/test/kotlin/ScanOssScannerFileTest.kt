@@ -23,23 +23,18 @@ import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.engine.spec.tempfile
 import io.kotest.matchers.collections.containExactly
 import io.kotest.matchers.should
 
-import io.mockk.every
 import io.mockk.spyk
-import io.mockk.verify
-
-import java.io.File
-import java.util.UUID
 
 import org.ossreviewtoolkit.model.LicenseFinding
 import org.ossreviewtoolkit.model.PackageType
 import org.ossreviewtoolkit.model.TextLocation
 import org.ossreviewtoolkit.plugins.api.Secret
 import org.ossreviewtoolkit.scanner.ScanContext
-
-private val TEST_FILE_TO_SCAN = File("src/test/assets/filesToScan/ScannerFactory.kt")
+import org.ossreviewtoolkit.utils.common.extractResource
 
 /**
  * A test for scanning a single file with the [ScanOss] scanner.
@@ -50,7 +45,7 @@ class ScanOssScannerFileTest : StringSpec({
     val server = WireMockServer(
         WireMockConfiguration.options()
             .dynamicPort()
-            .usingFilesUnderDirectory("src/test/assets/scanSingle")
+            .usingFilesUnderClasspath("scanSingle")
     )
 
     beforeSpec {
@@ -67,28 +62,18 @@ class ScanOssScannerFileTest : StringSpec({
     }
 
     "The scanner should scan a single file" {
-        // Manipulate the UUID generation to have the same IDs as in the response.
-        every {
-            scanner.generateRandomUUID()
-        } answers {
-            UUID.fromString("bf5401e9-03b3-4c91-906c-cadb90487b8c")
-        }
-
+        val pathToFile = extractResource("/filesToScan/random-data-05-07-04.kt", tempfile())
         val summary = scanner.scanPath(
-            TEST_FILE_TO_SCAN,
+            pathToFile,
             ScanContext(labels = emptyMap(), packageType = PackageType.PACKAGE)
         )
-
-        verify(exactly = 1) {
-            scanner.createWfpForFile(TEST_FILE_TO_SCAN)
-        }
 
         with(summary) {
             licenseFindings should containExactly(
                 LicenseFinding(
                     license = "Apache-2.0",
                     location = TextLocation(
-                        path = "scanner/src/main/kotlin/ScannerFactory.kt",
+                        path = "scanner/src/main/kotlin/random-data-05-07-04.kt",
                         line = TextLocation.UNKNOWN_LINE
                     ),
                     score = 100.0f

@@ -22,8 +22,6 @@ package org.ossreviewtoolkit.plugins.scanners.scancode
 import java.io.File
 import java.time.Instant
 
-import kotlin.math.max
-
 import org.apache.logging.log4j.kotlin.logger
 
 import org.ossreviewtoolkit.model.ScanSummary
@@ -32,25 +30,35 @@ import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.scanner.LocalPathScannerWrapper
 import org.ossreviewtoolkit.scanner.ScanContext
+import org.ossreviewtoolkit.scanner.ScanException
 import org.ossreviewtoolkit.scanner.ScannerMatcher
-import org.ossreviewtoolkit.scanner.ScannerMatcherConfig
 import org.ossreviewtoolkit.scanner.ScannerWrapperFactory
 import org.ossreviewtoolkit.utils.common.CommandLineTool
 import org.ossreviewtoolkit.utils.common.Os
 import org.ossreviewtoolkit.utils.common.ProcessCapture
+import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.safeDeleteRecursively
 import org.ossreviewtoolkit.utils.common.withoutPrefix
 import org.ossreviewtoolkit.utils.ort.createOrtTempDir
 
-import org.semver4j.RangesList
-import org.semver4j.RangesListFactory
 import org.semver4j.Semver
+import org.semver4j.range.RangeList
+import org.semver4j.range.RangeListFactory
 
 object ScanCodeCommand : CommandLineTool {
-    override fun command(workingDir: File?) =
-        listOfNotNull(workingDir, if (Os.isWindows) "scancode.bat" else "scancode").joinToString(File.separator)
+    override fun command(workingDir: File?): String {
+        val executable = if (Os.isWindows) {
+            // Installing ScanCode as a developer from the distribution archive provides a "scancode.bat", while
+            // installing as a user via pip provides a "scancode.exe".
+            Os.getPathFromEnvironment("scancode.bat")?.name ?: "scancode.exe"
+        } else {
+            "scancode"
+        }
 
-    override fun getVersionRequirement(): RangesList = RangesListFactory.create(">=30.0.0")
+        return listOfNotNull(workingDir, executable).joinToString(File.separator)
+    }
+
+    override fun getVersionRequirement(): RangeList = RangeListFactory.create(">=30.0.0")
 
     override fun transformVersion(output: String): String =
         output.lineSequence().firstNotNullOfOrNull { line ->
@@ -71,8 +79,6 @@ class ScanCode(
     private val config: ScanCodeConfig
 ) : LocalPathScannerWrapper() {
     companion object {
-        const val SCANNER_NAME = "ScanCode"
-
         private const val LICENSE_REFERENCES_OPTION_VERSION = "32.0.0"
         private const val OUTPUT_FORMAT_OPTION = "--json"
     }
@@ -82,13 +88,7 @@ class ScanCode(
     internal fun getCommandLineOptions(version: String) =
         buildList {
             addAll(config.commandLine)
-            config.commandLineNonConfig?.let { addAll(it) }
-
-            if ("--processes" !in config.commandLineNonConfig.orEmpty()) {
-                val maxProcesses = max(1, Runtime.getRuntime().availableProcessors() - 1)
-                add("--processes")
-                add(maxProcesses.toString())
-            }
+            addAll(config.commandLineNonConfig)
 
             if (Semver(version).isGreaterThanOrEqualTo(LICENSE_REFERENCES_OPTION_VERSION)) {
                 // Required to be able to map ScanCode license keys to SPDX IDs.
@@ -106,32 +106,31 @@ class ScanCode(
         }.joinToString(" ")
     }
 
-    override val matcher by lazy {
-        ScannerMatcher.create(
-            details,
-            ScannerMatcherConfig(
-                config.regScannerName,
-                config.minVersion,
-                config.maxVersion,
-                config.configuration
-            )
-        )
-    }
+    override val matcher by lazy { ScannerMatcher.create(details, config) }
 
-    override val version by lazy { ScanCodeCommand.getVersion() }
+    override val version by lazy {
+        require(ScanCodeCommand.isInPath()) {
+            "The '${ScanCodeCommand.command()}' command is not available in the PATH environment."
+        }
+
+        ScanCodeCommand.getVersion()
+    }
 
     override val readFromStorage = config.readFromStorage
     override val writeToStorage = config.writeToStorage
 
     override fun runScanner(path: File, context: ScanContext): String {
-        val resultFile = createOrtTempDir().resolve("result.json")
+        val resultFile = createOrtTempDir() / "result.json"
         val process = runScanCode(path, resultFile)
 
         return with(process) {
+            if (stderr.isNotBlank()) logger.debug { stderr }
+
             // Do not throw yet if the process exited with an error as some errors might turn out to be tolerable during
             // parsing.
             if (isError && stdout.isNotBlank()) logger.debug { stdout }
-            if (stderr.isNotBlank()) logger.debug { stderr }
+
+            if (!resultFile.isFile) throw ScanException(errorMessage)
 
             resultFile.readText().also { resultFile.parentFile.safeDeleteRecursively() }
         }

@@ -24,6 +24,7 @@ package org.ossreviewtoolkit.plugins.reporters.aosd
 import io.ks3.standard.sortedSetSerializer
 
 import java.io.File
+import java.net.URL
 
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
@@ -107,7 +108,7 @@ internal data class AOSD21(
         fun validate(): Component =
             apply {
                 require(id >= 0L) {
-                    "A component's ID must not be negative."
+                    "A component's ID must not be negative, but it is $id."
                 }
 
                 require(componentName.isNotEmpty()) {
@@ -115,19 +116,22 @@ internal data class AOSD21(
                 }
 
                 require(componentVersion.length in 1..50) {
-                    "A component's version length must be in range 1..50."
+                    "A component's version length must be in range 1..50, but '$componentVersion' has a length of " +
+                        "${componentVersion.length}."
                 }
 
                 require(scmUrl.length >= 5) {
-                    "The SCM or homepage URL must have a length of at least 5."
+                    "The SCM or homepage URL must have a length of at least 5, but '$scmUrl' has a length of " +
+                        "${scmUrl.length}."
                 }
 
                 require(subcomponents.isNotEmpty()) {
                     "A component must have at least one subcomponent."
                 }
 
-                require(subcomponents.first().subcomponentName == FIRST_SUBCOMPONENT_NAME) {
-                    "The first subcomponent must be named 'main'."
+                val firstSubcomponentName = subcomponents.first().subcomponentName
+                require(firstSubcomponentName == FIRST_SUBCOMPONENT_NAME) {
+                    "The first subcomponent must be named 'main', but is it named '$firstSubcomponentName'."
                 }
             }
     }
@@ -183,7 +187,8 @@ internal data class AOSD21(
                 }
 
                 require(licenseText.length >= 20) {
-                    "A subcomponent's license text must have a length of at least 20."
+                    "A subcomponent's license text must have a length of at least 20, but '$licenseText' has a " +
+                        "length of ${licenseText.length}."
                 }
 
                 require(selectedLicense.isEmpty() || spdxId.toSpdx().isValidChoice(selectedLicense.toSpdx())) {
@@ -201,4 +206,4 @@ private object SortedComponentSetSerializer : KSerializer<Set<AOSD21.Component>>
 
 internal fun File.writeReport(model: AOSD21): File = apply { outputStream().use { JSON.encodeToStream(model, it) } }
 
-internal fun File.readAosd21Report(): AOSD21 = inputStream().use { JSON.decodeFromStream<AOSD21>(it) }
+internal fun URL.readAosd21Report(): AOSD21 = openStream().use { JSON.decodeFromStream<AOSD21>(it) }

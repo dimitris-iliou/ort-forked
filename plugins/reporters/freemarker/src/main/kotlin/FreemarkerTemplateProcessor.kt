@@ -52,6 +52,7 @@ import org.ossreviewtoolkit.model.vulnerabilities.Vulnerability
 import org.ossreviewtoolkit.model.vulnerabilities.VulnerabilityReference
 import org.ossreviewtoolkit.reporter.Reporter
 import org.ossreviewtoolkit.reporter.ReporterInput
+import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.expandTilde
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
 import org.ossreviewtoolkit.utils.spdx.SpdxLicenseChoice
@@ -115,7 +116,7 @@ class FreemarkerTemplateProcessor(
         val reportFileResults = mutableListOf<Result<File>>()
 
         templateIds.mapTo(reportFileResults) { id ->
-            val outputFile = outputDir.resolve("$filePrefix$id$fileExtensionWithDot")
+            val outputFile = outputDir / "$filePrefix$id$fileExtensionWithDot"
 
             logger.info { "Generating file '$outputFile' using template id '$id'." }
 
@@ -129,7 +130,7 @@ class FreemarkerTemplateProcessor(
         }
 
         templateFiles.mapTo(reportFileResults) { file ->
-            val outputFile = outputDir.resolve("$filePrefix${file.nameWithoutExtension}$fileExtensionWithDot")
+            val outputFile = outputDir / "$filePrefix${file.nameWithoutExtension}$fileExtensionWithDot"
 
             logger.info { "Generating file '$outputFile' using template file '${file.absolutePath}'." }
 
@@ -161,6 +162,12 @@ class FreemarkerTemplateProcessor(
         val excluded: Boolean by lazy { input.ortResult.isExcluded(id) }
 
         /**
+         * The labels for the package.
+         */
+        @Suppress("unused") // This function is used in the templates.
+        val labels: Map<String, String> by lazy { input.ortResult.getPackage(id)?.metadata?.labels.orEmpty() }
+
+        /**
          * The resolved license information for the package.
          */
         val license: ResolvedLicenseInfo by lazy {
@@ -188,7 +195,7 @@ class FreemarkerTemplateProcessor(
          * license files. This is useful when the raw texts of the license files are included in the generated output
          * file and all licenses not contained in those files shall be listed separately.
          */
-        @Suppress("UNUSED") // This function is used in the templates.
+        @Suppress("unused") // This function is used in the templates.
         @JvmOverloads
         fun licensesNotInLicenseFiles(
             resolvedLicenses: List<ResolvedLicense> = license.licenses
@@ -206,7 +213,7 @@ class FreemarkerTemplateProcessor(
         /**
          * Return only those [packages] that are a dependency of at least one of the provided [projects][projectIds].
          */
-        @Suppress("UNUSED") // This function is used in the templates.
+        @Suppress("unused") // This function is used in the templates.
         fun filterByProjects(
             packages: Collection<PackageModel>,
             projectIds: Collection<Identifier>
@@ -221,7 +228,7 @@ class FreemarkerTemplateProcessor(
          * Return only those [licenses] that are classified under the given [category], or that are not categorized at
          * all.
          */
-        @Suppress("UNUSED") // This function is used in the templates.
+        @Suppress("unused") // This function is used in the templates.
         fun filterForCategory(licenses: Collection<ResolvedLicense>, category: String): List<ResolvedLicense> =
             licenses.filter { resolvedLicense ->
                 input.licenseClassifications[resolvedLicense.license]?.contains(category) != false
@@ -277,7 +284,7 @@ class FreemarkerTemplateProcessor(
          * than the [threshold], or `false` otherwise.
          */
         @JvmOverloads
-        @Suppress("UNUSED") // This function is used in the templates.
+        @Suppress("unused") // This function is used in the templates.
         fun hasUnresolvedIssues(threshold: Severity = input.ortConfig.severeIssueThreshold) =
             input.ortResult.getOpenIssues(minSeverity = threshold).isNotEmpty()
 
@@ -285,12 +292,12 @@ class FreemarkerTemplateProcessor(
          * If there are any issue caused by reaching the snippets limit, return the text of the issue. Otherwise return
          * the empty string.
          */
-        @Suppress("UNUSED") // This function is used in the templates.
+        @Suppress("unused") // This function is used in the templates.
         fun getSnippetsLimitIssue() =
             input.ortResult.scanner?.scanResults?.flatMap { result ->
                 result.summary.issues
             }?.firstOrNull {
-                it.message.contains("snippets limit")
+                "snippets limit" in it.message
             }?.message.orEmpty()
 
         /**
@@ -298,7 +305,7 @@ class FreemarkerTemplateProcessor(
          * greater than the [threshold], or `false` otherwise.
          */
         @JvmOverloads
-        @Suppress("UNUSED") // This function is used in the templates.
+        @Suppress("unused") // This function is used in the templates.
         fun hasUnresolvedRuleViolations(threshold: Severity = input.ortConfig.severeRuleViolationThreshold) =
             input.ortResult.getRuleViolations(omitResolved = true, minSeverity = threshold).any { violation ->
                 violation.pkg?.let { input.ortResult.isExcluded(it) } == true
@@ -307,21 +314,21 @@ class FreemarkerTemplateProcessor(
         /**
          * Return a list of [RuleViolation]s for which no [RuleViolationResolution] is provided.
          */
-        @Suppress("UNUSED") // This function is used in the templates.
+        @Suppress("unused") // This function is used in the templates.
         fun filterForUnresolvedRuleViolations(ruleViolation: List<RuleViolation>): List<RuleViolation> =
             ruleViolation.filterNot { input.ortResult.isResolved(it) }
 
         /**
          * Return a list of [Vulnerability]s for which no [VulnerabilityResolution] is provided.
          */
-        @Suppress("UNUSED") // This function is used in the templates.
+        @Suppress("unused") // This function is used in the templates.
         fun filterForUnresolvedVulnerabilities(vulnerabilities: List<Vulnerability>): List<Vulnerability> =
             vulnerabilities.filterNot { input.ortResult.isResolved(it) }
 
         /**
          * Return a list of [SnippetFinding]s grouped by the source file being matched by those snippets.
          */
-        @Suppress("UNUSED") // This function is used in the templates.
+        @Suppress("unused") // This function is used in the templates.
         fun groupSnippetsByFile(snippetFindings: Collection<SnippetFinding>): Map<String, List<SnippetFinding>> =
             snippetFindings.groupBy { it.sourceLocation.path }
 
@@ -329,21 +336,14 @@ class FreemarkerTemplateProcessor(
          * Return a list of [SnippetFinding]s grouped by the source file location ( line ranges) being matched by those
          * snippets.
          */
-        @Suppress("UNUSED") // This function is used in the templates.
+        @Suppress("unused") // This function is used in the templates.
         fun groupSnippetsBySourceLines(snippetFindings: Collection<SnippetFinding>): Map<TextLocation, SnippetFinding> =
             snippetFindings.associateBy { it.sourceLocation }
 
         /**
-         * Return a flag if the given [sourceLocation] refers to the full source file.
-         */
-        @Suppress("UNUSED") // This function is used in the templates.
-        fun isFullFileLocation(sourceLocation: TextLocation) =
-            sourceLocation.startLine == TextLocation.UNKNOWN_LINE && sourceLocation.endLine == TextLocation.UNKNOWN_LINE
-
-        /**
          * Collect all the licenses present in a collection of [SnippetFinding]s.
          */
-        @Suppress("UNUSED") // This function is used in the templates.
+        @Suppress("unused") // This function is used in the templates.
         fun collectLicenses(snippetsFindings: Collection<SnippetFinding>): Set<String> =
             snippetsFindings.flatMap { findings -> findings.snippets }.map { snippet -> snippet.license.toString() }
                 .toSet()
@@ -397,6 +397,12 @@ class FreemarkerTemplateProcessor(
         fun getPackage(id: Identifier): Package =
             input.ortResult.getPackage(id)?.metadata
                 ?: Package.EMPTY.also { logger.warn { "Could not resolve package '${id.toCoordinates()}'." } }
+
+        /**
+         * Return an [Identifier] constructed from the given [identifier] string.
+         */
+        @Suppress("unused") // This function is used in the templates.
+        fun identifierFromString(identifier: String) = Identifier(identifier)
     }
 }
 
@@ -428,7 +434,7 @@ private fun createDataModel(input: ReporterInput): Map<String, Any> {
         "projects" to projects,
         "packages" to packages,
         "ortResult" to input.ortResult,
-        "licenseTextProvider" to input.licenseTextProvider,
+        "licenseFactProvider" to input.licenseFactProvider,
         "LicenseView" to LicenseView,
         "helper" to FreemarkerTemplateProcessor.TemplateHelper(input),
         "statistics" to input.statistics,

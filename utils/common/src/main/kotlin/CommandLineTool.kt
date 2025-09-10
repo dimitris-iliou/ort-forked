@@ -23,9 +23,9 @@ import java.io.File
 
 import org.apache.logging.log4j.kotlin.logger
 
-import org.semver4j.RangesList
-import org.semver4j.RangesListFactory
 import org.semver4j.Semver
+import org.semver4j.range.RangeList
+import org.semver4j.range.RangeListFactory
 
 /**
  * An interface to implement by classes that are backed by a command line tool.
@@ -35,7 +35,7 @@ interface CommandLineTool {
         /**
          * A convenience property to require any version.
          */
-        val ANY_VERSION: RangesList = RangesListFactory.create("*")
+        val ANY_VERSION: RangeList = RangeListFactory.create("*")
     }
 
     /**
@@ -85,7 +85,11 @@ interface CommandLineTool {
      * Get the version of the command by parsing its output.
      */
     fun getVersion(workingDir: File? = null): String {
-        val version = run(workingDir, *getVersionArguments().splitOnWhitespace().toTypedArray()).requireSuccess()
+        val version = run(
+            *getVersionArguments().splitOnWhitespace().toTypedArray(),
+            workingDir = workingDir,
+            environment = mapOf("NO_COLOR" to "1")
+        ).requireSuccess()
 
         // Some tools actually report the version to stderr, so try that as a fallback.
         val versionString = sequenceOf(version.stdout, version.stderr).map {

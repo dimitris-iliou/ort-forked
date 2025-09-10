@@ -23,6 +23,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 
 import org.ossreviewtoolkit.analyzer.analyze
+import org.ossreviewtoolkit.analyzer.getAnalyzerResult
 import org.ossreviewtoolkit.model.config.PackageManagerConfiguration
 import org.ossreviewtoolkit.model.toYaml
 import org.ossreviewtoolkit.plugins.versioncontrolsystems.git.GitCommand
@@ -31,41 +32,41 @@ import org.ossreviewtoolkit.utils.test.matchExpectedResult
 import org.ossreviewtoolkit.utils.test.patchActualResult
 
 class SbtFunTest : StringSpec({
-    "Dependencies of the external 'sbt-multi-project-example' multi-project should be detected correctly" {
-        val definitionFile = getAssetFile("projects/external/sbt-multi-project-example/build.sbt")
-        val expectedResultFile = getAssetFile("projects/external/sbt-multi-project-example-expected-output.yml")
+    "Dependencies of the external 'multi-project' should be detected correctly" {
+        val definitionFile = getAssetFile("projects/external/multi-project/build.sbt")
+        val expectedResultFile = getAssetFile("projects/external/multi-project-expected-output.yml")
         val expectedResult = matchExpectedResult(expectedResultFile, definitionFile)
 
         // Clean any previously generated POM files / target directories.
         GitCommand.run(definitionFile.parentFile, "clean", "-fd").requireSuccess()
 
-        val ortResult = analyze(
+        val result = analyze(
             definitionFile.parentFile,
             packageManagers = setOf(SbtFactory()),
             packageManagerConfiguration = mapOf(
                 "SBT" to PackageManagerConfiguration(options = mapOf("javaVersion" to "11"))
             )
-        )
+        ).getAnalyzerResult()
 
-        patchActualResult(ortResult.toYaml(), patchStartAndEndTime = true) shouldBe expectedResult
+        result.toYaml() shouldBe expectedResult
     }
 
     "Dependencies of the synthetic 'http4s-template' project should be detected correctly" {
-        val definitionFile = getAssetFile("projects/synthetic/sbt-http4s-template/build.sbt")
-        val expectedResultFile = getAssetFile("projects/synthetic/sbt-http4s-template-expected-output.yml")
+        val definitionFile = getAssetFile("projects/synthetic/http4s-template/build.sbt")
+        val expectedResultFile = getAssetFile("projects/synthetic/http4s-template-expected-output.yml")
         val expectedResult = matchExpectedResult(expectedResultFile, definitionFile)
 
         // Clean any previously generated POM files / target directories.
         GitCommand.run(definitionFile.parentFile, "clean", "-fd").requireSuccess()
 
-        val ortResult = analyze(
+        val result = analyze(
             definitionFile.parentFile,
             packageManagers = setOf(SbtFactory()),
             packageManagerConfiguration = mapOf(
                 "SBT" to PackageManagerConfiguration(options = mapOf("javaVersion" to "11"))
             )
-        )
+        ).getAnalyzerResult()
 
-        patchActualResult(ortResult.toYaml(), patchStartAndEndTime = true) shouldBe expectedResult
+        patchActualResult(result.toYaml()) shouldBe expectedResult
     }
 })

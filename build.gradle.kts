@@ -17,7 +17,7 @@
  * License-Filename: LICENSE
  */
 
-import com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask
+import git.semver.plugin.gradle.PrintTask
 
 import org.eclipse.jgit.ignore.FastIgnoreRule
 
@@ -29,7 +29,6 @@ plugins {
     // Apply third-party plugins.
     alias(libs.plugins.gitSemver)
     alias(libs.plugins.ideaExt)
-    alias(libs.plugins.versions)
 }
 
 semver {
@@ -73,21 +72,6 @@ extensions.findByName("develocity")?.withGroovyBuilder {
     }
 }
 
-tasks.named<DependencyUpdatesTask>("dependencyUpdates") {
-    gradleReleaseChannel = "current"
-    outputFormatter = "json"
-
-    val nonFinalQualifiers = listOf(
-        "alpha", "b", "beta", "cr", "dev", "ea", "eap", "m", "milestone", "pr", "preview", "rc", "\\d{14}"
-    ).joinToString("|", "(", ")")
-
-    val nonFinalQualifiersRegex = Regex(".*[.-]$nonFinalQualifiers[.\\d-+]*", RegexOption.IGNORE_CASE)
-
-    rejectVersionIf {
-        candidate.version.matches(nonFinalQualifiersRegex)
-    }
-}
-
 // Gradle's "dependencies" task selector only executes on a single / the current project [1]. However, sometimes viewing
 // all dependencies at once is beneficial, e.g. for debugging version conflict resolution.
 // [1]: https://docs.gradle.org/current/userguide/viewing_debugging_dependencies.html#sec:listing_dependencies
@@ -103,6 +87,15 @@ tasks.register("allDependencies") {
         b.mustRunAfter(a)
     }
 }
+
+open class OrtPrintTask : PrintTask({ "" }, "Prints the current project version") {
+    private val projectVersion = project.version.toString()
+
+    @TaskAction
+    fun printVersion() = println(projectVersion)
+}
+
+tasks.replace("printVersion", OrtPrintTask::class.java)
 
 val checkCopyrightsInNoticeFile by tasks.registering {
     val gitFilesProvider = providers.of(GitFilesValueSource::class) { parameters { workingDir = rootDir } }

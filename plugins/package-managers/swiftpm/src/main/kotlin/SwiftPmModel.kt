@@ -21,13 +21,17 @@ package org.ossreviewtoolkit.plugins.packagemanagers.swiftpm
 
 import java.io.File
 import java.io.IOException
+import java.lang.invoke.MethodHandles
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.decodeFromStream
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+
+import org.apache.logging.log4j.kotlin.loggerOf
 
 private val json = Json { ignoreUnknownKeys = true }
 
@@ -55,12 +59,9 @@ internal data class PinV2(
     val kind: Kind
 ) {
     enum class Kind {
-        @SerialName("localSourceControl")
-        LOCAL_SOURCE_CONTROL,
-        @SerialName("registry")
-        REGISTRY,
-        @SerialName("remoteSourceControl")
-        REMOTE_SOURCE_CONTROL
+        @SerialName("localSourceControl") LOCAL_SOURCE_CONTROL,
+        @SerialName("registry") REGISTRY,
+        @SerialName("remoteSourceControl") REMOTE_SOURCE_CONTROL
     }
 }
 
@@ -84,6 +85,20 @@ private data class PinV1(
     val state: PinState?,
     @SerialName("repositoryURL") val repositoryUrl: String
 )
+
+/**
+ * See https://github.com/swiftlang/swift-package-manager/blob/cdb56746f0658b79aebb4b198e6cd7defe18a3c1/Sources/PackageRegistry/RegistryConfiguration.swift#L403
+ */
+@Serializable
+internal data class SwiftPackageRegistryConfiguration(
+    val version: Int,
+    val registries: Map<String, Registry> = emptyMap() // Map contains the mapping SCOPE <-> Registry
+) {
+    @Serializable
+    data class Registry(
+        val url: String
+    )
+}
 
 internal fun parseLockfile(packageResolvedFile: File): Result<Set<PinV2>> =
     runCatching {
@@ -128,3 +143,16 @@ private fun PinV1.toPinV2(projectDir: File): PinV2 =
             PinV2.Kind.REMOTE_SOURCE_CONTROL
         }
     )
+
+private val logger = loggerOf(MethodHandles.lookup().lookupClass())
+
+internal fun readSwiftPackageRegistryConfiguration(registriesFile: File): SwiftPackageRegistryConfiguration? =
+    if (!registriesFile.isFile) {
+        null
+    } else {
+        runCatching {
+            registriesFile.inputStream().use { json.decodeFromStream<SwiftPackageRegistryConfiguration>(it) }
+        }.onFailure {
+            logger.error(it) { "Failed to read SwiftPackageRegistryConfiguration from '$registriesFile'." }
+        }.getOrNull()
+    }

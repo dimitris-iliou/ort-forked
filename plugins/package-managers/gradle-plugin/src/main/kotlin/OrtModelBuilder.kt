@@ -31,6 +31,7 @@ import org.gradle.api.artifacts.component.ComponentIdentifier
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import org.gradle.api.artifacts.component.ProjectComponentSelector
+import org.gradle.api.artifacts.repositories.UrlArtifactRepository
 import org.gradle.api.artifacts.result.DependencyResult
 import org.gradle.api.artifacts.result.ResolvedArtifactResult
 import org.gradle.api.artifacts.result.ResolvedComponentResult
@@ -48,7 +49,7 @@ import org.gradle.tooling.provider.model.ToolingModelBuilder
 import org.gradle.util.GradleVersion
 
 internal class OrtModelBuilder : ToolingModelBuilder {
-    private val repositories = mutableMapOf<String, String?>()
+    private val repositories = mutableMapOf<String, UrlArtifactRepository>()
 
     private val platformCategories = setOf("platform", "enforced-platform")
 
@@ -98,7 +99,7 @@ internal class OrtModelBuilder : ToolingModelBuilder {
             name = project.name,
             version = project.version.toString().takeUnless { it == "unspecified" }.orEmpty(),
             configurations = ortConfigurations,
-            repositories = repositories.values.filterNotNull(),
+            repositories = repositories.values.map { it.toOrtRepository() },
             errors = errors,
             warnings = warnings
         )
@@ -186,10 +187,10 @@ internal class OrtModelBuilder : ToolingModelBuilder {
                                     if (it == "26c913274550a0b2221f47a0fe2d2358") "MavenRepo" else it
                                 }.getOrNull()
 
-                                repositories[repositoryId]?.let { repositoryUrl ->
+                                repositories[repositoryId]?.let { repository ->
                                     // Note: Only Maven-style layout is supported for now.
                                     buildString {
-                                        append(repositoryUrl.removeSuffix("/"))
+                                        append(repository.url.toString().removeSuffix("/"))
                                         append('/')
                                         append(id.group.replace('.', '/'))
                                         append('/')
@@ -209,7 +210,7 @@ internal class OrtModelBuilder : ToolingModelBuilder {
 
                             val modelBuildingResult = poms[id.toString()]
                             if (modelBuildingResult == null) {
-                                val message = "No POM found for $id."
+                                val message = "No POM found for component '$id'."
                                 logger.warn(message)
                                 warnings += message
                             }
@@ -225,6 +226,7 @@ internal class OrtModelBuilder : ToolingModelBuilder {
                                 version = id.version,
                                 classifier = "",
                                 extension = modelBuildingResult?.effectiveModel?.packaging.orEmpty(),
+                                variants = selectedComponent.variants.mapTo(mutableSetOf()) { it.displayName },
                                 dependencies = dependencies,
                                 error = null,
                                 warning = null,
@@ -254,6 +256,7 @@ internal class OrtModelBuilder : ToolingModelBuilder {
                                 version = moduleId.version.takeUnless { it == "unspecified" }.orEmpty(),
                                 classifier = "",
                                 extension = "",
+                                variants = selectedComponent.variants.mapTo(mutableSetOf()) { it.displayName },
                                 dependencies = dependencies,
                                 error = null,
                                 warning = null,

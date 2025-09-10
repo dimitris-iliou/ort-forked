@@ -23,13 +23,17 @@ import org.ossreviewtoolkit.model.CopyrightFinding
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.LicenseSource
 import org.ossreviewtoolkit.model.Provenance
+import org.ossreviewtoolkit.model.RepositoryProvenance
 import org.ossreviewtoolkit.model.config.CopyrightGarbage
+import org.ossreviewtoolkit.model.config.LicenseFilePatterns
 import org.ossreviewtoolkit.model.config.PathExclude
+import org.ossreviewtoolkit.model.utils.PathLicenseMatcher
 import org.ossreviewtoolkit.utils.ort.CopyrightStatementsProcessor
 import org.ossreviewtoolkit.utils.spdx.SpdxExpression
 import org.ossreviewtoolkit.utils.spdx.SpdxLicenseChoice
+import org.ossreviewtoolkit.utils.spdx.SpdxOperator
 import org.ossreviewtoolkit.utils.spdx.SpdxSingleLicenseExpression
-import org.ossreviewtoolkit.utils.spdx.andOrNull
+import org.ossreviewtoolkit.utils.spdx.toExpression
 
 /**
  * Resolved license information about a package (or project).
@@ -65,13 +69,50 @@ data class ResolvedLicenseInfo(
     operator fun get(license: SpdxSingleLicenseExpression): ResolvedLicense? = find { it.license == license }
 
     /**
-     * Map all original resolved license expressions to a single compound expression with top-level AND-operators, or
-     * return null if there are no licenses.
+     * Map all original resolved license expressions to a single expression with top-level [operator]s, or return null
+     * if there are no licenses.
      */
-    fun toCompoundExpression(): SpdxExpression? =
+    fun toExpression(operator: SpdxOperator = SpdxOperator.AND): SpdxExpression? =
         licenses.flatMapTo(mutableSetOf()) { resolvedLicense ->
             resolvedLicense.originalExpressions.map { it.expression }
-        }.andOrNull()
+        }.toExpression(operator)
+
+    /**
+     * Return the main license of a package (or project) as an [SpdxExpression], or null if there is no main license.
+     * The main license is the conjunction of the declared license of the package (or project) and the licenses detected
+     * in any of the configured [LicenseFilePatterns] matched against the root path of the package (or project).
+     */
+    fun mainLicense(): SpdxExpression? {
+        val matcher = PathLicenseMatcher(LicenseFilePatterns.getInstance())
+        val licensePaths = flatMap { resolvedLicense ->
+            resolvedLicense.locations.map { it.location.path }
+        }
+
+        val applicablePathsCache = mutableMapOf<String, Map<String, Set<String>>>()
+        val detectedLicenses = filterTo(mutableSetOf()) { resolvedLicense ->
+            resolvedLicense.locations.any {
+                val rootPath = (it.provenance as? RepositoryProvenance)?.vcsInfo?.path.orEmpty()
+
+                val applicableLicensePaths = applicablePathsCache.getOrPut(rootPath) {
+                    matcher.getApplicableLicenseFilesForDirectories(
+                        licensePaths,
+                        listOf(rootPath)
+                    )
+                }
+
+                val applicableLicenseFiles = applicableLicensePaths[rootPath].orEmpty()
+
+                it.location.path in applicableLicenseFiles
+            }
+        }
+
+        val declaredLicenses = filter(LicenseView.ONLY_DECLARED)
+        val mainLicenses = (detectedLicenses + declaredLicenses.licenses)
+            .flatMap { it.originalExpressions }
+            .map { it.expression }
+
+        return mainLicenses.toExpression()
+    }
 
     /**
      * Return the effective [SpdxExpression] of this [ResolvedLicenseInfo] based on their [licenses] filtered by the
@@ -82,14 +123,14 @@ data class ResolvedLicenseInfo(
     fun effectiveLicense(licenseView: LicenseView, vararg licenseChoices: List<SpdxLicenseChoice>): SpdxExpression? {
         val resolvedLicenseInfo = filter(licenseView, filterSources = true)
 
-        val resolvedLicenses = resolvedLicenseInfo.toCompoundExpression()
+        val resolvedLicenses = resolvedLicenseInfo.toExpression()
 
         val choices = licenseChoices.asList().flatten()
 
         return if (choices.isEmpty()) {
             resolvedLicenses
         } else {
-            resolvedLicenses?.applyChoices(choices)?.validChoices()?.reduceOrNull(SpdxExpression::or)
+            resolvedLicenses?.applyChoices(choices)?.validChoices()?.toExpression(SpdxOperator.OR)
         }
     }
 

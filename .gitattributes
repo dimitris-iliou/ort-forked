@@ -9,11 +9,12 @@ gradlew	text eol=lf
 *.bat	text eol=crlf
 
 # Use Unix line endings for expected test results for consistency across platforms.
-**/src/*/assets/**/*expected*.txt		text eol=lf
 **/src/*/assets/**/*expected*.yml		text eol=lf
+**/src/*/resources/**/*expected*.txt		text eol=lf
+**/src/*/resources/**/*expected*.yml		text eol=lf
 
 # Use Unix line endings for scan results which are misused for also testing the calculation of the SPDX package verification code.
-scanner/src/test/assets/*.json				text eol=lf
+scanner/src/test/resources/*.json			text eol=lf
 
 # Use Unix line endings for SPDX license texts for consistency across platforms.
 utils/spdx/src/main/resources/exceptions/*	text eol=lf
@@ -26,4 +27,4 @@ utils/spdx/src/main/resources/licenserefs/*		linguist-detectable=false
 utils/spdx/src/main/resources/licenses/*		linguist-detectable=false
 
 # Use Unix line endings for the expected control file of a Debian package.
-utils/common/src/funTest/assets/control-expected.txt	text eol=lf
+utils/common/src/funTest/resources/control-expected.txt	text eol=lf

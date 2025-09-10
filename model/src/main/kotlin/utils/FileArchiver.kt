@@ -25,10 +25,13 @@ import kotlin.time.measureTime
 import kotlin.time.measureTimedValue
 
 import org.apache.logging.log4j.kotlin.logger
+import org.apache.tika.Tika
+import org.apache.tika.mime.MimeTypes
 
 import org.ossreviewtoolkit.model.KnownProvenance
 import org.ossreviewtoolkit.utils.common.FileMatcher
 import org.ossreviewtoolkit.utils.common.collectMessages
+import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.packZip
 import org.ossreviewtoolkit.utils.common.safeDeleteRecursively
 import org.ossreviewtoolkit.utils.common.unpackZip
@@ -52,7 +55,7 @@ class FileArchiver(
     private val storage: ProvenanceFileStorage
 ) {
     companion object {
-        val DEFAULT_ARCHIVE_DIR by lazy { ortDataDirectory.resolve("scanner/archive") }
+        val DEFAULT_ARCHIVE_DIR by lazy { ortDataDirectory / "scanner" / "archive" }
     }
 
     private val matcher = FileMatcher(
@@ -72,20 +75,27 @@ class FileArchiver(
         logger.info { "Archiving files matching ${matcher.patterns} from '$directory'..." }
 
         val zipFile = createOrtTempFile(suffix = ".zip")
+        val tika = Tika()
 
         val zipDuration = measureTime {
             directory.packZip(zipFile, overwrite = true) { file ->
                 val relativePath = file.relativeTo(directory).invariantSeparatorsPath
 
-                matcher.matches(relativePath).also { result ->
+                if (!matcher.matches(relativePath)) {
                     logger.debug {
-                        if (result) {
-                            "Adding '$relativePath' to archive."
-                        } else {
-                            "Not adding '$relativePath' to archive."
-                        }
+                        "Not adding '$relativePath' to archive because it does not match the configured patterns."
                     }
+
+                    return@packZip false
                 }
+
+                if (tika.detect(file) != MimeTypes.PLAIN_TEXT) {
+                    logger.info { "Not adding file '$relativePath' to archive because it is not a text file." }
+                    return@packZip false
+                }
+
+                logger.debug { "Adding '$relativePath' to archive." }
+                true
             }
         }
 

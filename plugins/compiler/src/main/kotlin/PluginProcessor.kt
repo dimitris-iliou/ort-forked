@@ -67,10 +67,10 @@ class PluginProcessor(codeGenerator: CodeGenerator) : SymbolProcessor {
             val pluginFactoryClass = resolver.getPluginFactoryClass(pluginAnnotation)
             checkExtendsPluginFactory(pluginFactoryClass)
 
-            val pluginParentClass = getPluginParentClass(pluginFactoryClass)
-            checkExtendsPluginClass(pluginClass, pluginParentClass)
+            val pluginBaseClass = getPluginBaseClass(pluginFactoryClass)
+            checkExtendsPluginClass(pluginClass, pluginBaseClass)
 
-            val pluginSpec = specFactory.create(pluginAnnotation, pluginClass, pluginParentClass, pluginFactoryClass)
+            val pluginSpec = specFactory.create(pluginAnnotation, pluginClass, pluginBaseClass, pluginFactoryClass)
             serviceLoaderSpecs += factoryGenerator.generate(pluginSpec)
             jsonGenerator.generate(pluginSpec)
         }
@@ -104,25 +104,25 @@ class PluginProcessor(codeGenerator: CodeGenerator) : SymbolProcessor {
     /**
      * Get the declaration of the plugin class created by [factoryClass].
      */
-    private fun getPluginParentClass(factoryClass: KSClassDeclaration): KSClassDeclaration {
-        val parentClass = factoryClass
+    private fun getPluginBaseClass(factoryClass: KSClassDeclaration): KSClassDeclaration {
+        val baseClass = factoryClass
             .getAllFunctions()
             .single { it.simpleName.asString() == "create" }
             .returnType
             ?.resolve()
             ?.declaration
 
-        checkNotNull(parentClass)
+        checkNotNull(baseClass)
 
-        require(parentClass is KSClassDeclaration) {
-            "Plugin class $parentClass is not a class."
+        require(baseClass is KSClassDeclaration) {
+            "Plugin class $baseClass is not a class."
         }
 
-        return parentClass
+        return baseClass
     }
 
     /**
-     * Ensure that [factoryClass] extends [PluginFactory].
+     * Ensure that [factoryClass] extends [org.ossreviewtoolkit.plugins.api.PluginFactory].
      */
     private fun checkExtendsPluginFactory(factoryClass: KSClassDeclaration) =
         require(

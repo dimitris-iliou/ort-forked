@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
           fetch-depth: 0
       - name: Check Commit Messages
@@ -27,23 +27,23 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@94baf225fe0a508e581a564467443d0e2379123b # v4
+      uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
     - name: Check copyrights, license headers, and .gitattributes
       run: ./gradlew checkCopyrightsInNoticeFile checkLicenseHeaders checkGitAttributes
   completions:
     runs-on: ubuntu-24.04
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
     - name: Setup Java
-      uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4
+      uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5
       with:
         distribution: temurin
         java-version: 21
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@94baf225fe0a508e581a564467443d0e2379123b # v4
+      uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
     - name: Generate completions
       run: |
         ./scripts/generate_completion_scripts.sh
@@ -64,13 +64,13 @@ jobs:
       security-events: write
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@94baf225fe0a508e581a564467443d0e2379123b # v4
+      uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
     - name: Check for Detekt Issues
       run: ./gradlew detektAll
     - name: Upload SARIF File
-      uses: github/codeql-action/upload-sarif@5f8171a638ada777af81d42b55959a643bb29017 # v3
+      uses: github/codeql-action/upload-sarif@d3678e237b9c32a6c9bffb3315c335f976f3549f # v3
       if: always() # Upload even if the previous step failed.
       with:
         sarif_file: build/reports/detekt/merged.sarif
@@ -78,24 +78,40 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
     - name: Check Links
-      uses: umbrelladocs/action-linkspector@49cf4f8da82db70e691bb8284053add5028fa244 # v1
+      uses: umbrelladocs/action-linkspector@874d01cae9fd488e3077b08952093235bd626977 # v1
       with:
-        fail_on_error: true
+        fail_level: error
   markdownlint:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
           fetch-depth: 0
       - name: Setup Node
-        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
       - name: Check for Markdown issues
         run: |
           npm install -g markdownlint-rule-max-one-sentence-per-line@0.0.2
           npx markdownlint-cli2
+  prettier-website:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+        working-directory: website
+      - name: Run Prettier
+        run: npm run format:check
+        working-directory: website
   qodana-scan:
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-24.04
@@ -104,23 +120,23 @@ jobs:
       security-events: write
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       with:
         fetch-depth: 0
     - name: Qodana Scan
-      uses: JetBrains/qodana-action@b60a4b9259f448dd00f2ca4763db5677d69ba868 # v2024.3.4
+      uses: JetBrains/qodana-action@27de2a744479d1d731934eeaf79287575ebc5dd3 # v2025.2.1
       with:
         post-pr-comment: false
         use-caches: false
     - name: Upload Code Scanning Results
-      uses: github/codeql-action/upload-sarif@5f8171a638ada777af81d42b55959a643bb29017 # v3
+      uses: github/codeql-action/upload-sarif@d3678e237b9c32a6c9bffb3315c335f976f3549f # v3
       with:
         sarif_file: ${{ runner.temp }}/qodana/results/qodana.sarif.json
   reuse-tool:
     runs-on: ubuntu-24.04
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
     - name: Check REUSE Compliance
       run: |
         pipx install reuse

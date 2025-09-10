@@ -47,6 +47,13 @@ import org.ossreviewtoolkit.utils.spdx.toSpdx
 
 @DelicateCoroutinesApi
 class ResolvedLicenseInfoTest : WordSpec({
+    "mainLicense()" should {
+        "return declared and detected licenses, but no concluded license" {
+            RESOLVED_LICENSE_INFO.mainLicense() shouldBe
+                "($APACHE OR $MIT) AND ($MIT OR $GPL) AND ($BSD OR $GPL)".toSpdx()
+        }
+    }
+
     "effectiveLicense()" should {
         "apply choices for LicenseView.ALL on all resolved licenses" {
             // All: (Apache-2.0 WITH LLVM-exception OR MIT) AND (MIT OR GPL-2.0-only) AND (0BSD OR GPL-2.0-only)
@@ -145,18 +152,18 @@ class ResolvedLicenseInfoTest : WordSpec({
         }
     }
 
-    "toCompoundExpression()" should {
+    "toExpression()" should {
         "execute in reasonable time for large license info with several OR operators".config(
             blockingTest = true,
             timeout = 2.seconds
         ) {
             runCancellable {
-                COMPUTATION_HEAVY_RESOLVED_LICENSE_INFO.toCompoundExpression()
+                COMPUTATION_HEAVY_RESOLVED_LICENSE_INFO.toExpression()
             }
         }
     }
 
-    "applyChoices(licenseChoices)" should {
+    "applyChoices()" should {
         "apply license choices on all licenses" {
             val choices = listOf(
                 SpdxLicenseChoice("$APACHE OR $MIT".toSpdx(), MIT.toSpdx()),
@@ -193,7 +200,15 @@ private val RESOLVED_LICENSE_INFO: ResolvedLicenseInfo by lazy {
                 ResolvedOriginalExpression("$APACHE OR $MIT".toSpdx(), LicenseSource.DECLARED),
                 ResolvedOriginalExpression("$MIT OR $GPL".toSpdx(), LicenseSource.DETECTED)
             ),
-            locations = emptySet()
+            locations = setOf(
+                ResolvedLicenseLocation(
+                    provenance = UnknownProvenance,
+                    location = TextLocation("LICENSE", TextLocation.UNKNOWN_LINE),
+                    appliedCuration = null,
+                    matchingPathExcludes = emptyList(),
+                    copyrights = emptySet()
+                )
+            )
         ),
         ResolvedLicense(
             license = GPL.toSpdx() as SpdxSingleLicenseExpression,
@@ -202,7 +217,15 @@ private val RESOLVED_LICENSE_INFO: ResolvedLicenseInfo by lazy {
                 ResolvedOriginalExpression("$MIT OR $GPL".toSpdx(), LicenseSource.DETECTED),
                 ResolvedOriginalExpression("$BSD OR $GPL".toSpdx(), LicenseSource.CONCLUDED)
             ),
-            locations = emptySet()
+            locations = setOf(
+                ResolvedLicenseLocation(
+                    provenance = UnknownProvenance,
+                    location = TextLocation("LICENCE", TextLocation.UNKNOWN_LINE),
+                    appliedCuration = null,
+                    matchingPathExcludes = emptyList(),
+                    copyrights = emptySet()
+                )
+            )
         ),
         ResolvedLicense(
             license = BSD.toSpdx() as SpdxSingleLicenseExpression,

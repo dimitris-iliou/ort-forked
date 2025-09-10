@@ -19,6 +19,8 @@
 
 package org.ossreviewtoolkit.model
 
+import com.fasterxml.jackson.annotation.JsonIgnore
+
 import java.io.File
 
 import kotlin.math.abs
@@ -65,6 +67,16 @@ data class TextLocation(
      */
     constructor(path: String, line: Int) : this(path, line, line)
 
+    /**
+     * Indicate whether this TextLocation has known start and end lines.
+     */
+    @JsonIgnore
+    val hasLineRange = startLine != UNKNOWN_LINE && endLine != UNKNOWN_LINE
+
+    /**
+     * Return a negative integer, zero, or a positive integer as this TextLocation comes before, is the same, or comes
+     * after the [other] TextLocation.
+     */
     override fun compareTo(other: TextLocation) = COMPARATOR.compare(this, other)
 
     /**

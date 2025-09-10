@@ -19,9 +19,7 @@
 
 package org.ossreviewtoolkit.analyzer
 
-import io.kotest.inspectors.forAll
 import io.kotest.matchers.collections.shouldBeSingleton
-import io.kotest.matchers.collections.shouldHaveAtLeastSize
 import io.kotest.matchers.nulls.shouldNotBeNull
 
 import java.io.File
@@ -38,6 +36,7 @@ import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
 import org.ossreviewtoolkit.model.config.PackageManagerConfiguration
+import org.ossreviewtoolkit.model.config.RepositoryConfiguration
 import org.ossreviewtoolkit.model.config.ScopeExclude
 import org.ossreviewtoolkit.model.config.ScopeExcludeReason
 import org.ossreviewtoolkit.plugins.api.PluginConfig
@@ -53,8 +52,11 @@ fun PackageManager.resolveSingleProject(
     val analyzerConfig = AnalyzerConfiguration(allowDynamicVersions = allowDynamicVersions)
 
     beforeResolution(USER_DIR, definitionFiles, analyzerConfig)
+
     val excludes = Excludes(scopes = excludedScopes.map { ScopeExclude(it, ScopeExcludeReason.TEST_DEPENDENCY_OF) })
     val managerResult = resolveDependencies(USER_DIR, definitionFiles, excludes, analyzerConfig, emptyMap())
+
+    afterResolution(USER_DIR, definitionFiles)
 
     val resultList = managerResult.projectResults[definitionFile]
     resultList.shouldNotBeNull()
@@ -64,37 +66,7 @@ fun PackageManager.resolveSingleProject(
         if (resolveScopes) managerResult.resolveScopes(it) else it
     }
 
-    afterResolution(USER_DIR, definitionFiles)
-
     return result
-}
-
-/**
- * Resolve the dependencies of all [definitionFiles] which should create at least one project. All created projects will
- * be collated in an [AnalyzerResult] with their dependency graph.
- */
-fun PackageManager.collateMultipleProjects(
-    vararg definitionFiles: File,
-    excludedScopes: Collection<String> = emptySet(),
-    allowDynamicVersions: Boolean = false
-): AnalyzerResult {
-    val excludes = Excludes(scopes = excludedScopes.map { ScopeExclude(it, ScopeExcludeReason.TEST_DEPENDENCY_OF) })
-    val analyzerConfig = AnalyzerConfiguration(allowDynamicVersions = allowDynamicVersions)
-    val managerResult = resolveDependencies(USER_DIR, definitionFiles.asList(), excludes, analyzerConfig, emptyMap())
-
-    val builder = AnalyzerResultBuilder()
-    managerResult.dependencyGraph?.also {
-        builder.addDependencyGraph(descriptor.id, it).addPackages(managerResult.sharedPackages)
-    }
-
-    definitionFiles.forAll { definitionFile ->
-        managerResult.projectResults[definitionFile] shouldNotBeNull {
-            this shouldHaveAtLeastSize 1
-            forEach { builder.addResult(it) }
-        }
-    }
-
-    return builder.build()
 }
 
 /**
@@ -143,19 +115,33 @@ fun ProjectAnalyzerResult.withInvariantIssues() =
 fun analyze(
     projectDir: File,
     allowDynamicVersions: Boolean = false,
+    excludedScopes: Collection<String> = emptySet(),
+    skipExcluded: Boolean = false,
     packageManagers: Collection<PackageManagerFactory> = PackageManagerFactory.ALL.values,
     packageManagerConfiguration: Map<String, PackageManagerConfiguration>? = null
 ): OrtResult {
     val config = AnalyzerConfiguration(
         allowDynamicVersions,
         enabledPackageManagers = packageManagers.map { it.descriptor.id },
-        packageManagers = packageManagerConfiguration
+        packageManagers = packageManagerConfiguration,
+        skipExcluded = skipExcluded
     )
+
+    val repositoryConfig = RepositoryConfiguration(
+        excludes = Excludes(
+            scopes = excludedScopes.map {
+                ScopeExclude(it, ScopeExcludeReason.TEST_DEPENDENCY_OF)
+            }
+        )
+    )
+
     val analyzer = Analyzer(config)
-    val managedFiles = analyzer.findManagedFiles(projectDir, packageManagers)
+    val managedFiles = analyzer.findManagedFiles(projectDir, packageManagers, repositoryConfig)
 
     return analyzer.analyze(managedFiles).withResolvedScopes()
 }
+
+fun OrtResult.getAnalyzerResult(): AnalyzerResult = checkNotNull(analyzer).result
 
 fun create(managerName: String, pluginConfig: PluginConfig) =
     PackageManagerFactory.ALL.getValue(managerName).create(pluginConfig)

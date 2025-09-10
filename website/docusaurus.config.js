@@ -1,7 +1,7 @@
 // @ts-check
 // Note: type annotations allow type checking and IDEs autocompletion
 
-const {themes} = require('prism-react-renderer');
+const { themes } = require('prism-react-renderer');
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.dracula;
 
@@ -145,7 +145,8 @@ const config = {
             ],
           },
         ],
-        copyright: `Copyright © ${new Date().getFullYear()} The ORT Project Authors. Built with Docusaurus.`,
+        copyright: `Copyright © ${new Date().getFullYear()} <a href="https://github.com/oss-review-toolkit/ort/graphs/contributors">The ORT Project Authors</a>.
+                    Built with <a href="https://docusaurus.io">Docusaurus</a>.`,
       },
       prism: {
         theme: lightCodeTheme,

@@ -27,13 +27,15 @@ import org.ossreviewtoolkit.utils.common.getDuplicates
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants.REF_PREFIX
 import org.ossreviewtoolkit.utils.spdx.SpdxLicense
 
+const val SPDX_VERSION_2_2 = "SPDX-2.2"
+const val SPDX_VERSION_2_3 = "SPDX-2.3"
+
 private const val SPDX_ID = "${REF_PREFIX}DOCUMENT"
-private const val SPDX_VERSION_MAJOR_MINOR = "SPDX-2.2"
 
 private val DATA_LICENSE = SpdxLicense.CC0_1_0.id
 
 /**
- * An SPDX document as specified by https://spdx.github.io/spdx-spec/v2.2.2/.
+ * An SPDX document as specified by https://spdx.github.io/spdx-spec/v2.3/.
  */
 data class SpdxDocument(
     /**
@@ -48,7 +50,7 @@ data class SpdxDocument(
     /**
      * The SPDX version of this document, must equal [SPDX_VERSION_MAJOR_MINOR].
      */
-    val spdxVersion: String = SPDX_VERSION_MAJOR_MINOR,
+    val spdxVersion: String = SPDX_VERSION_2_3,
 
     /**
      * Information about the creation of this document.
@@ -133,43 +135,48 @@ data class SpdxDocument(
     val relationships: List<SpdxRelationship> = emptyList()
 ) {
     init {
-        require(spdxId.isNotBlank()) { "The SPDX-ID must not be blank." }
-
-        require(spdxVersion.isNotBlank()) { "The SPDX version must not be blank." }
-
-        require(name.isNotBlank()) { "The document name for SPDX-ID '$spdxId' must not be blank." }
-
-        require(dataLicense.isNotBlank()) { "The data license must not be blank." }
-
-        require(packages.isNotEmpty()) { "At least one package must be listed in packages" }
-
-        val duplicateExternalDocumentRefs = externalDocumentRefs.getDuplicates { it.externalDocumentId }
-        require(duplicateExternalDocumentRefs.isEmpty()) {
-            "The document must not contain duplicate external document references but has " +
-                "${duplicateExternalDocumentRefs.keys}."
-        }
-
-        require(documentNamespace.isNotBlank()) { "The document namespace must not be blank." }
-
-        val duplicatePackages = packages.getDuplicates { it.spdxId }
-        require(duplicatePackages.isEmpty()) {
-            "The document must not contain duplicate packages but has ${duplicatePackages.keys}."
-        }
-
-        val duplicateFiles = files.getDuplicates { it.spdxId }
-        require(duplicateFiles.isEmpty()) {
-            "The document must not contain duplicate files but has ${duplicateFiles.keys}."
-        }
-
-        val duplicateSnippets = snippets.getDuplicates { it.spdxId }
-        require(duplicateSnippets.isEmpty()) {
-            "The document must not contain duplicate snippets but has ${duplicateSnippets.keys}."
-        }
-
-        val hasDescribesRelationship = relationships.any { it.relationshipType == SpdxRelationship.Type.DESCRIBES }
-        require(hasDescribesRelationship || documentDescribes.isNotEmpty()) {
-            "The document must either have at least one relationship of type 'DESCRIBES' or contain the " +
-                "'documentDescribes' field."
-        }
+        validate()
     }
+
+    fun validate(): SpdxDocument =
+        apply {
+            require(spdxId.isNotBlank()) { "The SPDX-ID must not be blank." }
+
+            require(spdxVersion.isNotBlank()) { "The SPDX version must not be blank." }
+
+            require(name.isNotBlank()) { "The document name for SPDX-ID '$spdxId' must not be blank." }
+
+            require(dataLicense.isNotBlank()) { "The data license must not be blank." }
+
+            require(packages.isNotEmpty()) { "At least one package must be listed in packages" }
+
+            val duplicateExternalDocumentRefs = externalDocumentRefs.getDuplicates { it.externalDocumentId }
+            require(duplicateExternalDocumentRefs.isEmpty()) {
+                "The document must not contain duplicate external document references but has " +
+                    "${duplicateExternalDocumentRefs.keys}."
+            }
+
+            require(documentNamespace.isNotBlank()) { "The document namespace must not be blank." }
+
+            val duplicatePackages = packages.getDuplicates { it.spdxId }
+            require(duplicatePackages.isEmpty()) {
+                "The document must not contain duplicate packages but has ${duplicatePackages.keys}."
+            }
+
+            val duplicateFiles = files.getDuplicates { it.spdxId }
+            require(duplicateFiles.isEmpty()) {
+                "The document must not contain duplicate files but has ${duplicateFiles.keys}."
+            }
+
+            val duplicateSnippets = snippets.getDuplicates { it.spdxId }
+            require(duplicateSnippets.isEmpty()) {
+                "The document must not contain duplicate snippets but has ${duplicateSnippets.keys}."
+            }
+
+            val hasDescribesRelationship = relationships.any { it.relationshipType == SpdxRelationship.Type.DESCRIBES }
+            require(hasDescribesRelationship || documentDescribes.isNotEmpty()) {
+                "The document must either have at least one relationship of type 'DESCRIBES' or contain the " +
+                    "'documentDescribes' field."
+            }
+        }
 }

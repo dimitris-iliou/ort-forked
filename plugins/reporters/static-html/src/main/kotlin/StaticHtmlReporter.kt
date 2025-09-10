@@ -51,11 +51,10 @@ import org.ossreviewtoolkit.reporter.Reporter
 import org.ossreviewtoolkit.reporter.ReporterFactory
 import org.ossreviewtoolkit.reporter.ReporterInput
 import org.ossreviewtoolkit.utils.common.isValidUri
-import org.ossreviewtoolkit.utils.common.joinNonBlank
 import org.ossreviewtoolkit.utils.common.normalizeLineBreaks
 import org.ossreviewtoolkit.utils.common.titlecase
-import org.ossreviewtoolkit.utils.ort.Environment
 import org.ossreviewtoolkit.utils.ort.ORT_FULL_NAME
+import org.ossreviewtoolkit.utils.ort.ORT_VERSION
 import org.ossreviewtoolkit.utils.spdx.SpdxCompoundExpression
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
 import org.ossreviewtoolkit.utils.spdx.SpdxExpression
@@ -67,7 +66,7 @@ private const val RULE_VIOLATION_TABLE_ID = "rule-violation-summary"
 @Suppress("LargeClass", "TooManyFunctions")
 @OrtPlugin(
     id = "StaticHTML",
-    displayName = "Static HTML Reporter",
+    displayName = "Static HTML",
     description = "Generates a static HTML report.",
     factory = ReporterFactory::class
 )
@@ -139,7 +138,7 @@ class StaticHtmlReporter(override val descriptor: PluginDescriptor = StaticHtmlR
                             +ORT_FULL_NAME
                         }
 
-                        +", version ${Environment.ORT_VERSION} on ${Instant.now()}."
+                        +", version $ORT_VERSION on ${Instant.now()}."
                     }
 
                     h2 { +"Project" }
@@ -742,6 +741,9 @@ private fun ResolvedLicenseLocation.permalink(id: Identifier): String? {
 private val PathExclude.description: String get() = joinNonBlank(reason.toString(), comment)
 
 private val ScopeExclude.description: String get() = joinNonBlank(reason.toString(), comment)
+
+private fun joinNonBlank(vararg strings: String, separator: String = " - ") =
+    strings.filter { it.isNotBlank() }.joinToString(separator)
 
 private fun IssueTable.title(): String =
     "${type.name.titlecase()} Issue Summary ($errorCount errors, $warningCount warnings, $hintCount hints to resolve)"

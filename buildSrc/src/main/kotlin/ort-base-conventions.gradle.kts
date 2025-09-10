@@ -17,11 +17,6 @@
  * License-Filename: LICENSE
  */
 
-plugins {
-    // Apply third-party plugins.
-    id("org.gradlex.reproducible-builds")
-}
-
 repositories {
     mavenCentral()
 
@@ -58,7 +53,7 @@ repositories {
 
     exclusiveContent {
         forRepository {
-            maven("https://sig-repo.synopsys.com/bds-bdio-release")
+            maven("https://repo.blackduck.com/bds-bdio-release")
         }
 
         filter {

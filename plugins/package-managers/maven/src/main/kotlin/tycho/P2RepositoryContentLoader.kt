@@ -133,16 +133,16 @@ internal class P2RepositoryContentLoader : AutoCloseable {
          * Parse the given [file] with information about the artifacts contained in a P2 repository. Return a [Map]
          * that assigns the bundle identifiers of the artifacts to their hashes.
          */
-        private fun parseArtifactsFile(file: File): Map<String, Hash> {
+        private fun parseArtifactsFile(file: File): Map<P2Identifier, Hash> {
             val handler = ElementHandler(ParseArtifactsState())
-                .handleElement("artifact") { state, attributes ->
+                .handleElement("artifact") { state, attributes, _ ->
                     state.withCurrentArtifactId(
-                        bundleIdentifier(
-                            attributes.getValue("id"),
-                            attributes.getValue("version")
-                        ).takeIf { attributes.getValue("classifier") == "osgi.bundle" }
+                        P2Identifier(
+                            bundleId = bundleIdentifier(attributes.getValue("id"), attributes.getValue("version")),
+                            classifier = attributes.getValue("classifier")
+                        )
                     )
-                }.handleElement("property") { state, attributes ->
+                }.handleElement("property") { state, attributes, _ ->
                     state.withProperty(attributes.getValue("name"), attributes.getValue("value"))
                 }
 
@@ -161,7 +161,7 @@ internal class P2RepositoryContentLoader : AutoCloseable {
             logger.info { "Parsing composite artifacts information for repository '$baseUrl'." }
 
             val handler = ElementHandler(ParseCompositeArtifactsState(URI.create("$baseUrl/compositeArtifacts.xml")))
-                .handleElement("child") { state, attributes ->
+                .handleElement("child") { state, attributes, _ ->
                     state.withChildRepository(attributes.getValue("location"))
                 }
 
@@ -268,6 +268,18 @@ internal class P2RepositoryContentLoader : AutoCloseable {
 }
 
 /**
+ * A data class to represent a unique identifier for an artifact downloaded from a P2 repository. It consists of an
+ * actual identifier for the artifact plus a classifier which determines the artifact type.
+ */
+internal data class P2Identifier(
+    /** The identifier for this artifact (which also includes the version). */
+    val bundleId: String,
+
+    /** The classifier for this artifact. */
+    val classifier: String = "osgi.bundle"
+)
+
+/**
  * A data class storing information about a P2 repository including the artifacts it contains.
  */
 internal data class P2RepositoryContent(
@@ -278,7 +290,7 @@ internal data class P2RepositoryContent(
      * A map with the artifacts contained in this repository. The keys are the bundle identifiers of the artifacts, the
      * values are their hashes.
      */
-    val artifacts: Map<String, Hash>,
+    val artifacts: Map<P2Identifier, Hash>,
 
     /** A set with the URLs of child repositories that are referenced from this repository. */
     val childRepositories: Set<String>
@@ -289,26 +301,30 @@ internal data class P2RepositoryContent(
  * repository.
  */
 private data class ParseArtifactsState(
-    /** The ID of the artifact whose properties are currently processed. */
-    val currentArtifactId: String? = null,
+    /** The properties of the current artifact. */
+    val currentProperties: MutableMap<String, String> = mutableMapOf(),
 
     /** A [Map] with the aggregated properties of all encountered artifacts. */
-    val properties: MutableMap<String, MutableMap<String, String>> = mutableMapOf()
+    val properties: MutableMap<P2Identifier, Map<String, String>> = mutableMapOf()
 ) {
     /**
      * Return an updated [ParseArtifactsState] instance that has the given [artifactId] set as current artifact.
      */
-    fun withCurrentArtifactId(artifactId: String?) = copy(currentArtifactId = artifactId)
+    fun withCurrentArtifactId(artifactId: P2Identifier?): ParseArtifactsState {
+        artifactId?.also { id ->
+            properties[id] = HashMap(currentProperties)
+        }
+
+        currentProperties.clear()
+        return this
+    }
 
     /**
      * Return an updated [ParseArtifactsState] instance that stores the property defined by the given [key] and [value]
      * for the current artifact.
      */
     fun withProperty(key: String, value: String): ParseArtifactsState {
-        if (currentArtifactId == null) return this
-
-        val artifactProperties = properties.getOrPut(currentArtifactId) { mutableMapOf() }
-        artifactProperties[key] = value
+        currentProperties[key] = value
 
         return this
     }

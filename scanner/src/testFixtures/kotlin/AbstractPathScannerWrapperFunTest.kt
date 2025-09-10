@@ -32,6 +32,8 @@ import java.io.File
 
 import org.ossreviewtoolkit.model.LicenseFinding
 import org.ossreviewtoolkit.model.PackageType
+import org.ossreviewtoolkit.utils.common.div
+import org.ossreviewtoolkit.utils.test.readResource
 
 abstract class AbstractPathScannerWrapperFunTest(testTags: Set<Tag> = emptySet()) : StringSpec() {
     // This is loosely based on the patterns from
@@ -49,7 +51,7 @@ abstract class AbstractPathScannerWrapperFunTest(testTags: Set<Tag> = emptySet()
         inputDir = tempdir()
 
         // Create variants of the Apache-2.0 license text in a temporary directory, so we have something to operate on.
-        val licenseText = javaClass.getResource("/LICENSE").readText()
+        val licenseText = readResource("/LICENSE")
         commonlyDetectedFiles.forEach {
             inputDir.resolve(it).writeText(licenseText.replace("license", it))
         }
@@ -57,12 +59,12 @@ abstract class AbstractPathScannerWrapperFunTest(testTags: Set<Tag> = emptySet()
 
     init {
         "Scanning a single file succeeds".config(tags = testTags) {
-            val result = scanner.scanPath(inputDir.resolve("LICENSE"), scanContext)
+            val result = scanner.scanPath(inputDir / "LICENSE", scanContext)
             val findings = result.licenseFindings.map { it.copy(location = it.location.withRelativePath(inputDir)) }
 
             findings shouldContainExactlyInAnyOrder expectedFileLicenses
             findings.forAll {
-                inputDir.resolve(it.location.path) shouldBe aFile()
+                inputDir / it.location.path shouldBe aFile()
             }
         }
 
@@ -72,7 +74,7 @@ abstract class AbstractPathScannerWrapperFunTest(testTags: Set<Tag> = emptySet()
 
             findings shouldContainExactlyInAnyOrder expectedDirectoryLicenses
             findings.forAll {
-                inputDir.resolve(it.location.path) shouldBe aFile()
+                inputDir / it.location.path shouldBe aFile()
             }
         }
     }

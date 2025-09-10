@@ -29,7 +29,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.ossreviewtoolkit.clients.fossid.EntityResponseBody
 import org.ossreviewtoolkit.clients.fossid.FossIdRestService
 import org.ossreviewtoolkit.clients.fossid.FossIdServiceWithVersion
-import org.ossreviewtoolkit.clients.fossid.MapResponseBody
+import org.ossreviewtoolkit.clients.fossid.PolymorphicData
+import org.ossreviewtoolkit.clients.fossid.PolymorphicDataResponseBody
 import org.ossreviewtoolkit.clients.fossid.PolymorphicInt
 import org.ossreviewtoolkit.clients.fossid.PolymorphicList
 import org.ossreviewtoolkit.clients.fossid.PolymorphicResponseBody
@@ -38,6 +39,7 @@ import org.ossreviewtoolkit.clients.fossid.createIgnoreRule
 import org.ossreviewtoolkit.clients.fossid.createScan
 import org.ossreviewtoolkit.clients.fossid.deleteScan
 import org.ossreviewtoolkit.clients.fossid.downloadFromGit
+import org.ossreviewtoolkit.clients.fossid.extractArchives
 import org.ossreviewtoolkit.clients.fossid.getProject
 import org.ossreviewtoolkit.clients.fossid.listIdentifiedFiles
 import org.ossreviewtoolkit.clients.fossid.listIgnoreRules
@@ -47,6 +49,7 @@ import org.ossreviewtoolkit.clients.fossid.listMatchedLines
 import org.ossreviewtoolkit.clients.fossid.listPendingFiles
 import org.ossreviewtoolkit.clients.fossid.listScansForProject
 import org.ossreviewtoolkit.clients.fossid.listSnippets
+import org.ossreviewtoolkit.clients.fossid.model.CreateScanResponse
 import org.ossreviewtoolkit.clients.fossid.model.Scan
 import org.ossreviewtoolkit.clients.fossid.model.identification.common.LicenseMatchType
 import org.ossreviewtoolkit.clients.fossid.model.identification.identifiedFiles.IdentifiedFile
@@ -65,6 +68,8 @@ import org.ossreviewtoolkit.clients.fossid.model.rules.RuleType
 import org.ossreviewtoolkit.clients.fossid.model.status.DownloadStatus
 import org.ossreviewtoolkit.clients.fossid.model.status.ScanStatus
 import org.ossreviewtoolkit.clients.fossid.model.status.UnversionedScanDescription
+import org.ossreviewtoolkit.clients.fossid.removeUploadedContent
+import org.ossreviewtoolkit.clients.fossid.uploadFile
 import org.ossreviewtoolkit.downloader.VersionControlSystem
 import org.ossreviewtoolkit.model.ArtifactProvenance
 import org.ossreviewtoolkit.model.Hash
@@ -81,6 +86,8 @@ import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.Excludes
 import org.ossreviewtoolkit.model.config.SnippetChoices
 import org.ossreviewtoolkit.plugins.api.Secret
+import org.ossreviewtoolkit.plugins.scanners.fossid.events.CloneRepositoryHandler
+import org.ossreviewtoolkit.plugins.scanners.fossid.events.UploadArchiveHandler
 import org.ossreviewtoolkit.scanner.ScanContext
 import org.ossreviewtoolkit.scanner.provenance.NestedProvenance
 import org.ossreviewtoolkit.utils.spdx.SpdxExpression
@@ -123,7 +130,8 @@ internal fun createConfig(
     deltaScans: Boolean = true,
     deltaScanLimit: Int = Int.MAX_VALUE,
     fetchSnippetMatchedLines: Boolean = false,
-    snippetsLimit: Int = Int.MAX_VALUE
+    snippetsLimit: Int = Int.MAX_VALUE,
+    isArchiveMode: Boolean = false
 ): FossIdConfig {
     val config = FossIdConfig(
         serverUrl = "https://www.example.org/fossid",
@@ -142,7 +150,11 @@ internal fun createConfig(
         snippetsLimit = snippetsLimit,
         sensitivity = 10,
         urlMappings = null,
-        writeToStorage = false
+        writeToStorage = false,
+        logRequests = false,
+        isArchiveMode = isArchiveMode,
+        treatPendingIdentificationsAsError = false,
+        deleteUploadedArchiveAfterScan = true
     )
 
     val namingProvider = createNamingProviderMock()
@@ -208,14 +220,15 @@ private fun createScanDescription(state: ScanStatus): UnversionedScanDescription
 }
 
 /**
- * Create a mock [Scan] with the given properties.
+ * Create a mock [Scan] as if created by the [CloneRepositoryHandler] with the given properties.
  */
 internal fun createScan(
     url: String,
     revision: String,
     scanCode: String,
     scanId: Int = SCAN_ID,
-    comment: String = "master"
+    comment: String = "master",
+    legacyComment: Boolean = false
 ): Scan {
     val scan = mockk<Scan>()
     every { scan.gitRepoUrl } returns url
@@ -223,7 +236,33 @@ internal fun createScan(
     every { scan.code } returns scanCode
     every { scan.id } returns scanId
     every { scan.isArchived } returns null
-    every { scan.comment } returns comment
+    if (legacyComment) {
+        every { scan.comment } returns comment
+    } else {
+        every { scan.comment } returns createOrtScanComment(url, revision, comment).asJsonString()
+    }
+
+    return scan
+}
+
+/**
+ * Create a mock [Scan] as if created by the [UploadArchiveHandler] with the given properties.
+ */
+internal fun createScanWithUploadedContent(
+    url: String,
+    revision: String,
+    scanCode: String,
+    scanId: Int = SCAN_ID,
+    comment: String = "master"
+): Scan {
+    val scan = mockk<Scan>()
+    every { scan.gitRepoUrl } returns null
+    every { scan.gitBranch } returns null
+    every { scan.code } returns scanCode
+    every { scan.id } returns scanId
+    every { scan.isArchived } returns null
+    every { scan.comment } returns createOrtScanComment(url, revision, comment).asJsonString()
+
     return scan
 }
 
@@ -466,7 +505,7 @@ internal fun FossIdServiceWithVersion.expectProjectRequest(
     error: String? = null
 ): FossIdServiceWithVersion {
     coEvery { getProject(USER, API_KEY, projectCode) } returns
-        EntityResponseBody(status = status, error = error, data = mockk())
+        EntityResponseBody(status = status, error = error, data = PolymorphicData(mockk()))
     return this
 }
 
@@ -508,6 +547,26 @@ internal fun FossIdServiceWithVersion.expectListIgnoreRules(
 }
 
 /**
+ * Prepare this service mock to return the list of [rules] for the given [scanCode].
+ */
+internal fun FossIdServiceWithVersion.expectCreateIgnoreRule(
+    scanCode: String,
+    type: RuleType,
+    value: String,
+    scope: RuleScope = RuleScope.SCAN,
+    error: Boolean = false
+): FossIdServiceWithVersion {
+    if (error) {
+        coEvery { createIgnoreRule(USER, API_KEY, scanCode, type, value, scope) } returns
+            EntityResponseBody("create ignore rules", error = "Rule already exists.")
+    } else {
+        coEvery { createIgnoreRule(USER, API_KEY, scanCode, type, value, scope) } returns EntityResponseBody()
+    }
+
+    return this
+}
+
+/**
  * Prepare this service mock to expect a request to create an 'ignore rule' for the given [scanCode], [ruleType],
  * [value] and [scope].
  */
@@ -524,6 +583,38 @@ internal fun FossIdServiceWithVersion.expectCreateIgnoreRule(
 }
 
 /**
+ * Prepare this service mock to expect a request to remove uploaded content for the given [scanCode].
+ */
+internal fun FossIdServiceWithVersion.expectRemoveUploadedContent(scanCode: String): FossIdServiceWithVersion {
+    coEvery {
+        removeUploadedContent(USER, API_KEY, scanCode)
+    } returns EntityResponseBody(status = 1)
+    return this
+}
+
+/**
+ * Prepare this service mock to expect a request to upload a file for the given [scanCode]. The file nane is not
+ * required as the FossID scanner generates a unique name for each file.
+ */
+internal fun FossIdServiceWithVersion.expectUploadFile(scanCode: String): FossIdServiceWithVersion {
+    coEvery {
+        uploadFile(USER, API_KEY, scanCode, any())
+    } returns EntityResponseBody()
+    return this
+}
+
+/**
+ * Prepare this service mock to expect a request to extract archives for the given [scanCode]. The file nane is not
+ * required as the FossID scanner generates a unique name for each file.
+ */
+internal fun FossIdServiceWithVersion.expectExtractArchives(scanCode: String): FossIdServiceWithVersion {
+    coEvery {
+        extractArchives(USER, API_KEY, scanCode, any())
+    } returns EntityResponseBody(data = true)
+    return this
+}
+
+/**
  * Prepare this service mock to expect a download trigger for the given [scanCode] and later on to report that the
  * download has finished.
  */
@@ -531,23 +622,38 @@ internal fun FossIdServiceWithVersion.expectDownload(scanCode: String): FossIdSe
     coEvery { downloadFromGit(USER, API_KEY, scanCode) } returns
         EntityResponseBody(status = 1)
     coEvery { checkDownloadStatus(USER, API_KEY, scanCode) } returns
-        EntityResponseBody(status = 1, data = DownloadStatus.FINISHED)
+        EntityResponseBody(status = 1, data = PolymorphicData(DownloadStatus.FINISHED))
     return this
 }
 
 /**
  * Prepare this service mock to expect a request to create a scan for the given [projectCode], [scanCode], and
- * [vcsInfo].
+ * [vcsInfo] and [projectRevision]. With the [isArchiveMode] flag, scans can be mocked as if created by the
+ * [UploadArchiveHandler].
  */
 internal fun FossIdServiceWithVersion.expectCreateScan(
     projectCode: String,
     scanCode: String,
     vcsInfo: VcsInfo,
-    comment: String = "master"
+    projectRevision: String = "master",
+    isArchiveMode: Boolean = false
 ): FossIdServiceWithVersion {
-    coEvery {
-        createScan(USER, API_KEY, projectCode, scanCode, vcsInfo.url, vcsInfo.revision, comment)
-    } returns MapResponseBody(status = 1, data = mapOf("scan_id" to SCAN_ID.toString()))
+    val comment = createOrtScanComment(vcsInfo.url, vcsInfo.revision, projectRevision).asJsonString()
+
+    if (isArchiveMode) {
+        coEvery {
+            createScan(USER, API_KEY, projectCode, scanCode, null, null, comment)
+        } returns PolymorphicDataResponseBody(
+            status = 1, data = PolymorphicData(CreateScanResponse(SCAN_ID.toString()))
+        )
+    } else {
+        coEvery {
+            createScan(USER, API_KEY, projectCode, scanCode, vcsInfo.url, vcsInfo.revision, comment)
+        } returns PolymorphicDataResponseBody(
+            status = 1, data = PolymorphicData(CreateScanResponse(SCAN_ID.toString()))
+        )
+    }
+
     return this
 }
 
@@ -597,7 +703,7 @@ internal fun FossIdServiceWithVersion.mockFiles(
         PolymorphicResponseBody(status = 1, data = PolymorphicList(snippets))
     if (matchedLinesFlag) {
         coEvery { listMatchedLines(USER, API_KEY, scanCode, any(), any()) } returns
-            EntityResponseBody(status = 1, data = matchedLines)
+            EntityResponseBody(status = 1, data = PolymorphicData(matchedLines))
     }
 
     return this

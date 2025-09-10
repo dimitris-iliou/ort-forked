@@ -53,16 +53,14 @@ import org.ossreviewtoolkit.plugins.commands.api.OrtCommandFactory
 import org.ossreviewtoolkit.utils.common.EnvironmentVariableFilter
 import org.ossreviewtoolkit.utils.common.MaskedString
 import org.ossreviewtoolkit.utils.common.Os
+import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.expandTilde
 import org.ossreviewtoolkit.utils.common.mebibytes
 import org.ossreviewtoolkit.utils.common.replaceCredentialsInUri
 import org.ossreviewtoolkit.utils.ort.Environment
-import org.ossreviewtoolkit.utils.ort.ORT_CONFIG_DIR_ENV_NAME
 import org.ossreviewtoolkit.utils.ort.ORT_CONFIG_FILENAME
-import org.ossreviewtoolkit.utils.ort.ORT_DATA_DIR_ENV_NAME
 import org.ossreviewtoolkit.utils.ort.ORT_NAME
 import org.ossreviewtoolkit.utils.ort.ortConfigDirectory
-import org.ossreviewtoolkit.utils.ort.ortDataDirectory
 import org.ossreviewtoolkit.utils.ort.printStackTrace
 
 import org.slf4j.LoggerFactory
@@ -93,7 +91,7 @@ class OrtMain : CliktCommand(ORT_NAME) {
     private val configFile by option("--config", "-c", help = "The path to a configuration file.")
         .convert { it.expandTilde() }
         .file(mustExist = true, canBeFile = true, canBeDir = false, mustBeWritable = false, mustBeReadable = true)
-        .default(ortConfigDirectory.resolve(ORT_CONFIG_FILENAME))
+        .default(ortConfigDirectory / ORT_CONFIG_FILENAME)
 
     private val logLevel by option(help = "Set the verbosity level of log output.").switch(
         "--error" to Level.ERROR,
@@ -207,11 +205,7 @@ class OrtMain : CliktCommand(ORT_NAME) {
             row {
                 val content = mutableListOf("Environment variables:")
 
-                listOf(
-                    ORT_CONFIG_DIR_ENV_NAME to ortConfigDirectory.path,
-                    ORT_DATA_DIR_ENV_NAME to ortDataDirectory.path,
-                    *env.variables.toList().toTypedArray()
-                ).mapTo(content) { (key, value) ->
+                env.variables.mapTo(content) { (key, value) ->
                     val safeValue = value.replaceCredentialsInUri(MaskedString.DEFAULT_MASK)
                     "${Theme.Default.info(key)} = ${Theme.Default.warning(safeValue)}"
                 }

@@ -41,7 +41,7 @@ fun TextLocation.prependPath(prefix: String): TextLocation =
 /**
  * Return the VCS path if this is a [RepositoryProvenance] or else an empty string.
  */
-val Provenance.vcsPath: String
+val Provenance?.vcsPath: String
     get() = (this as? RepositoryProvenance)?.vcsInfo?.path.orEmpty()
 
 /**
@@ -53,7 +53,7 @@ fun ProvenanceResolutionResult.getKnownProvenancesWithoutVcsPath(): Map<String, 
         when (packageProvenance) {
             is RepositoryProvenance -> put("", packageProvenance.clearVcsPath().alignRevisions())
             is ArtifactProvenance -> put("", packageProvenance)
-            else -> { }
+            else -> {}
         }
 
         subRepositories.mapValuesTo(this) { (_, vcsInfo) ->

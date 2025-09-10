@@ -35,9 +35,11 @@ import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.OrtPluginOption
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
+import org.ossreviewtoolkit.plugins.packagemanagers.node.ModuleInfoResolver
 import org.ossreviewtoolkit.plugins.packagemanagers.node.NodePackageManager
 import org.ossreviewtoolkit.plugins.packagemanagers.node.NodePackageManagerType
-import org.ossreviewtoolkit.plugins.packagemanagers.node.PackageJson
+import org.ossreviewtoolkit.plugins.packagemanagers.node.Scope
+import org.ossreviewtoolkit.plugins.packagemanagers.node.getNames
 import org.ossreviewtoolkit.plugins.packagemanagers.node.parsePackageJson
 import org.ossreviewtoolkit.utils.common.CommandLineTool
 import org.ossreviewtoolkit.utils.common.DirectoryStash
@@ -46,13 +48,13 @@ import org.ossreviewtoolkit.utils.common.ProcessCapture
 import org.ossreviewtoolkit.utils.common.collectMessages
 import org.ossreviewtoolkit.utils.common.withoutPrefix
 
-import org.semver4j.RangesList
-import org.semver4j.RangesListFactory
+import org.semver4j.range.RangeList
+import org.semver4j.range.RangeListFactory
 
 internal object NpmCommand : CommandLineTool {
     override fun command(workingDir: File?) = if (Os.isWindows) "npm.cmd" else "npm"
 
-    override fun getVersionRequirement(): RangesList = RangesListFactory.create("6.* - 10.*")
+    override fun getVersionRequirement(): RangeList = RangeListFactory.create("6.* - 10.*")
 }
 
 data class NpmConfig(
@@ -67,12 +69,12 @@ data class NpmConfig(
 )
 
 /**
- * The [Node package manager](https://www.npmjs.com/) for JavaScript.
+ * The [Node package manager](https://www.npmjs.com/).
  */
 @OrtPlugin(
     id = "NPM",
     displayName = "NPM",
-    description = "The Node package manager for JavaScript.",
+    description = "The Node package manager for Node.js.",
     factory = PackageManagerFactory::class
 )
 class Npm(override val descriptor: PluginDescriptor = NpmFactory.descriptor, private val config: NpmConfig) :
@@ -82,16 +84,26 @@ class Npm(override val descriptor: PluginDescriptor = NpmFactory.descriptor, pri
 
     private lateinit var stash: DirectoryStash
 
-    private val npmViewCache = mutableMapOf<String, PackageJson>()
-    private val handler = NpmDependencyHandler(projectType, this::getRemotePackageDetails)
+    private val moduleInfoResolver = ModuleInfoResolver.create { workingDir, moduleId ->
+        runCatching {
+            val process = NpmCommand.run(workingDir, "info", "--json", moduleId).requireSuccess()
+            parsePackageJson(process.stdout)
+        }.onFailure { e ->
+            logger.warn { "Error getting module info for $moduleId: ${e.message.orEmpty()}" }
+        }.getOrNull()
+    }
 
-    override val graphBuilder by lazy { DependencyGraphBuilder(handler) }
+    private val handler = NpmDependencyHandler(moduleInfoResolver)
+
+    override val graphBuilder = DependencyGraphBuilder(handler)
 
     override fun beforeResolution(
         analysisRoot: File,
         definitionFiles: List<File>,
         analyzerConfig: AnalyzerConfiguration
     ) {
+        super.beforeResolution(analysisRoot, definitionFiles, analyzerConfig)
+
         NpmCommand.checkVersion()
 
         val directories = definitionFiles.mapTo(mutableSetOf()) { it.resolveSibling("node_modules") }
@@ -110,6 +122,8 @@ class Npm(override val descriptor: PluginDescriptor = NpmFactory.descriptor, pri
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {
         val workingDir = definitionFile.parentFile
+        moduleInfoResolver.workingDir = workingDir
+
         val issues = installDependencies(analysisRoot, workingDir, analyzerConfig.allowDynamicVersions).toMutableList()
 
         if (issues.any { it.severity == Severity.ERROR }) {
@@ -125,19 +139,17 @@ class Npm(override val descriptor: PluginDescriptor = NpmFactory.descriptor, pri
 
         val project = parseProject(definitionFile, analysisRoot)
         val projectModuleInfo = listModules(workingDir, issues).undoDeduplication()
+        val scopes = Scope.entries.filterNotTo(mutableSetOf()) { scope -> scope.isExcluded(excludes) }
 
-        val scopeNames = Scope.entries
-            .filterNot { excludes.isScopeExcluded(it.descriptor) }
-            .mapTo(mutableSetOf()) { scope ->
-                val scopeName = scope.descriptor
+        // Warm-up the cache to speed-up processing.
+        requestAllPackageDetails(projectModuleInfo, scopes)
 
-                graphBuilder.addDependencies(project.id, scopeName, projectModuleInfo.getScopeDependencies(scope))
-
-                scopeName
-            }
+        scopes.forEach { scope ->
+            graphBuilder.addDependencies(project.id, scope.descriptor, projectModuleInfo.getScopeDependencies(scope))
+        }
 
         return ProjectAnalyzerResult(
-            project = project.copy(scopeNames = scopeNames),
+            project = project.copy(scopeNames = scopes.getNames()),
             packages = emptySet(),
             issues = issues
         ).let { listOf(it) }
@@ -148,20 +160,6 @@ class Npm(override val descriptor: PluginDescriptor = NpmFactory.descriptor, pri
         issues += listProcess.extractNpmIssues()
 
         return parseNpmList(listProcess.stdout)
-    }
-
-    internal fun getRemotePackageDetails(packageName: String): PackageJson? {
-        npmViewCache[packageName]?.let { return it }
-
-        return runCatching {
-            val process = NpmCommand.run("info", "--json", packageName).requireSuccess()
-
-            parsePackageJson(process.stdout)
-        }.onFailure { e ->
-            logger.warn { "Error getting details for $packageName: ${e.message.orEmpty()}" }
-        }.onSuccess {
-            npmViewCache[packageName] = it
-        }.getOrNull()
     }
 
     private fun installDependencies(analysisRoot: File, workingDir: File, allowDynamicVersions: Boolean): List<Issue> {
@@ -179,12 +177,29 @@ class Npm(override val descriptor: PluginDescriptor = NpmFactory.descriptor, pri
 
         return process.extractNpmIssues()
     }
+
+    private fun requestAllPackageDetails(projectModuleInfo: ModuleInfo, scopes: Set<Scope>) {
+        projectModuleInfo.getAllPackageNodeModuleIds(scopes).let { moduleIds ->
+            moduleInfoResolver.getModuleInfos(moduleIds)
+        }
+    }
 }
 
-private enum class Scope(val descriptor: String) {
-    DEPENDENCIES("dependencies"),
-    DEV_DEPENDENCIES("devDependencies")
-}
+private fun ModuleInfo.getAllPackageNodeModuleIds(scopes: Set<Scope>): Set<String> =
+    buildSet {
+        val queue = scopes.flatMapTo(LinkedList()) { getScopeDependencies(it) }
+
+        while (queue.isNotEmpty()) {
+            val info = queue.removeFirst()
+
+            @Suppress("ComplexCondition")
+            if (!info.isProject && info.isInstalled && !info.name.isNullOrBlank() && !info.version.isNullOrBlank()) {
+                add("${info.name}@${info.version}")
+            }
+
+            scopes.flatMapTo(queue) { info.getScopeDependencies(it) }
+        }
+    }
 
 private fun ModuleInfo.getScopeDependencies(scope: Scope) =
     when (scope) {
@@ -298,7 +313,7 @@ internal fun List<String>.groupLines(vararg markers: String): List<String> {
     }
 }
 
-internal fun ProcessCapture.extractNpmIssues(): List<Issue> {
+private fun ProcessCapture.extractNpmIssues(): List<Issue> {
     val lines = stderr.lines()
     val issues = mutableListOf<Issue>()
 

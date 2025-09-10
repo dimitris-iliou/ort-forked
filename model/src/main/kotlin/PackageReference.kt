@@ -32,8 +32,7 @@ import org.ossreviewtoolkit.model.utils.PackageReferenceSortedSetConverter
  * A human-readable reference to a software [Package]. Each package reference itself refers to other package
  * references that are dependencies of the package.
  */
-// Do not serialize default values to reduce the size of the result file.
-@JsonInclude(JsonInclude.Include.NON_DEFAULT)
+@JsonInclude(JsonInclude.Include.NON_EMPTY)
 data class PackageReference(
     /**
      * The identifier of the package.
@@ -45,7 +44,7 @@ data class PackageReference(
      * package managers / languages only support dynamic linking or at least default to it, also use that as the
      * default value here to not blow up ORT result files.
      */
-    @JsonInclude(value = JsonInclude.Include.CUSTOM, valueFilter = PackageLinkageValueFilter::class)
+    @JsonInclude(JsonInclude.Include.CUSTOM, valueFilter = PackageLinkageValueFilter::class)
     override val linkage: PackageLinkage = PackageLinkage.DYNAMIC,
 
     /**
@@ -74,7 +73,7 @@ data class PackageReference(
 
         val queue: Deque<Pair<PackageReference, Int>> = LinkedList()
         fun enqueue(packages: Collection<PackageReference>, level: Int) {
-            if (maxDepth < 0 || level <= maxDepth) {
+            if (maxDepth !in 0..<level) {
                 packages.forEach { queue += Pair(it, level) }
             }
         }

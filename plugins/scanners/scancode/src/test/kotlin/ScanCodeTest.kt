@@ -22,7 +22,6 @@ package org.ossreviewtoolkit.plugins.scanners.scancode
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.engine.spec.tempdir
 import io.kotest.matchers.collections.beEmpty
-import io.kotest.matchers.nulls.beNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNot
 import io.kotest.matchers.string.shouldMatch
@@ -37,6 +36,8 @@ import org.ossreviewtoolkit.model.PackageType
 import org.ossreviewtoolkit.model.ScannerDetails
 import org.ossreviewtoolkit.scanner.ScanContext
 import org.ossreviewtoolkit.utils.common.ProcessCapture
+import org.ossreviewtoolkit.utils.common.extractResource
+import org.ossreviewtoolkit.utils.test.readResource
 
 class ScanCodeTest : WordSpec({
     val scanner = ScanCodeFactory.create()
@@ -59,9 +60,9 @@ class ScanCodeTest : WordSpec({
     "getCommandLineOptions()" should {
         "contain the default values if the scanner configuration is empty" {
             scanner.getCommandLineOptions("31.2.4").joinToString(" ") shouldMatch
-                "--copyright --license --info --strip-root --timeout 300 --processes \\d+"
+                "--copyright --license --info --strip-root --timeout 300"
             scanner.getCommandLineOptions("32.0.0").joinToString(" ") shouldMatch
-                "--copyright --license --info --strip-root --timeout 300 --processes \\d+ --license-references"
+                "--copyright --license --info --strip-root --timeout 300 --license-references"
         }
 
         "contain the values from the scanner configuration" {
@@ -71,7 +72,7 @@ class ScanCodeTest : WordSpec({
             )
 
             scannerWithConfig.getCommandLineOptions("31.2.4").joinToString(" ") shouldMatch
-                "--command --line --commandLineNonConfig --processes \\d+"
+                "--command --line --commandLineNonConfig"
         }
     }
 
@@ -86,9 +87,8 @@ class ScanCodeTest : WordSpec({
 
             val scannerSpy = spyk(scanner)
             every { scannerSpy.runScanCode(any(), any()) } answers {
-                val resultFile = File("src/test/assets/scancode-with-issues.json")
                 val targetFile = secondArg<File>()
-                resultFile.copyTo(targetFile)
+                extractResource("/scancode-with-issues.json", targetFile)
 
                 process
             }
@@ -97,7 +97,7 @@ class ScanCodeTest : WordSpec({
 
             with(summary) {
                 licenseFindings shouldNot beEmpty()
-                issues.find { it.message.contains("Unexpected EOF") } shouldNot beNull()
+                issues.any { "Unexpected EOF" in it.message } shouldBe true
             }
         }
     }
@@ -126,8 +126,7 @@ class ScanCodeTest : WordSpec({
 
     "parseDetails()" should {
         "return details for a raw scan result" {
-            val resultFile = File("src/test/assets/scancode-with-issues.json")
-            val result = resultFile.readText()
+            val result = readResource("/scancode-with-issues.json")
 
             scanner.parseDetails(result) shouldBe ScannerDetails(
                 name = "ScanCode",

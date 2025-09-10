@@ -39,11 +39,14 @@ import java.util.concurrent.TimeUnit
 
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
+import okhttp3.RequestBody
 import okhttp3.ResponseBody
 
 import org.apache.logging.log4j.kotlin.logger
 
+import org.ossreviewtoolkit.clients.fossid.model.CreateScanResponse
 import org.ossreviewtoolkit.clients.fossid.model.Project
+import org.ossreviewtoolkit.clients.fossid.model.RemoveUploadContentResponse
 import org.ossreviewtoolkit.clients.fossid.model.Scan
 import org.ossreviewtoolkit.clients.fossid.model.identification.identifiedFiles.IdentifiedFile
 import org.ossreviewtoolkit.clients.fossid.model.identification.ignored.IgnoredFile
@@ -61,6 +64,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.jackson.JacksonConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.Headers
 import retrofit2.http.POST
 
@@ -79,6 +83,7 @@ interface FossIdRestService {
             addModule(
                 kotlinModule().addDeserializer(PolymorphicList::class.java, PolymorphicListDeserializer())
                     .addDeserializer(PolymorphicInt::class.java, PolymorphicIntDeserializer())
+                    .addDeserializer(PolymorphicData::class.java, PolymorphicDataDeserializer())
             )
         }
 
@@ -132,10 +137,47 @@ interface FossIdRestService {
         }
 
         /**
+         * A custom JSON deserializer implementation to deal with inconsistencies in error responses sent by FossID
+         * for requests returning a single value. If such a request fails, the response from FossID contains an
+         * empty array for the value, which cannot be handled by the default deserialization.
+         */
+        private class PolymorphicDataDeserializer(val boundType: JavaType? = null) :
+            StdDeserializer<PolymorphicData<Any>>(PolymorphicData::class.java), ContextualDeserializer {
+            override fun deserialize(p: JsonParser, ctxt: DeserializationContext): PolymorphicData<Any> {
+                requireNotNull(boundType) {
+                    "The PolymorphicDataDeserializer needs a type to deserialize values!"
+                }
+
+                return when (p.currentToken) {
+                    JsonToken.START_ARRAY -> {
+                        val arrayType = JSON_MAPPER.typeFactory.constructArrayType(boundType)
+                        val array = JSON_MAPPER.readValue<Array<Any>>(p, arrayType)
+                        PolymorphicData(array.firstOrNull())
+                    }
+
+                    JsonToken.START_OBJECT -> {
+                        val data = JSON_MAPPER.readValue<Any>(p, boundType)
+                        PolymorphicData(data)
+                    }
+
+                    else -> {
+                        val delegate = ctxt.findNonContextualValueDeserializer(boundType)
+                        PolymorphicData(delegate.deserialize(p, ctxt))
+                    }
+                }
+            }
+
+            override fun createContextual(ctxt: DeserializationContext?, property: BeanProperty?): JsonDeserializer<*> {
+                val type = property?.member?.type?.bindings?.getBoundType(0)
+                return PolymorphicDataDeserializer(type)
+            }
+        }
+
+        /**
          * A class to modify the standard Jackson deserialization to deal with inconsistencies in responses
          * sent by the FossID server.
-         * When deleting a scan, FossId returns the scan id as String in the 'data' property of the response. If no scan
-         * could be found, it returns an empty array. Starting with FossID version 2023.1, the return type of the
+         * When deleting a scan, FossID returns the scan id as a string in the `data` property of the response. If no
+         * scan could be found, it returns an empty array. Starting with FossID version 2023.1, the return type of the
          * [deleteScan] function is now a map of strings to strings. Creating a special [FossIdServiceWithVersion]
          * implementation for this call is an overkill as ORT does not even use the return value. Therefore, this change
          * is also handled by the [PolymorphicIntDeserializer].
@@ -186,11 +228,20 @@ interface FossIdRestService {
          * Create the [FossIdServiceWithVersion] to interact with the FossID instance running at the given [url],
          * optionally using a pre-built OkHttp [client].
          */
-        suspend fun create(url: String, client: OkHttpClient? = null): FossIdServiceWithVersion {
+        suspend fun create(
+            url: String,
+            client: OkHttpClient? = null,
+            logRequests: Boolean = false
+        ): FossIdServiceWithVersion {
             logger.info { "The FossID server URL is $url." }
 
+            val builder = client?.newBuilder() ?: OkHttpClient.Builder()
+            if (logRequests) {
+                builder.addInterceptor(LoggingInterceptor)
+            }
+
             val retrofit = Retrofit.Builder()
-                .client((client?.newBuilder() ?: OkHttpClient.Builder()).addInterceptor(TimeoutInterceptor).build())
+                .client(builder.addInterceptor(TimeoutInterceptor).build())
                 .baseUrl(url)
                 .addConverterFactory(JacksonConverterFactory.create(JSON_MAPPER))
                 .build()
@@ -223,10 +274,13 @@ interface FossIdRestService {
     }
 
     @POST("api.php")
-    suspend fun getProject(@Body body: PostRequestBody): EntityResponseBody<Project>
+    suspend fun getProject(@Body body: PostRequestBody): PolymorphicDataResponseBody<Project>
 
     @POST("api.php")
-    suspend fun getScan(@Body body: PostRequestBody): EntityResponseBody<Scan>
+    suspend fun listProjects(@Body body: PostRequestBody): PolymorphicResponseBody<Project>
+
+    @POST("api.php")
+    suspend fun getScan(@Body body: PostRequestBody): PolymorphicDataResponseBody<Scan>
 
     @POST("api.php")
     suspend fun listScansForProject(@Body body: PostRequestBody): PolymorphicResponseBody<Scan>
@@ -235,7 +289,7 @@ interface FossIdRestService {
     suspend fun createProject(@Body body: PostRequestBody): MapResponseBody<String>
 
     @POST("api.php")
-    suspend fun createScan(@Body body: PostRequestBody): MapResponseBody<String>
+    suspend fun createScan(@Body body: PostRequestBody): PolymorphicDataResponseBody<CreateScanResponse>
 
     @POST("api.php")
     suspend fun runScan(@Body body: PostRequestBody): EntityResponseBody<Nothing>
@@ -248,7 +302,7 @@ interface FossIdRestService {
     suspend fun downloadFromGit(@Body body: PostRequestBody): EntityResponseBody<Nothing>
 
     @POST("api.php")
-    suspend fun checkDownloadStatus(@Body body: PostRequestBody): EntityResponseBody<DownloadStatus>
+    suspend fun checkDownloadStatus(@Body body: PostRequestBody): PolymorphicDataResponseBody<DownloadStatus>
 
     @POST("api.php")
     suspend fun checkScanStatus(@Body body: PostRequestBody): EntityResponseBody<ScanDescription>
@@ -264,7 +318,7 @@ interface FossIdRestService {
 
     @POST("api.php")
     @Headers("$READ_TIMEOUT_HEADER:${5 * 60 * 1000}")
-    suspend fun listMatchedLines(@Body body: PostRequestBody): EntityResponseBody<MatchedLines>
+    suspend fun listMatchedLines(@Body body: PostRequestBody): PolymorphicDataResponseBody<MatchedLines>
 
     @POST("api.php")
     @Headers("$READ_TIMEOUT_HEADER:${60 * 1000}")
@@ -288,6 +342,7 @@ interface FossIdRestService {
     suspend fun createIgnoreRule(@Body body: PostRequestBody): EntityResponseBody<Nothing>
 
     @POST("api.php")
+    @Headers("$READ_TIMEOUT_HEADER:${5 * 60 * 1000}")
     suspend fun generateReport(@Body body: PostRequestBody): Response<ResponseBody>
 
     @POST("api.php")
@@ -304,6 +359,24 @@ interface FossIdRestService {
 
     @POST("api.php")
     suspend fun addFileComment(@Body body: PostRequestBody): EntityResponseBody<Nothing>
+
+    @POST("api.php")
+    suspend fun extractArchives(@Body body: PostRequestBody): EntityResponseBody<Boolean>
+
+    @POST("api.php")
+    suspend fun removeUploadedContent(
+        @Body body: PostRequestBody
+    ): PolymorphicDataResponseBody<RemoveUploadContentResponse>
+
+    @POST("api.php")
+    @Headers("Content-Type: application/octet-stream")
+    suspend fun uploadFile(
+        @Header("FOSSID-SCAN-CODE") scanCodeB64: String,
+        @Header("FOSSID-FILE-NAME") fileNameB64: String,
+        @Header("Authorization") authorization: String,
+        @Header("Transfer-Encoding") transferEncoding: String,
+        @Body payload: RequestBody
+    ): EntityResponseBody<Nothing>
 
     @GET("index.php?form=login")
     suspend fun getLoginPage(): ResponseBody

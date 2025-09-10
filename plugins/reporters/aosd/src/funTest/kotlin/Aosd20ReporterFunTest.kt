@@ -19,39 +19,33 @@
 
 package org.ossreviewtoolkit.plugins.reporters.aosd
 
-import com.networknt.schema.InputFormat
-import com.networknt.schema.JsonSchemaFactory
-import com.networknt.schema.SpecVersion
-
 import io.kotest.assertions.assertSoftly
 import io.kotest.assertions.json.shouldEqualJson
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.engine.spec.tempdir
 import io.kotest.inspectors.forAll
-import io.kotest.matchers.collections.beEmpty
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.result.shouldBeSuccess
 import io.kotest.matchers.should
 
+import org.ossreviewtoolkit.plugins.licensefactproviders.spdx.SpdxLicenseFactProviderFactory
 import org.ossreviewtoolkit.reporter.ORT_RESULT
 import org.ossreviewtoolkit.reporter.ReporterInput
-import org.ossreviewtoolkit.utils.test.getAssetFile
+import org.ossreviewtoolkit.utils.test.getResource
+import org.ossreviewtoolkit.utils.test.matchJsonSchema
+import org.ossreviewtoolkit.utils.test.readResource
 
 class Aosd20ReporterFunTest : WordSpec({
     "The example JSON report" should {
         "be valid according to the schema" {
-            val schemaFile = getAssetFile("aosd20/aosd.schema.json")
-            val schema = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7).getSchema(schemaFile.toURI())
+            val schemaJson = readResource("/aosd20/aosd.schema.json")
+            val example = readResource("/aosd20/aosd.example.json")
 
-            val exampleFile = getAssetFile("aosd20/aosd.example.json")
-            val errors = schema.validate(exampleFile.readText(), InputFormat.JSON)
-
-            errors should beEmpty()
+            example should matchJsonSchema(schemaJson)
         }
 
         "deserialize correctly" {
-            val aosdFile = getAssetFile("aosd20/aosd.example.json")
-            val aosd = aosdFile.readAosd20Report()
+            val aosd = getResource("/aosd20/aosd.example.json").readAosd20Report()
 
             with(aosd) {
                 directDependencies shouldHaveSize 1
@@ -61,17 +55,20 @@ class Aosd20ReporterFunTest : WordSpec({
     }
 
     "The generated report" should {
-        val outputDir = tempdir()
-        val reportFiles = Aosd20Reporter().generateReport(ReporterInput(ORT_RESULT), outputDir)
+        val reportFiles = Aosd20Reporter().generateReport(
+            ReporterInput(
+                ORT_RESULT,
+                licenseFactProvider = SpdxLicenseFactProviderFactory.create()
+            ),
+            tempdir()
+        )
 
         "be valid according to the schema" {
-            val schemaFile = getAssetFile("aosd20/aosd.schema.json")
-            val schema = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7).getSchema(schemaFile.toURI())
+            val schemaJson = readResource("/aosd20/aosd.schema.json")
 
             reportFiles.forAll {
                 it shouldBeSuccess { reportFile ->
-                    val errors = schema.validate(reportFile.readText(), InputFormat.JSON)
-                    errors should beEmpty()
+                    reportFile.readText() should matchJsonSchema(schemaJson)
                 }
             }
         }
@@ -82,15 +79,15 @@ class Aosd20ReporterFunTest : WordSpec({
             assertSoftly {
                 with(reportFiles[0]) {
                     this shouldBeSuccess { actualFile ->
-                        val expectedFile = getAssetFile("aosd20/aosd.NPM-%40ort-project-with-findings-1.0.json")
-                        actualFile.readText() shouldEqualJson expectedFile.readText()
+                        val expectedResult = readResource("/aosd20/aosd.NPM-%40ort-project-with-findings-1.0.json")
+                        actualFile.readText() shouldEqualJson expectedResult
                     }
                 }
 
                 with(reportFiles[1]) {
                     this shouldBeSuccess { actualFile ->
-                        val expectedFile = getAssetFile("aosd20/aosd.NPM-%40ort-project-without-findings-1.0.json")
-                        actualFile.readText() shouldEqualJson expectedFile.readText()
+                        val expectedResult = readResource("/aosd20/aosd.NPM-%40ort-project-without-findings-1.0.json")
+                        actualFile.readText() shouldEqualJson expectedResult
                     }
                 }
             }
