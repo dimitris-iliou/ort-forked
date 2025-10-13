@@ -19,40 +19,76 @@
 
 package org.ossreviewtoolkit.plugins.versioncontrolsystems.git
 
-import io.kotest.core.spec.Spec
-import io.kotest.core.spec.style.StringSpec
+import io.kotest.assertions.throwables.shouldNotThrow
+import io.kotest.core.annotation.Tags
+import io.kotest.core.spec.style.WordSpec
 import io.kotest.engine.spec.tempdir
+import io.kotest.matchers.maps.shouldContainExactly
+import io.kotest.matchers.sequences.shouldContainExactly
 import io.kotest.matchers.shouldBe
 
 import java.io.File
 
 import org.ossreviewtoolkit.downloader.VersionControlSystem
-import org.ossreviewtoolkit.downloader.WorkingTree
 import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.plugins.api.PluginConfig
 import org.ossreviewtoolkit.utils.common.div
 
+import org.semver4j.Semver
+import org.semver4j.SemverException
+
 private const val REPO_URL = "https://github.com/oss-review-toolkit/ort-test-data-git-repo?manifest=manifest.xml"
 private const val REPO_REV = "31588aa8f8555474e1c3c66a359ec99e4cd4b1fa"
 
-class GitRepoDownloadFunTest : StringSpec() {
-    private val vcs = VcsInfo(VcsType.GIT_REPO, REPO_URL, REPO_REV)
-    private val pkg = Package.EMPTY.copy(vcsProcessed = vcs)
+@Tags("RequiresExternalTool")
+class GitRepoFunTest : WordSpec({
+    val gitRepo = GitRepoFactory().create(PluginConfig.EMPTY)
+    val vcs = VcsInfo(VcsType.GIT_REPO, REPO_URL, REPO_REV)
+    val pkg = Package.EMPTY.copy(vcsProcessed = vcs)
 
-    private lateinit var outputDir: File
-    private lateinit var workingTree: WorkingTree
+    lateinit var outputDir: File
 
-    override suspend fun beforeSpec(spec: Spec) {
+    beforeEach {
         outputDir = tempdir()
-        workingTree = GitRepoFactory().create(PluginConfig.EMPTY).download(pkg, outputDir)
     }
 
-    init {
-        "GitRepo can download a given revision" {
+    "getVersion()" should {
+        "return a version that can be coerced to a Semver" {
+            shouldNotThrow<SemverException> {
+                Semver.coerce(gitRepo.getVersion())
+            }
+        }
+    }
+
+    "download()" should {
+        "get the given revision" {
             val spdxDir = outputDir / "spdx-tools"
-            val expectedSpdxFiles = listOf(
+
+            val actualSpdxFiles = spdxDir.walk().maxDepth(1).filter {
+                it.isDirectory && it != spdxDir
+            }.map {
+                it.name
+            }.sorted()
+
+            val submodulesDir = outputDir / "submodules"
+
+            val actualSubmodulesFiles = submodulesDir.walk().maxDepth(1).filter {
+                it.isDirectory && it != submodulesDir
+            }.map {
+                it.name
+            }.sorted()
+
+            val workingTree = gitRepo.download(pkg, outputDir)
+
+            workingTree.isValid() shouldBe true
+            workingTree.getInfo() shouldBe vcs
+
+            workingTree.getPathToRoot(outputDir / "grpc" / "README.md") shouldBe "grpc/README.md"
+            workingTree.getPathToRoot(outputDir / "spdx-tools" / "TODO") shouldBe "spdx-tools/TODO"
+
+            actualSpdxFiles.shouldContainExactly(
                 ".git",
                 "Examples",
                 "Test",
@@ -62,47 +98,26 @@ class GitRepoDownloadFunTest : StringSpec() {
                 "src"
             )
 
-            val actualSpdxFiles = spdxDir.walk().maxDepth(1).filter {
-                it.isDirectory && it != spdxDir
-            }.map {
-                it.name
-            }.sorted()
-
-            val submodulesDir = outputDir / "submodules"
-            val expectedSubmodulesFiles = listOf(
+            actualSubmodulesFiles.shouldContainExactly(
                 ".git",
                 "commons-text",
                 "test-data-npm"
             )
-
-            val actualSubmodulesFiles = submodulesDir.walk().maxDepth(1).filter {
-                it.isDirectory && it != submodulesDir
-            }.map {
-                it.name
-            }.sorted()
-
-            workingTree.isValid() shouldBe true
-            workingTree.getInfo() shouldBe vcs
-
-            workingTree.getPathToRoot(outputDir / "grpc" / "README.md") shouldBe "grpc/README.md"
-            workingTree.getPathToRoot(outputDir / "spdx-tools" / "TODO") shouldBe "spdx-tools/TODO"
-
-            actualSpdxFiles.joinToString("\n") shouldBe expectedSpdxFiles.joinToString("\n")
-            actualSubmodulesFiles.joinToString("\n") shouldBe expectedSubmodulesFiles.joinToString("\n")
         }
 
-        "GitRepo correctly lists submodules" {
-            val expectedSubmodules = listOf(
+        "get nested submodules" {
+            val workingTree = gitRepo.download(pkg, outputDir)
+
+            workingTree.getNested() shouldContainExactly listOf(
                 "spdx-tools",
                 "submodules",
                 "submodules/commons-text",
                 "submodules/test-data-npm",
                 "submodules/test-data-npm/isarray",
                 "submodules/test-data-npm/long.js"
-            ).associateWith { VersionControlSystem.getPathInfo(outputDir / it) }
-
-            val workingTree = GitRepoFactory().create(PluginConfig.EMPTY).getWorkingTree(outputDir)
-            workingTree.getNested() shouldBe expectedSubmodules
+            ).associateWith {
+                VersionControlSystem.getPathInfo(outputDir / it)
+            }
         }
     }
-}
+})

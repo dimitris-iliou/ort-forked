@@ -27,6 +27,7 @@ import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.licensefactproviders.api.LicenseFactProvider
 import org.ossreviewtoolkit.plugins.licensefactproviders.api.LicenseFactProviderFactory
+import org.ossreviewtoolkit.plugins.licensefactproviders.api.LicenseText
 import org.ossreviewtoolkit.utils.common.Os
 import org.ossreviewtoolkit.utils.common.realFile
 
@@ -50,12 +51,12 @@ data class ScanCodeLicenseFactProviderConfig(
 class ScanCodeLicenseFactProvider(
     override val descriptor: PluginDescriptor = ScanCodeLicenseFactProviderFactory.descriptor,
     private val config: ScanCodeLicenseFactProviderConfig
-) : LicenseFactProvider {
+) : LicenseFactProvider() {
     /**
      * The directory that contains the ScanCode license texts. This is located using a heuristic based on the path of
      * the ScanCode binary.
      */
-    private val scanCodeLicenseTextDir: File by lazy {
+    private val scanCodeLicenseTextDir: File? by lazy {
         if (config.scanCodeLicenseTextDir != null) {
             return@lazy File(config.scanCodeLicenseTextDir).also {
                 require(it.isDirectory) {
@@ -74,7 +75,7 @@ class ScanCodeLicenseFactProvider(
         if (scanCodeExeDir == null) {
             logger.debug { "Could not locate the ScanCode executable directory." }
         } else {
-            logger.debug { "Located ScanCode executable directory: ${scanCodeExeDir.absolutePath}" }
+            logger.debug { "Located ScanCode executable directory: $scanCodeExeDir" }
         }
 
         val pythonBinDir = listOf("bin", "Scripts")
@@ -83,15 +84,15 @@ class ScanCodeLicenseFactProvider(
         if (scanCodeBaseDir == null) {
             logger.debug { "Could not locate the ScanCode base directory." }
         } else {
-            logger.debug { "Located ScanCode base directory: ${scanCodeBaseDir.absolutePath}" }
+            logger.debug { "Located ScanCode base directory: $scanCodeBaseDir" }
         }
 
         val licenseDir = scanCodeBaseDir?.walk()?.find { it.isDirectory && it.endsWith("licensedcode/data/licenses") }
 
         if (licenseDir == null) {
-            logger.debug { "Could not locate the ScanCode license text directory." }
+            logger.debug { "Could not locate the ScanCode 'licenses' text directory." }
         } else {
-            logger.debug { "Located ScanCode license text directory: ${licenseDir.absolutePath}" }
+            logger.debug { "Located ScanCode license text directory: $licenseDir" }
             return@lazy licenseDir
         }
 
@@ -99,12 +100,14 @@ class ScanCodeLicenseFactProvider(
             if (it == null) {
                 logger.debug { "Could not locate fallback directory: $FALLBACK_DIR" }
             } else {
-                logger.debug { "Located fallback ScanCode license text directory: ${it.absolutePath}" }
+                logger.debug { "Located fallback ScanCode license text directory: $it" }
                 return@lazy it
             }
         }
 
-        error("Could not locate the ScanCode license text directory.")
+        logger.warn { "Could not locate any ScanCode license text directory." }
+
+        null
     }
 
     private fun getLicenseTextFile(licenseId: String): File? {
@@ -116,21 +119,36 @@ class ScanCodeLicenseFactProvider(
             "${licenseId.removePrefix("LicenseRef-scancode-").lowercase()}.LICENSE"
         }
 
-        return scanCodeLicenseTextDir.resolve(filename).takeIf { it.isFile }
+        return scanCodeLicenseTextDir?.resolve(filename)?.takeIf { it.isFile && it.isNotBlank }
     }
 
-    override fun getLicenseText(licenseId: String): String? =
-        getLicenseTextFile(licenseId)?.readText()?.removeYamlFrontMatter()
+    override fun getLicenseText(licenseId: String) =
+        getLicenseTextFile(licenseId)?.useLines { lines ->
+            lines.skipYamlFrontMatter().joinToString("\n").trimEnd()
+        }?.let {
+            LicenseText(it)
+        }
 
     override fun hasLicenseText(licenseId: String): Boolean = getLicenseTextFile(licenseId) != null
 }
 
-internal fun String.removeYamlFrontMatter(): String {
-    val lines = lines()
+internal fun Sequence<String>.skipYamlFrontMatter(): Sequence<String> {
+    var inFrontMatter = false
 
-    // Remove any YAML front matter enclosed by "---" from ScanCode license files.
-    val licenseLines = lines.takeUnless { it.first() == "---" }
-        ?: lines.drop(1).dropWhile { it != "---" }.drop(1)
-
-    return licenseLines.dropWhile { it.isEmpty() }.joinToString("\n").trimEnd()
+    return filterIndexed { index, line ->
+        if (index == 0 && line == "---") {
+            inFrontMatter = true
+            false
+        } else if (inFrontMatter) {
+            if (line == "---") inFrontMatter = false
+            false
+        } else {
+            true
+        }
+    }.dropWhile {
+        it.isBlank()
+    }
 }
+
+private val File.isNotBlank: Boolean
+    get() = useLines { lines -> lines.skipYamlFrontMatter().any { line -> line.any { !it.isWhitespace() } } }

@@ -17,66 +17,68 @@
  * License-Filename: LICENSE
  */
 
-package org.ossreviewtoolkit.plugins.versioncontrolsystems.git
+package org.ossreviewtoolkit.plugins.versioncontrolsystems.mercurial
 
-import io.kotest.assertions.throwables.shouldThrow
-import io.kotest.core.spec.style.StringSpec
-import io.kotest.core.test.TestCase
+import io.kotest.assertions.throwables.shouldNotThrow
+import io.kotest.core.annotation.Tags
+import io.kotest.core.spec.style.WordSpec
 import io.kotest.engine.spec.tempdir
 import io.kotest.matchers.shouldBe
 
 import java.io.File
 
-import org.ossreviewtoolkit.downloader.DownloadException
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
-import org.ossreviewtoolkit.plugins.api.PluginConfig
 
-private const val PKG_VERSION = "0.4.1"
+import org.semver4j.Semver
+import org.semver4j.SemverException
 
-private const val REPO_URL = "https://github.com/jriecken/dependency-graph"
-private const val REPO_REV = "8964880d9bac33f0a7f030a74c7c9299a8f117c8"
-private const val REPO_PATH = "lib"
+private const val PKG_VERSION = "v1.0.0"
 
-private const val REPO_REV_FOR_VERSION = "371b23f37da064687518bace268d607a92ecbe8f"
-private const val REPO_PATH_FOR_VERSION = "specs"
+private const val REPO_URL = "https://hg.sr.ht/~breakfastquay/bqfft"
+private const val REPO_REV = "e1c392f85e973225ece81cf8d74287b3a4992dea"
+private const val REPO_PATH = "test"
 
-class GitDownloadFunTest : StringSpec() {
-    private val git = GitFactory().create(PluginConfig.EMPTY)
-    private lateinit var outputDir: File
+private const val REPO_REV_FOR_VERSION = "a766fe47501b185bc46cffc210735304e28f2189"
+private const val REPO_PATH_FOR_VERSION = "build"
 
-    override suspend fun beforeTest(testCase: TestCase) {
+@Tags("RequiresExternalTool")
+class MercurialFunTest : WordSpec({
+    val hg = Mercurial()
+    lateinit var outputDir: File
+
+    beforeEach {
         outputDir = tempdir()
     }
 
-    init {
-        "Git does not prompt for credentials for non-existing repositories" {
-            val url = "https://github.com/oss-review-toolkit/foobar.git"
-            val pkg = Package.EMPTY.copy(vcsProcessed = VcsInfo(VcsType.GIT, url, "master"))
-
-            val exception = shouldThrow<DownloadException> {
-                git.download(pkg, outputDir, allowMovingRevisions = true)
+    "getVersion()" should {
+        "return a version that can be coerced to a Semver" {
+            shouldNotThrow<SemverException> {
+                Semver.coerce(hg.getVersion())
             }
-
-            exception.message shouldBe "Git failed to get revisions from URL $url."
         }
+    }
 
-        "Git can download a given revision" {
-            val pkg = Package.EMPTY.copy(vcsProcessed = VcsInfo(VcsType.GIT, REPO_URL, REPO_REV))
+    "download()" should {
+        "get the given revision" {
+            val pkg = Package.EMPTY.copy(vcsProcessed = VcsInfo(VcsType.MERCURIAL, REPO_URL, REPO_REV))
             val expectedFiles = listOf(
-                ".git",
-                ".gitignore",
-                "CHANGELOG.md",
-                "LICENSE",
+                ".hg",
+                ".hgignore",
+                ".hgtags",
+                ".travis.yml",
+                "COPYING",
+                "Makefile",
                 "README.md",
-                "lib",
-                "package.json",
-                "specs"
+                "bqfft",
+                "build",
+                "src",
+                "test"
             )
 
-            val workingTree = git.download(pkg, outputDir)
+            val workingTree = hg.download(pkg, outputDir)
             val actualFiles = workingTree.getRootPath().walk().maxDepth(1).mapNotNullTo(mutableListOf()) {
                 it.toRelativeString(workingTree.getRootPath()).ifEmpty { null }
             }.sorted()
@@ -86,18 +88,22 @@ class GitDownloadFunTest : StringSpec() {
             actualFiles.joinToString("\n") shouldBe expectedFiles.joinToString("\n")
         }
 
-        "Git can download only a single path" {
-            val pkg = Package.EMPTY.copy(vcsProcessed = VcsInfo(VcsType.GIT, REPO_URL, REPO_REV, path = REPO_PATH))
+        "get only the given path".config(enabled = hg.isAtLeastVersion("4.3")) {
+            val pkg = Package.EMPTY.copy(
+                vcsProcessed = VcsInfo(VcsType.MERCURIAL, REPO_URL, REPO_REV, path = REPO_PATH)
+            )
             val expectedFiles = listOf(
-                File("LICENSE"),
-                File("README.md"),
-                File(REPO_PATH, "dep_graph.js"),
-                File(REPO_PATH, "index.d.ts")
+                ".hgignore",
+                ".hgtags",
+                "COPYING",
+                "README.md",
+                "$REPO_PATH/TestFFT.cpp",
+                "$REPO_PATH/timings.cpp"
             )
 
-            val workingTree = git.download(pkg, outputDir)
+            val workingTree = hg.download(pkg, outputDir)
             val actualFiles = workingTree.getRootPath().walkBottomUp()
-                .onEnter { it.name != ".git" }
+                .onEnter { it.name != ".hg" }
                 .filter { it.isFile }
                 .map { it.relativeTo(outputDir) }
                 .sortedBy { it.path }
@@ -108,36 +114,41 @@ class GitDownloadFunTest : StringSpec() {
             actualFiles.joinToString("\n") shouldBe expectedFiles.joinToString("\n")
         }
 
-        "Git can download based on a version" {
+        "work based on a package version" {
             val pkg = Package.EMPTY.copy(
                 id = Identifier("Test:::$PKG_VERSION"),
 
                 // Use a non-blank dummy revision to enforce multiple revision candidates being tried.
-                vcsProcessed = VcsInfo(VcsType.GIT, REPO_URL, "dummy")
+                vcsProcessed = VcsInfo(VcsType.MERCURIAL, REPO_URL, "dummy")
             )
 
-            val workingTree = git.download(pkg, outputDir)
+            val workingTree = hg.download(pkg, outputDir)
 
             workingTree.isValid() shouldBe true
             workingTree.getRevision() shouldBe REPO_REV_FOR_VERSION
         }
 
-        "Git can download only a single path based on a version" {
+        "get only the given path based on a package version".config(enabled = hg.isAtLeastVersion("4.3")) {
             val pkg = Package.EMPTY.copy(
                 id = Identifier("Test:::$PKG_VERSION"),
 
                 // Use a non-blank dummy revision to enforce multiple revision candidates being tried.
-                vcsProcessed = VcsInfo(VcsType.GIT, REPO_URL, "dummy", path = REPO_PATH_FOR_VERSION)
+                vcsProcessed = VcsInfo(VcsType.MERCURIAL, REPO_URL, "dummy", path = REPO_PATH_FOR_VERSION)
             )
             val expectedFiles = listOf(
-                File("LICENSE"),
-                File("README.md"),
-                File(REPO_PATH_FOR_VERSION, "dep_graph_spec.js")
+                ".hgignore",
+                "COPYING",
+                "README.md",
+                "build/Makefile.inc",
+                "build/Makefile.linux.fftw",
+                "build/Makefile.linux.ipp",
+                "build/Makefile.osx",
+                "build/run-platform-tests.sh"
             )
 
-            val workingTree = git.download(pkg, outputDir)
+            val workingTree = hg.download(pkg, outputDir)
             val actualFiles = workingTree.getRootPath().walkBottomUp()
-                .onEnter { it.name != ".git" }
+                .onEnter { it.name != ".hg" }
                 .filter { it.isFile }
                 .map { it.relativeTo(outputDir) }
                 .sortedBy { it.path }
@@ -148,4 +159,4 @@ class GitDownloadFunTest : StringSpec() {
             actualFiles.joinToString("\n") shouldBe expectedFiles.joinToString("\n")
         }
     }
-}
+})

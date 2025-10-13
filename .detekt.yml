@@ -20,8 +20,8 @@ coroutines:
   InjectDispatcher:
     active: false
 
-# Formatting rules are implemented via the ktlint plugin. As ktlint does not allow exceptions, we need to disable
-# respective rules completely.
+# Formatting rules are implemented via the ktlint plugin and are the only rules that support auto-formatting. However,
+# as ktlint does not allow to configure exceptions, some rules need to be disabled completely.
 formatting:
   AnnotationOnSeparateLine:
     active: false
@@ -40,8 +40,6 @@ formatting:
     active: false
   MaximumLineLength:
     active: false
-  NoUnusedImports:
-    active: false
   NoWildcardImports:
     active: false
   ParameterListWrapping:
@@ -56,8 +54,6 @@ formatting:
     useTrailingCommaOnDeclarationSite: false
 
 naming:
-  ConstructorParameterNaming:
-    excludes: ["**/clients/github-graphql/build/generated/**"]
   InvalidPackageDeclaration:
     active: false
 
@@ -87,8 +83,6 @@ style:
     active: true
   ThrowsCount:
     max: 5
-  UnusedImports:
-    active: true
   WildcardImport:
     excludes: ''
     excludeImports:

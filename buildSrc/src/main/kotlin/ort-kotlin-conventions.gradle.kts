@@ -61,6 +61,7 @@ testing {
                 implementation(project(":utils:test-utils"))
 
                 implementation(libs.kotest.assertions.core)
+                implementation(libs.kotest.property)
                 implementation(libs.kotest.runner.junit5)
             }
         }
@@ -114,6 +115,43 @@ java {
         // Note that Gradle currently matches the Java language version exactly and does not consider (backward)
         // compatibility between versions, see https://github.com/gradle/gradle/issues/16256.
         languageVersion = JavaLanguageVersion.of(javaLanguageVersion)
+    }
+}
+
+val globalJvmArgs by extra {
+    val javaVersion = JavaVersion.toVersion(javaLanguageVersion.toInt())
+
+    buildList {
+        // See https://kotest.io/docs/next/extensions/system_extensions.html#system-environment.
+        if (javaVersion.isCompatibleWith(JavaVersion.VERSION_17)) {
+            add("--add-opens")
+            add("java.base/java.io=ALL-UNNAMED")
+
+            add("--add-opens")
+            add("java.base/java.lang=ALL-UNNAMED")
+
+            add("--add-opens")
+            add("java.base/java.util=ALL-UNNAMED")
+
+            add("--add-opens")
+            add("java.base/sun.nio.ch=ALL-UNNAMED")
+        }
+
+        // See https://openjdk.org/jeps/424.
+        if (javaVersion.isCompatibleWith(JavaVersion.VERSION_19)) {
+            add("--enable-native-access=ALL-UNNAMED")
+        }
+    }
+}
+
+tasks.withType<JavaExec>().configureEach {
+    jvmArgs = globalJvmArgs
+
+    val normalizedName = name.trimEnd { !it.isLetter() }.lowercase()
+
+    // Work around https://youtrack.jetbrains.com/issue/KTIJ-34755.
+    if (normalizedName.endsWith("main") || normalizedName.endsWith("run")) {
+        doNotTrackState("Interactive Java execution tasks are never supposed to be UP-TO-DATE.")
     }
 }
 
@@ -190,9 +228,7 @@ tasks.withType<KotlinCompile>().configureEach {
         allWarningsAsErrors = true
         freeCompilerArgs = listOf(
             "-Xannotation-default-target=param-property",
-            "-Xconsistent-data-class-copy-visibility",
-            // Work-around for https://youtrack.jetbrains.com/issue/KT-78352.
-            "-Xwarning-level=IDENTITY_SENSITIVE_OPERATIONS_WITH_VALUE_TYPE:disabled"
+            "-Xconsistent-data-class-copy-visibility"
         )
         jvmTarget = maxKotlinJvmTarget
         optIn = optInRequirements
@@ -214,6 +250,8 @@ tasks.register<Jar>("javadocJar") {
 }
 
 tasks.withType<Test>().configureEach {
+    jvmArgs = globalJvmArgs
+
     // Work-around for "--tests" only being able to include tests, see https://github.com/gradle/gradle/issues/6505.
     properties["tests.exclude"]?.also { excludes ->
         filter {
@@ -229,16 +267,6 @@ tasks.withType<Test>().configureEach {
             includes.toString().split(',').map { includeTestsMatching(it) }
             isFailOnNoMatchingTests = false
         }
-    }
-
-    if (javaVersion.isCompatibleWith(JavaVersion.VERSION_17)) {
-        // See https://kotest.io/docs/next/extensions/system_extensions.html#system-environment.
-        jvmArgs(
-            "--add-opens", "java.base/java.io=ALL-UNNAMED",
-            "--add-opens", "java.base/java.lang=ALL-UNNAMED",
-            "--add-opens", "java.base/java.util=ALL-UNNAMED",
-            "--add-opens", "java.base/sun.nio.ch=ALL-UNNAMED"
-        )
     }
 
     val testSystemProperties = mutableListOf("gradle.build.dir" to project.layout.buildDirectory.get().asFile.path)

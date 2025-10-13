@@ -20,6 +20,7 @@
 package org.ossreviewtoolkit.scanner.provenance
 
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.core.annotation.Tags
 import io.kotest.core.spec.Spec
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.matchers.should
@@ -39,6 +40,7 @@ import org.ossreviewtoolkit.model.SourceCodeOrigin
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 
+@Tags("RequiresExternalTool")
 class DefaultPackageProvenanceResolverFunTest : WordSpec() {
     private val workingTreeCache = DefaultWorkingTreeCache()
     private val resolver = DefaultPackageProvenanceResolver(DummyProvenanceStorage(), workingTreeCache)
@@ -220,25 +222,4 @@ class DefaultPackageProvenanceResolverFunTest : WordSpec() {
             }
         }
     }
-}
-
-internal class DummyProvenanceStorage : PackageProvenanceStorage {
-    override fun readProvenance(id: Identifier, sourceArtifact: RemoteArtifact): PackageProvenanceResolutionResult? =
-        null
-
-    override fun readProvenance(id: Identifier, vcs: VcsInfo): PackageProvenanceResolutionResult? = null
-
-    override fun readProvenances(id: Identifier): List<PackageProvenanceResolutionResult> = emptyList()
-
-    override fun writeProvenance(id: Identifier, vcs: VcsInfo, result: PackageProvenanceResolutionResult) {
-        /* no-op */
-    }
-
-    override fun writeProvenance(
-        id: Identifier,
-        sourceArtifact: RemoteArtifact,
-        result: PackageProvenanceResolutionResult
-    ) { /* no-op */ }
-
-    override fun deleteProvenances(id: Identifier) { /* no-op */ }
 }

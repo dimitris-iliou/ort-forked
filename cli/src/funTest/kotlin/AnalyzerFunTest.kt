@@ -20,6 +20,7 @@
 package org.ossreviewtoolkit.cli
 
 import io.kotest.core.TestConfiguration
+import io.kotest.core.annotation.Tags
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.engine.spec.tempdir
 import io.kotest.matchers.concurrent.shouldCompleteWithin
@@ -42,9 +43,10 @@ import org.ossreviewtoolkit.plugins.packagemanagers.gradle.GradleFactory
 import org.ossreviewtoolkit.plugins.versioncontrolsystems.git.GitRepoFactory
 import org.ossreviewtoolkit.utils.test.readResourceValue
 
+@Tags("RequiresExternalTool")
 class AnalyzerFunTest : WordSpec({
     "An analysis" should {
-        "correctly report repositories git-repo for projects" {
+        "correctly report git-repo repositories for projects" {
             val expectedRepository = readResourceValue<Repository>("/git-repo-expected-repository.yml")
             val projectDir = createGitRepoProject()
 

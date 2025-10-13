@@ -284,7 +284,7 @@ internal class OrtModelBuilder : ToolingModelBuilder {
                         // Ignore unresolved project dependencies. For example for complex Android projects, Gradle's
                         // own "dependencies" task runs into "AmbiguousConfigurationSelectionException", but the project
                         // still builds fine, probably due to some Android plugin magic. Omitting a project dependency
-                        // is uncritical in terms of resovling dependencies, as the for the project itself dependencies
+                        // is uncritical in terms of resolving dependencies, as the for the project itself dependencies
                         // will still get resolved.
                         return@mapNotNull null
                     }
@@ -295,11 +295,7 @@ internal class OrtModelBuilder : ToolingModelBuilder {
                         append(dep.from)
                         append(".")
 
-                        val causes = (dep.failure as? ModuleVersionResolveException)?.causes?.takeIf { it.isNotEmpty() }
-                        if (causes != null) {
-                            appendLine(" Causes are:")
-                            append(causes.joinToString("\n") { it.toString() })
-                        }
+                        appendCauses(dep.failure)
                     }
 
                     logger.error(message)
@@ -318,4 +314,28 @@ internal class OrtModelBuilder : ToolingModelBuilder {
                 }
             }
         }
+}
+
+/**
+ * Add a string with information about the causes of the given [exception] to this [StringBuilder]. This is used to
+ * log the reason why a dependency could not be resolved. To get meaningful information, all causes need to be obtained
+ * recursively. This is because the top-level [ModuleVersionResolveException] typically has only other
+ * [ModuleVersionResolveException]s as causes with generic messages. The actual information about what went wrong is
+ * hidden somewhere down the cause chain.
+ */
+private fun StringBuilder.appendCauses(exception: Throwable) {
+    val causes = (exception as? ModuleVersionResolveException)?.causes?.takeIf { it.isNotEmpty() }
+    if (causes != null) {
+        appendLine(" Causes are:")
+        val allCauses = mutableSetOf<String>()
+
+        fun getAllCauses(exception: Throwable) {
+            exception.message?.also(allCauses::add)
+            exception.cause?.also { getAllCauses(it) }
+        }
+
+        causes.forEach { getAllCauses(it) }
+
+        append(allCauses.joinToString("\n"))
+    }
 }

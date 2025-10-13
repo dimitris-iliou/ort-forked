@@ -89,7 +89,7 @@ data class ScannerRun(
     val issues: Map<Identifier, Set<Issue>> = emptyMap(),
 
     /**
-     * The names of the scanners which have been used to scan the package.
+     * The project / package identifiers that have been scanned, associated with the names of the scanners used.
      */
     @JsonSerialize(converter = ScannersMapConverter::class)
     val scanners: Map<Identifier, Set<String>>,
@@ -241,8 +241,7 @@ data class ScannerRun(
             }
         }
 
-        @Suppress("UnsafeCallOnNullableType")
-        val packageProvenance = resolutionResult.packageProvenance!!
+        val packageProvenance = checkNotNull(resolutionResult.packageProvenance)
 
         val scanResultsByPath = resolutionResult.getKnownProvenancesWithoutVcsPath().mapValues { (_, provenance) ->
             scanResultsByProvenance[provenance].orEmpty()
@@ -265,8 +264,7 @@ data class ScannerRun(
             it.packageProvenanceResolutionIssue == null && it.nestedProvenanceResolutionIssue == null
         } ?: return null
 
-        @Suppress("UnsafeCallOnNullableType")
-        val packageProvenance = resolutionResult.packageProvenance!!
+        val packageProvenance = checkNotNull(resolutionResult.packageProvenance)
 
         val fileListsByPath = resolutionResult.getKnownProvenancesWithoutVcsPath().mapValues { (_, provenance) ->
             // If there was an issue creating at least one file list, then return null instead of an incomplete file

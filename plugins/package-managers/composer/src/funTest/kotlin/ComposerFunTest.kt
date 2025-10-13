@@ -19,6 +19,7 @@
 
 package org.ossreviewtoolkit.plugins.packagemanagers.composer
 
+import io.kotest.core.annotation.Tags
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.collections.beEmpty
 import io.kotest.matchers.collections.containExactly
@@ -26,6 +27,9 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.haveSubstring
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.file
+import io.kotest.property.arbitrary.single
 
 import java.io.File
 
@@ -36,10 +40,11 @@ import org.ossreviewtoolkit.model.toYaml
 import org.ossreviewtoolkit.utils.test.getAssetFile
 import org.ossreviewtoolkit.utils.test.matchExpectedResult
 
+@Tags("RequiresExternalTool")
 class ComposerFunTest : StringSpec({
     "Project files from vendor directories are ignored" {
         val projectFiles = ComposerFactory.create().mapDefinitionFiles(
-            File("."),
+            Arb.file().single(),
             listOf(
                 "projectA/composer.json",
                 "projectA/vendor/dependency1/composer.json",
@@ -69,9 +74,7 @@ class ComposerFunTest : StringSpec({
         val result = ComposerFactory.create().resolveSingleProject(definitionFile)
 
         with(result) {
-            project.id shouldBe Identifier(
-                "Composer::src/funTest/assets/projects/synthetic/no-lockfile/composer.json:"
-            )
+            project.id shouldBe Identifier("Composer::composer.json:")
             project.definitionFilePath shouldBe "plugins/package-managers/composer/src/funTest/assets/projects/" +
                 "synthetic/no-lockfile/composer.json"
             packages should beEmpty()

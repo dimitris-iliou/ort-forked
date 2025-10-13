@@ -46,6 +46,7 @@ plugins {
 }
 
 application {
+    // As the Java version used at runtime is not generally known, only hard-code some uncritical options.
     applicationDefaultJvmArgs = listOf(
         "--add-opens", "java.base/java.io=ALL-UNNAMED",
         "--add-opens", "java.base/sun.nio.ch=ALL-UNNAMED"
@@ -86,7 +87,7 @@ graalvmNative {
                         listOf("^/META-INF/native-image/org.jline/.*"),
                     // The contained "reflect-config.json" does not match the code of the AWS flavor of the Apache HTTP
                     // client.
-                    "software.amazon.awssdk:apache-client:2.33.2" to
+                    "software.amazon.awssdk:apache-client:2.35.2" to
                         listOf("^/META-INF/native-image/software.amazon.awssdk/apache-client/.*")
                 )
             )
@@ -213,9 +214,6 @@ signing {
 }
 
 tasks.named<JavaExec>("run") {
-    // Work around https://github.com/graalvm/native-build-tools/issues/743.
-    doNotTrackState("The 'run' task is never supposed to be UP-TO-DATE.")
-
     System.getenv("TERM")?.also {
         val mode = it.substringAfter('-', "16color")
         environment("FORCE_COLOR" to mode)

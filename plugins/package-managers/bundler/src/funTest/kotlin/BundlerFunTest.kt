@@ -19,6 +19,7 @@
 
 package org.ossreviewtoolkit.plugins.packagemanagers.bundler
 
+import io.kotest.core.annotation.Tags
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.matchers.collections.beEmpty
 import io.kotest.matchers.collections.shouldHaveSize
@@ -32,6 +33,8 @@ import org.ossreviewtoolkit.model.toYaml
 import org.ossreviewtoolkit.utils.test.getAssetFile
 import org.ossreviewtoolkit.utils.test.matchExpectedResult
 
+// Requires Git to be able to use Gems from Git repositories.
+@Tags("RequiresExternalTool")
 class BundlerFunTest : WordSpec({
     "Bundler" should {
         "resolve dependencies correctly" {
@@ -48,8 +51,7 @@ class BundlerFunTest : WordSpec({
             val actualResult = BundlerFactory.create().resolveSingleProject(definitionFile)
 
             with(actualResult) {
-                project.id shouldBe
-                    Identifier("Bundler::src/funTest/assets/projects/synthetic/no-lockfile/Gemfile:")
+                project.id shouldBe Identifier("Bundler::Gemfile:")
                 project.definitionFilePath shouldBe
                     "plugins/package-managers/bundler/src/funTest/assets/projects/synthetic/no-lockfile/Gemfile"
                 packages should beEmpty()

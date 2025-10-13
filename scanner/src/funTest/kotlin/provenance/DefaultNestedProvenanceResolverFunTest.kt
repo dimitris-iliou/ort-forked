@@ -20,6 +20,7 @@
 package org.ossreviewtoolkit.scanner.provenance
 
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.core.annotation.Tags
 import io.kotest.core.spec.Spec
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.matchers.maps.containExactly
@@ -36,8 +37,8 @@ import org.ossreviewtoolkit.model.RepositoryProvenance
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.utils.common.Os
-import org.ossreviewtoolkit.utils.test.ExpensiveTag
 
+@Tags("RequiresExternalTool")
 class DefaultNestedProvenanceResolverFunTest : WordSpec() {
     private val workingTreeCache = DefaultWorkingTreeCache()
     private val resolver = DefaultNestedProvenanceResolver(DummyNestedProvenanceStorage(), workingTreeCache)
@@ -205,7 +206,9 @@ class DefaultNestedProvenanceResolverFunTest : WordSpec() {
                 }
             }
 
-            "work for Subversion tags".config(tags = setOf(ExpensiveTag)) {
+            // Currently disabled due to a bug in the Subversion implementation that causes too much being cloned, see
+            // https://github.com/oss-review-toolkit/ort/issues/2392.
+            "work for Subversion tags".config(enabled = false) {
                 val provenance = RepositoryProvenance(
                     vcsInfo = VcsInfo(
                         type = VcsType.SUBVERSION,
@@ -219,12 +222,5 @@ class DefaultNestedProvenanceResolverFunTest : WordSpec() {
                     NestedProvenance(root = provenance, subRepositories = emptyMap())
             }
         }
-    }
-}
-
-internal class DummyNestedProvenanceStorage : NestedProvenanceStorage {
-    override fun readNestedProvenance(root: RepositoryProvenance): NestedProvenanceResolutionResult? = null
-    override fun writeNestedProvenance(root: RepositoryProvenance, result: NestedProvenanceResolutionResult) {
-        /** no-op */
     }
 }

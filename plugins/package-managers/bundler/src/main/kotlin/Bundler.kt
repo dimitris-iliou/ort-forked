@@ -23,8 +23,6 @@ import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 
-import kotlin.time.measureTime
-
 import kotlinx.serialization.decodeFromString
 
 import org.apache.logging.log4j.kotlin.logger
@@ -54,6 +52,7 @@ import org.ossreviewtoolkit.model.orEmpty
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.utils.common.AlphaNumericComparator
+import org.ossreviewtoolkit.utils.common.Os
 import org.ossreviewtoolkit.utils.common.collectMessages
 import org.ossreviewtoolkit.utils.ort.HttpDownloadError
 import org.ossreviewtoolkit.utils.ort.OkHttpClientHelper
@@ -62,14 +61,14 @@ import org.ossreviewtoolkit.utils.ort.okHttpClient
 import org.ossreviewtoolkit.utils.ort.showStackTrace
 
 /**
- * The path to the helper script resource that resolves a `Gemfile`'s top-level dependencies with group information.
+ * The name of the helper script resource that resolves a `Gemfile`'s top-level dependencies with group information.
  */
-private const val ROOT_DEPENDENCIES_SCRIPT = "root_dependencies.rb"
+private const val ROOT_DEPENDENCIES_SCRIPT_RESOURCE_NAME = "root_dependencies.rb"
 
 /**
- * The path to the helper script resource that resolves a `Gemfile`'s dependencies.
+ * The name of the helper script resource that resolves a `Gemfile`'s dependencies.
  */
-private const val RESOLVE_DEPENDENCIES_SCRIPT = "resolve_dependencies.rb"
+private const val RESOLVE_DEPENDENCIES_SCRIPT_RESOURCE_NAME = "resolve_dependencies.rb"
 
 /**
  * The name of the Bundler Gem.
@@ -81,24 +80,22 @@ private const val BUNDLER_GEM_NAME = "bundler"
  */
 internal const val BUNDLER_LOCKFILE_NAME = "Gemfile.lock"
 
-private fun runScriptCode(code: String, workingDir: File? = null): String {
+private fun runScriptCode(sourceCode: String, workingDir: File? = null): Any? {
     val output = with(ScriptingContainer(LocalContextScope.THREADSAFE)) {
         if (workingDir != null) currentDirectory = workingDir.path
-        runScriptlet(code).toString()
+        environment["BUNDLE_PATH"] = "${Os.userHomeDirectory}/.bundle"
+        runScriptlet(sourceCode)
     }
-
-    if (output.isEmpty()) throw IOException("Failed to run script code '$code'.")
 
     return output
 }
 
-private fun runScriptResource(resource: String, workingDir: File? = null): String {
+private fun runScriptResource(resourceName: String, workingDir: File? = null): Any? {
     val output = with(ScriptingContainer(LocalContextScope.THREADSAFE)) {
         if (workingDir != null) currentDirectory = workingDir.path
-        runScriptlet(PathType.CLASSPATH, resource).toString()
+        environment["BUNDLE_PATH"] = "${Os.userHomeDirectory}/.bundle"
+        runScriptlet(PathType.CLASSPATH, resourceName)
     }
-
-    if (output.isEmpty()) throw IOException("Failed to run script resource '$resource'.")
 
     return output
 }
@@ -155,28 +152,32 @@ class Bundler(
         val bundlerVersion = config.bundlerVersion ?: lockfilesBundlerVersion
 
         if (bundlerVersion != null) {
-            val duration = measureTime {
-                val output = runScriptCode(
-                    """
+            logger.info { "Installing custom Bundler version $bundlerVersion..." }
+
+            runCatching {
+                val code = """
                     require 'rubygems/commands/install_command'
                     cmd = Gem::Commands::InstallCommand.new
                     cmd.handle_options ["--no-document", "--user-install", "$BUNDLER_GEM_NAME:$bundlerVersion"]
                     cmd.execute
-                    """.trimIndent()
-                ).trim()
-
-                output.lines().forEach(logger::info)
+                """.trimIndent()
+                val result = runScriptCode(code) as Long
+                check(result == 0L) { "Installing the '$BUNDLER_GEM_NAME' Gem failed with error code $result." }
+            }.onSuccess {
+                logger.info { "Installing Bundler version $bundlerVersion completed successfully." }
+            }.onFailure {
+                logger.info { "Installing Bundler version $bundlerVersion failed: ${it.collectMessages()}" }
             }
-
-            logger.info { "Installing the '$BUNDLER_GEM_NAME' Gem in version $bundlerVersion took $duration." }
         }
 
         runCatching {
-            runScriptCode("puts(Gem::Specification.find_by_name('$BUNDLER_GEM_NAME').version)").trim()
+            val code = "Gem::Specification.find_by_name('$BUNDLER_GEM_NAME').version"
+            val result = runScriptCode(code) as String
+            result.trim()
         }.onSuccess { installedBundlerVersion ->
             logger.info { "Using the '$BUNDLER_GEM_NAME' Gem in version $installedBundlerVersion." }
         }.onFailure {
-            logger.warn { "Unable to determine the '$BUNDLER_GEM_NAME' Gem version." }
+            logger.warn { "Unable to determine the '$BUNDLER_GEM_NAME' Gem version: ${it.collectMessages()}" }
         }
     }
 
@@ -295,15 +296,16 @@ class Bundler(
         }
     }
 
+    @Suppress("UNCHECKED_CAST")
     private fun getDependencyGroups(workingDir: File): Map<String, List<String>> =
-        YAML.decodeFromString(runScriptResource(ROOT_DEPENDENCIES_SCRIPT, workingDir))
+        runScriptResource(ROOT_DEPENDENCIES_SCRIPT_RESOURCE_NAME, workingDir) as Map<String, List<String>>
 
     private fun resolveGemsInfo(workingDir: File): MutableMap<String, GemInfo> {
-        val stdout = runScriptResource(RESOLVE_DEPENDENCIES_SCRIPT, workingDir)
+        val specs = runScriptResource(RESOLVE_DEPENDENCIES_SCRIPT_RESOURCE_NAME, workingDir).toString()
 
         // The metadata produced by the "resolve_dependencies.rb" script separates specs for packages with the "\0"
         // character as delimiter.
-        val gemsInfo = stdout.split('\u0000').map {
+        val gemsInfo = specs.split('\u0000').map {
             val spec = YAML.decodeFromString<GemSpec>(it)
             GemInfo.createFromMetadata(spec)
         }.associateByTo(mutableMapOf()) {

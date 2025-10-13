@@ -118,6 +118,18 @@ ENTRYPOINT [ "/bin/bash" ]
 # PYTHON - Build Python as a separate component with pyenv
 FROM base AS pythonbuild
 
+ARG CONAN_VERSION
+ARG CONAN2_VERSION
+ARG PIP_VERSION
+ARG PYENV_GIT_TAG
+ARG PYTHON_INSPECTOR_VERSION
+ARG PYTHON_PIPENV_VERSION
+ARG PYTHON_POETRY_PLUGIN_EXPORT_VERSION
+ARG PYTHON_POETRY_VERSION
+ARG PYTHON_SETUPTOOLS_VERSION
+ARG PYTHON_VERSION
+ARG SCANCODE_VERSION
+
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -133,24 +145,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     tk-dev \
     && sudo rm -rf /var/lib/apt/lists/*
 
-ARG PYTHON_VERSION
-ARG PYENV_GIT_TAG
-
 ENV PYENV_ROOT=/opt/python
 ENV PATH=$PATH:$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PYENV_ROOT/conan2/bin
 RUN curl -kSs https://pyenv.run | bash \
     && pyenv install -v $PYTHON_VERSION \
     && pyenv global $PYTHON_VERSION
-
-ARG CONAN_VERSION
-ARG CONAN2_VERSION
-ARG PYTHON_INSPECTOR_VERSION
-ARG PYTHON_PIPENV_VERSION
-ARG PYTHON_POETRY_VERSION
-ARG PYTHON_POETRY_PLUGIN_EXPORT_VERSION
-ARG PYTHON_SETUPTOOLS_VERSION
-ARG PIP_VERSION
-ARG SCANCODE_VERSION
 
 RUN ARCH=$(arch | sed s/aarch64/arm64/) \
     &&  if [ "$ARCH" == "arm64" ]; then \
@@ -220,15 +219,18 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     sudo apt-get update -qq \
     && DEBIAN_FRONTEND=noninteractive sudo apt-get install -y --no-install-recommends \
+    cmake \
     libreadline6-dev \
     libssl-dev \
     libz-dev \
     make \
+    pkg-config \
     xvfb \
     zlib1g-dev \
     && sudo rm -rf /var/lib/apt/lists/*
 
 ARG COCOAPODS_VERSION
+ARG LICENSEE_VERSION
 ARG RUBY_VERSION
 
 ENV RBENV_ROOT=/opt/rbenv
@@ -241,7 +243,7 @@ RUN src/configure \
     && make -C src
 RUN rbenv install $RUBY_VERSION -v \
     && rbenv global $RUBY_VERSION \
-    && gem install bundler cocoapods:$COCOAPODS_VERSION
+    && gem install cocoapods:$COCOAPODS_VERSION licensee:$LICENSEE_VERSION
 
 FROM scratch AS ruby
 COPY --from=rubybuild /opt/rbenv /opt/rbenv
@@ -265,6 +267,7 @@ COPY --from=rustbuild /opt/rust /opt/rust
 FROM base AS gobuild
 
 ARG GO_VERSION
+
 ENV GOBIN=/opt/go/bin
 ENV PATH=$PATH:/opt/go/bin
 
@@ -279,19 +282,13 @@ COPY --from=gobuild /opt/go /opt/go
 # HASKELL STACK
 FROM base AS haskellbuild
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    sudo apt-get update -qq \
-    && DEBIAN_FRONTEND=noninteractive sudo apt-get install -y --no-install-recommends \
-    zlib1g-dev \
-    && sudo rm -rf /var/lib/apt/lists/*
-
 ARG HASKELL_STACK_VERSION
 
-ENV HASKELL_HOME=/opt/haskell
-ENV PATH=$PATH:$HASKELL_HOME/bin
+ENV PATH=$PATH:$HOME/.ghcup/bin
 
-RUN curl -sSL https://get.haskellstack.org/ | bash -s -- -d $HASKELL_HOME/bin
+RUN curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | BOOTSTRAP_HASKELL_MINIMAL=1 BOOTSTRAP_HASKELL_NONINTERACTIVE=1 sh && \
+    ghcup install stack $HASKELL_STACK_VERSION && \
+    mv $HOME/.ghcup /opt/haskell
 
 FROM scratch AS haskell
 COPY --from=haskellbuild /opt/haskell /opt/haskell
@@ -300,6 +297,8 @@ COPY --from=haskellbuild /opt/haskell /opt/haskell
 # REPO / ANDROID SDK
 FROM base AS androidbuild
 
+ARG ANDROID_CMD_VERSION
+
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     sudo apt-get update -qq \
@@ -307,7 +306,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     unzip \
     && sudo rm -rf /var/lib/apt/lists/*
 
-ARG ANDROID_CMD_VERSION
 ENV ANDROID_HOME=/opt/android-sdk
 
 RUN --mount=type=tmpfs,target=/android \
@@ -333,6 +331,7 @@ COPY --from=androidbuild /opt/android-sdk /opt/android-sdk
 FROM base AS dartbuild
 
 ARG DART_VERSION
+
 WORKDIR /opt/
 
 ENV DART_SDK=/opt/dart-sdk
@@ -470,8 +469,10 @@ COPY --from=ortbuild /opt/ort /opt/ort
 # Container with minimal selection of supported package managers.
 FROM base AS minimal-tools
 
+ARG NODEJS_VERSION
+
 # Remove ort build scripts
-RUN [ -d /etc/scripts ] && sudo rm -rf /etc/scripts
+RUN sudo rm -rf /etc/scripts
 
 #  Install optional tool subversion for ORT analyzer
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -487,7 +488,6 @@ ENV PATH=$PATH:$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PYENV_ROOT/conan2/bin
 COPY --from=python --chown=$USER:$USER $PYENV_ROOT $PYENV_ROOT
 
 # NodeJS
-ARG NODEJS_VERSION
 ENV NVM_DIR=/opt/nvm
 ENV PATH=$PATH:$NVM_DIR/versions/node/v$NODEJS_VERSION/bin
 COPY --from=nodejs --chown=$USER:$USER $NVM_DIR $NVM_DIR
@@ -505,7 +505,7 @@ ENV PATH=$PATH:/opt/go/bin
 COPY --from=golang --chown=$USER:$USER /opt/go /opt/go
 
 # Ruby
-ENV RBENV_ROOT=/opt/rbenv/
+ENV RBENV_ROOT=/opt/rbenv
 ENV GEM_HOME=/var/tmp/gem
 ENV PATH=$PATH:$RBENV_ROOT/bin:$RBENV_ROOT/shims:$RBENV_ROOT/plugins/ruby-install/bin
 COPY --from=ruby --chown=$USER:$USER $RBENV_ROOT $RBENV_ROOT
@@ -515,6 +515,10 @@ COPY --from=scancode-license-data --chown=$USER:$USER /opt/scancode-license-data
 #------------------------------------------------------------------------
 # Container with all supported package managers.
 FROM minimal-tools AS all-tools
+
+ARG ASKALONO_VERSION
+ARG COMPOSER_VERSION
+ARG PHP_VERSION
 
 # Repo and Android
 ENV ANDROID_HOME=/opt/android-sdk
@@ -547,9 +551,6 @@ ENV PATH=$PATH:$DOTNET_HOME:$DOTNET_HOME/tools:$DOTNET_HOME/bin
 COPY --from=dotnet --chown=$USER:$USER $DOTNET_HOME $DOTNET_HOME
 
 # PHP
-ARG PHP_VERSION
-ARG COMPOSER_VERSION
-
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     sudo apt-get update \
@@ -576,6 +577,13 @@ ENV PATH=$PATH:$BAZEL_HOME/bin
 
 COPY --from=bazel $BAZEL_HOME $BAZEL_HOME
 COPY --from=bazel --chown=$USER:$USER /opt/go/bin/buildozer /opt/go/bin/buildozer
+
+# Askalono
+RUN curl -LOs https://github.com/amzn/askalono/releases/download/$ASKALONO_VERSION/askalono-Linux.zip && \
+    mkdir /opt/askalono && \
+    unzip askalono-Linux.zip -d /opt/askalono
+
+ENV PATH=$PATH:/opt/askalono
 
 #------------------------------------------------------------------------
 # Runtime container with minimal selection of supported package managers pre-installed.
@@ -609,5 +617,8 @@ RUN mkdir -p "$HOME/.ort" "$HOME/.gradle"
 
 # Install cargo-credential-netrc late in the build to prevent an error accessing /opt/rust/cargo/registry/.
 RUN $CARGO_HOME/bin/cargo install cargo-credential-netrc
+
+# Verify that all tools required by ORT are available.
+RUN ort requirements
 
 ENTRYPOINT ["/opt/ort/bin/ort"]

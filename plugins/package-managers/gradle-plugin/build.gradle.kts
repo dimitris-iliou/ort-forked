@@ -77,8 +77,13 @@ tasks.register<Jar>("fatJar") {
 
     from({
         configurations.runtimeClasspath.get().filter {
-            // Only bundle JARs that are not specific to the Gradle version.
-            it.extension == "jar" && !("gradle" in it.path && gradle.gradleVersion in it.path)
+            check(it.extension == "jar")
+
+            val isGradleDependency = "gradle" in it.path && "-${gradle.gradleVersion}" in it.path
+            if (isGradleDependency) logger.lifecycle("Filtering out '$it' from '${archiveFile.get().asFile.name}'.")
+
+            // Omit JARs for Gradle dependencies from the fat JAR.
+            !isGradleDependency
         }.map {
             zipTree(it)
         }

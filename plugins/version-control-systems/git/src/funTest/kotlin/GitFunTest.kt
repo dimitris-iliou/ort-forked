@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,88 +19,146 @@
 
 package org.ossreviewtoolkit.plugins.versioncontrolsystems.git
 
+import io.kotest.assertions.throwables.shouldNotThrow
+import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.core.annotation.Tags
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.engine.spec.tempdir
-import io.kotest.matchers.result.shouldBeSuccess
 import io.kotest.matchers.shouldBe
 
 import java.io.File
 
-import kotlin.time.Duration.Companion.milliseconds
-
-import kotlinx.coroutines.delay
-
-import org.ossreviewtoolkit.downloader.WorkingTree
+import org.ossreviewtoolkit.downloader.DownloadException
+import org.ossreviewtoolkit.model.Identifier
+import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.plugins.api.PluginConfig
-import org.ossreviewtoolkit.utils.common.Os
 
-private val branches = mapOf(
-    "main" to "6f09f276c4426c387c6663f54bbd45aea8d81dac",
-    "branch1" to "0c58ea81d5c8112affab7a9cd6308deb4bc51589",
-    "branch2" to "7a05ad3ad30b4ddbfac22e0b768fb91383f16d8d",
-    "branch3" to "b798693a551e4d0e96d09409948327178a9abbce"
-)
+import org.semver4j.Semver
+import org.semver4j.SemverException
 
-private val tags = mapOf(
-    "tag1" to "0c58ea81d5c8112affab7a9cd6308deb4bc51589",
-    "tag2" to "7a05ad3ad30b4ddbfac22e0b768fb91383f16d8d",
-    "tag3" to "b798693a551e4d0e96d09409948327178a9abbce"
-)
+private const val PKG_VERSION = "0.4.1"
 
+private const val REPO_URL = "https://github.com/jriecken/dependency-graph"
+private const val REPO_REV = "8964880d9bac33f0a7f030a74c7c9299a8f117c8"
+private const val REPO_PATH = "lib"
+
+private const val REPO_REV_FOR_VERSION = "371b23f37da064687518bace268d607a92ecbe8f"
+private const val REPO_PATH_FOR_VERSION = "specs"
+
+@Tags("RequiresExternalTool")
 class GitFunTest : WordSpec({
     val git = GitFactory().create(PluginConfig.EMPTY)
-    val vcsInfo = VcsInfo(
-        type = VcsType.GIT,
-        url = "https://github.com/oss-review-toolkit/ort-test-data-git.git",
-        revision = "main"
-    )
-
-    lateinit var repoDir: File
-    lateinit var workingTree: WorkingTree
+    lateinit var outputDir: File
 
     beforeEach {
-        repoDir = tempdir()
-        workingTree = git.initWorkingTree(repoDir, vcsInfo)
+        outputDir = tempdir()
     }
 
-    afterEach {
-        // This delay is required to successfully let Kotest delete the temporary directories on Windows.
-        if (Os.isWindows) delay(100.milliseconds)
+    "getVersion()" should {
+        "return a version that can be coerced to a Semver" {
+            shouldNotThrow<SemverException> {
+                Semver.coerce(git.getVersion())
+            }
+        }
     }
 
-    "updateWorkingTree" should {
-        "update the working tree to the correct revision" {
-            branches.values.forEach { revision ->
-                git.updateWorkingTree(workingTree, revision) shouldBeSuccess revision
-                workingTree.getRevision() shouldBe revision
+    "download()" should {
+        "not prompt for credentials for non-existing repositories" {
+            val url = "https://github.com/oss-review-toolkit/foobar.git"
+            val pkg = Package.EMPTY.copy(vcsProcessed = VcsInfo(VcsType.GIT, url, "master"))
+
+            val exception = shouldThrow<DownloadException> {
+                git.download(pkg, outputDir, allowMovingRevisions = true)
             }
+
+            exception.message shouldBe "Git failed to get revisions from URL $url."
         }
 
-        "update the working tree to the correct tag" {
-            tags.forEach { (tag, revision) ->
-                git.updateWorkingTree(workingTree, tag) shouldBeSuccess tag
-                workingTree.getRevision() shouldBe revision
-            }
+        "get the given revision" {
+            val pkg = Package.EMPTY.copy(vcsProcessed = VcsInfo(VcsType.GIT, REPO_URL, REPO_REV))
+            val expectedFiles = listOf(
+                ".git",
+                ".gitignore",
+                "CHANGELOG.md",
+                "LICENSE",
+                "README.md",
+                "lib",
+                "package.json",
+                "specs"
+            )
+
+            val workingTree = git.download(pkg, outputDir)
+            val actualFiles = workingTree.getRootPath().walk().maxDepth(1).mapNotNullTo(mutableListOf()) {
+                it.toRelativeString(workingTree.getRootPath()).ifEmpty { null }
+            }.sorted()
+
+            workingTree.isValid() shouldBe true
+            workingTree.getRevision() shouldBe REPO_REV
+            actualFiles.joinToString("\n") shouldBe expectedFiles.joinToString("\n")
         }
 
-        "update the working tree to the correct branch" {
-            branches.forEach { (branch, revision) ->
-                git.updateWorkingTree(workingTree, branch) shouldBeSuccess branch
-                workingTree.getRevision() shouldBe revision
-            }
+        "get only the given path" {
+            val pkg = Package.EMPTY.copy(vcsProcessed = VcsInfo(VcsType.GIT, REPO_URL, REPO_REV, path = REPO_PATH))
+            val expectedFiles = listOf(
+                File("LICENSE"),
+                File("README.md"),
+                File(REPO_PATH, "dep_graph.js"),
+                File(REPO_PATH, "index.d.ts")
+            )
+
+            val workingTree = git.download(pkg, outputDir)
+            val actualFiles = workingTree.getRootPath().walkBottomUp()
+                .onEnter { it.name != ".git" }
+                .filter { it.isFile }
+                .map { it.relativeTo(outputDir) }
+                .sortedBy { it.path }
+                .toList()
+
+            workingTree.isValid() shouldBe true
+            workingTree.getRevision() shouldBe REPO_REV
+            actualFiles.joinToString("\n") shouldBe expectedFiles.joinToString("\n")
         }
 
-        "update an outdated local branch" {
-            val branch = "branch1"
-            val revision = branches.getValue(branch)
+        "work based on a package version" {
+            val pkg = Package.EMPTY.copy(
+                id = Identifier("Test:::$PKG_VERSION"),
 
-            git.updateWorkingTree(workingTree, branch)
-            GitCommand.run("reset", "--hard", "HEAD~1", workingDir = repoDir).requireSuccess()
+                // Use a non-blank dummy revision to enforce multiple revision candidates being tried.
+                vcsProcessed = VcsInfo(VcsType.GIT, REPO_URL, "dummy")
+            )
 
-            git.updateWorkingTree(workingTree, branch) shouldBeSuccess branch
-            workingTree.getRevision() shouldBe revision
+            val workingTree = git.download(pkg, outputDir)
+
+            workingTree.isValid() shouldBe true
+            workingTree.getRevision() shouldBe REPO_REV_FOR_VERSION
+        }
+
+        "get only the given path based on a package version" {
+            val pkg = Package.EMPTY.copy(
+                id = Identifier("Test:::$PKG_VERSION"),
+
+                // Use a non-blank dummy revision to enforce multiple revision candidates being tried.
+                vcsProcessed = VcsInfo(VcsType.GIT, REPO_URL, "dummy", path = REPO_PATH_FOR_VERSION)
+            )
+            val expectedFiles = listOf(
+                File("LICENSE"),
+                File("README.md"),
+                File(REPO_PATH_FOR_VERSION, "dep_graph_spec.js")
+            )
+
+            val workingTree = git.download(pkg, outputDir)
+            val actualFiles = workingTree.getRootPath().walkBottomUp()
+                .onEnter { it.name != ".git" }
+                .filter { it.isFile }
+                .map { it.relativeTo(outputDir) }
+                .sortedBy { it.path }
+                .toList()
+
+            workingTree.isValid() shouldBe true
+            workingTree.getRevision() shouldBe REPO_REV_FOR_VERSION
+            actualFiles.joinToString("\n") shouldBe expectedFiles.joinToString("\n")
         }
     }
 })

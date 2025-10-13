@@ -153,6 +153,8 @@ private data class Dependency(
     val sourceArtifact: SourceArtifact? = null,
     val declaredLicenses: Set<String> = emptySet(),
     val concludedLicense: SpdxExpression? = null,
+    val description: String? = null,
+    val homepageUrl: String? = null,
     val isExcluded: Boolean = false,
     val isDynamicallyLinked: Boolean = false,
     val labels: Map<String, String> = emptyMap()
@@ -203,8 +205,8 @@ private fun Dependency.toPackage(): Package {
         vcs = vcsInfo,
         declaredLicenses = declaredLicenses,
         concludedLicense = concludedLicense,
-        description = "",
-        homepageUrl = "",
+        description = description.orEmpty(),
+        homepageUrl = homepageUrl.orEmpty(),
         binaryArtifact = RemoteArtifact.EMPTY,
         labels = labels
     )

@@ -19,10 +19,13 @@
 
 package org.ossreviewtoolkit.plugins.licensefactproviders.spdx
 
+import java.net.URL
+
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.licensefactproviders.api.LicenseFactProvider
 import org.ossreviewtoolkit.plugins.licensefactproviders.api.LicenseFactProviderFactory
+import org.ossreviewtoolkit.plugins.licensefactproviders.api.LicenseText
 
 @OrtPlugin(
     id = "SPDX",
@@ -32,11 +35,19 @@ import org.ossreviewtoolkit.plugins.licensefactproviders.api.LicenseFactProvider
 )
 class SpdxLicenseFactProvider(
     override val descriptor: PluginDescriptor = SpdxLicenseFactProviderFactory.descriptor
-) : LicenseFactProvider {
-    override fun getLicenseText(licenseId: String) = getLicenseTextResource(licenseId)?.readText()
+) : LicenseFactProvider() {
+    override fun getLicenseText(licenseId: String) =
+        getLicenseTextResource(licenseId)?.readText()?.let {
+            // It can be safely assumed that the license text is not blank as all SPDX license texts are non-blank.
+            LicenseText(it)
+        }
 
     override fun hasLicenseText(licenseId: String) = getLicenseTextResource(licenseId) != null
 
-    private fun getLicenseTextResource(licenseId: String) =
-        javaClass.getResource("/licenses/$licenseId") ?: javaClass.getResource("/exceptions/$licenseId")
+    private fun getLicenseTextResource(licenseId: String): URL? =
+        if (licenseId.isNotEmpty()) {
+            javaClass.getResource("/licenses/$licenseId") ?: javaClass.getResource("/exceptions/$licenseId")
+        } else {
+            null
+        }
 }

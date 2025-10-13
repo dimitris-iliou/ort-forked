@@ -19,6 +19,7 @@
 
 package org.ossreviewtoolkit.plugins.packagemanagers.bazel
 
+import io.kotest.core.annotation.Tags
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.should
 
@@ -29,7 +30,8 @@ import org.ossreviewtoolkit.utils.test.getAssetFile
 import org.ossreviewtoolkit.utils.test.matchExpectedResult
 import org.ossreviewtoolkit.utils.test.patchActualResult
 
-class BazelDetectionTest : StringSpec({
+@Tags("RequiresExternalTool")
+class BazelDetectionFunTest : StringSpec({
     "MODULE.bazel files present in a local registry should not be considered as definition files" {
         val definitionFile = getAssetFile("projects/synthetic/bazel-local-registry2/MODULE.bazel")
         val expectedResultFile = getAssetFile("projects/synthetic/bazel-expected-output-local-registry2.yml")

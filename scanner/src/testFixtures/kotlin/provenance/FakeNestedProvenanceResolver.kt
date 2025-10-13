@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,14 @@
  * License-Filename: LICENSE
  */
 
-@file:Suppress("Filename", "MatchingDeclarationName")
+package org.ossreviewtoolkit.scanner.provenance
 
-package org.ossreviewtoolkit.utils.test
+import org.ossreviewtoolkit.model.KnownProvenance
 
-import io.kotest.core.Tag
-
-object ExpensiveTag : Tag()
+/**
+ * An implementation of [NestedProvenanceResolver] that always returns a non-nested provenance.
+ */
+class FakeNestedProvenanceResolver : NestedProvenanceResolver {
+    override suspend fun resolveNestedProvenance(provenance: KnownProvenance): NestedProvenance =
+        NestedProvenance(root = provenance, subRepositories = emptyMap())
+}
