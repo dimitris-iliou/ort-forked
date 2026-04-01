@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,9 +26,12 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 
 import org.ossreviewtoolkit.analyzer.PackageManagerFactory
+import org.ossreviewtoolkit.model.Issue
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
+import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.OrtPluginOption
@@ -40,8 +43,10 @@ import org.ossreviewtoolkit.plugins.packagemanagers.node.Scope
 import org.ossreviewtoolkit.plugins.packagemanagers.node.getDependenciesForScope
 import org.ossreviewtoolkit.plugins.packagemanagers.node.getInstalledModulesDirs
 import org.ossreviewtoolkit.plugins.packagemanagers.node.getNames
+import org.ossreviewtoolkit.plugins.packagemanagers.node.moduleId
 import org.ossreviewtoolkit.plugins.packagemanagers.node.parsePackageJson
 import org.ossreviewtoolkit.plugins.packagemanagers.node.parsePackageJsons
+import org.ossreviewtoolkit.utils.common.collectMessages
 import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.realFile
 import org.ossreviewtoolkit.utils.common.withoutPrefix
@@ -82,9 +87,11 @@ class Yarn2(override val descriptor: PluginDescriptor = Yarn2Factory.descriptor,
     NodePackageManager(NodePackageManagerType.YARN2) {
     override val globsForDefinitionFiles = listOf(NodePackageManagerType.DEFINITION_FILE)
     internal val yarn2Command = Yarn2Command(config.corepackEnabled)
+
+    private val issues = mutableListOf<Issue>()
     private val moduleInfoResolver = ModuleInfoResolver { workingDir, moduleIds ->
         runBlocking(Dispatchers.IO.limitedParallelism(20)) {
-            moduleIds.chunked(YARN_NPM_INFO_CHUNK_SIZE).map { chunk ->
+            val resultChunks = moduleIds.chunked(YARN_NPM_INFO_CHUNK_SIZE).map { chunk ->
                 async {
                     val process = yarn2Command.run(
                         "npm",
@@ -99,7 +106,13 @@ class Yarn2(override val descriptor: PluginDescriptor = Yarn2Factory.descriptor,
 
                     parsePackageJsons(process.stdout)
                 }
-            }.awaitAll().flatten().toSet()
+            }.awaitAll()
+
+            resultChunks.flatten().mapNotNullTo(mutableSetOf()) { result ->
+                result.onFailure {
+                    issues += createAndLogIssue(it.collectMessages())
+                }.getOrNull()
+            }
         }
     }
 
@@ -122,6 +135,7 @@ class Yarn2(override val descriptor: PluginDescriptor = Yarn2Factory.descriptor,
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {
@@ -130,13 +144,21 @@ class Yarn2(override val descriptor: PluginDescriptor = Yarn2Factory.descriptor,
         installDependencies(workingDir)
 
         val workspaceModuleDirs = getWorkspaceModuleDirs(workingDir)
-        val packageInfoForLocator = getPackageInfos(workingDir).associateBy { it.value }
-        handler.setContext(workingDir, getInstalledModulesDirs(workingDir), packageInfoForLocator)
+        val packageJsonForModuleId = getInstalledModulesDirs(workingDir).associate { moduleDir ->
+            val packageJson = parsePackageJson(moduleDir.resolve(NodePackageManagerType.DEFINITION_FILE))
+            packageJson.moduleId to packageJson
+        }
+
+        val packageInfoForLocator = getPackageInfos(workingDir)
+            .filterNotInstalled(packageJsonForModuleId.keys)
+            .associateBy { it.value }
+
+        handler.setContext(workingDir, packageJsonForModuleId, packageInfoForLocator)
 
         // Warm-up the cache to speed-up processing.
         requestAllPackageDetails(packageInfoForLocator.values)
 
-        val scopes = Scope.entries.filterNot { scope -> scope.isExcluded(excludes) }
+        val scopes = Scope.entries.filterNot { scope -> scope.isExcluded(excludes, includes) }
 
         return workspaceModuleDirs.map { projectDir ->
             val packageJsonFile = projectDir / NodePackageManagerType.DEFINITION_FILE
@@ -155,13 +177,27 @@ class Yarn2(override val descriptor: PluginDescriptor = Yarn2Factory.descriptor,
 
             ProjectAnalyzerResult(
                 project = project.copy(scopeNames = scopes.getNames()),
-                packages = emptySet()
+                packages = emptySet(),
+                issues = issues
             )
         }
     }
 
     private fun installDependencies(workingDir: File) {
-        yarn2Command.run("install", workingDir = workingDir).requireSuccess()
+        yarn2Command.run(
+            "install",
+            workingDir = workingDir,
+            environment = mapOf(
+                // Disable the execution of postinstall scripts for security reasons.
+                // See: https://yarnpkg.com/configuration/yarnrc#enableScripts
+                "YARN_ENABLE_SCRIPTS" to "false",
+
+                // Set the node linker to "node-modules" as the "node_modules" directory is required by this class to
+                // filter out optional dependencies that were not installed.
+                // See: https://yarnpkg.com/features/linkers
+                "YARN_NODE_LINKER" to "node-modules"
+            )
+        ).requireSuccess()
     }
 
     private fun getPackageInfos(workingDir: File): List<PackageInfo> {
@@ -172,11 +208,25 @@ class Yarn2(override val descriptor: PluginDescriptor = Yarn2Factory.descriptor,
             "--manifest",
             "--virtuals",
             "--json",
-            workingDir = workingDir,
-            environment = mapOf("YARN_NODE_LINKER" to "pnp")
+            workingDir = workingDir
         ).requireSuccess()
 
         return parsePackageInfos(process.stdout)
+    }
+
+    private fun Collection<PackageInfo>.filterNotInstalled(installedModuleIds: Set<String>): List<PackageInfo> {
+        val infoForLocator = associateBy { it.value }
+
+        return mapNotNull { info ->
+            if (info.moduleId !in installedModuleIds) return@mapNotNull null
+            info.copy(
+                children = info.children.copy(
+                    dependencies = info.children.dependencies.filter { dep ->
+                        infoForLocator.getValue(dep.locator).moduleId in installedModuleIds
+                    }
+                )
+            )
+        }
     }
 
     private fun getWorkspaceModuleDirs(workingDir: File): Set<File> {

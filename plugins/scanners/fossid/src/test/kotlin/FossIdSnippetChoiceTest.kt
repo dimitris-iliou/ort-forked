@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ package org.ossreviewtoolkit.plugins.scanners.fossid
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.inspectors.forAtLeastOne
 import io.kotest.matchers.collections.beEmpty
+import io.kotest.matchers.collections.shouldBeSingleton
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
@@ -61,12 +62,12 @@ import org.ossreviewtoolkit.clients.fossid.uploadFile
 import org.ossreviewtoolkit.downloader.VersionControlSystem
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.TextLocation
-import org.ossreviewtoolkit.model.config.SnippetChoices
 import org.ossreviewtoolkit.model.config.snippet.Choice
 import org.ossreviewtoolkit.model.config.snippet.Given
-import org.ossreviewtoolkit.model.config.snippet.Provenance
 import org.ossreviewtoolkit.model.config.snippet.SnippetChoice
 import org.ossreviewtoolkit.model.config.snippet.SnippetChoiceReason
+import org.ossreviewtoolkit.model.config.snippet.SnippetChoices
+import org.ossreviewtoolkit.model.config.snippet.SnippetProvenance
 import org.ossreviewtoolkit.model.jsonMapper
 import org.ossreviewtoolkit.utils.ort.ORT_NAME
 import org.ossreviewtoolkit.utils.spdx.toSpdx
@@ -119,7 +120,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 .expectProjectRequest(projectCode)
                 .expectListScans(projectCode, listOf(scan))
                 .expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
-                .expectCreateScan(projectCode, scanCode, vcsInfo, "")
+                .expectCreateScan(projectCode, scanCode, vcsInfo, REVISION_EMPTY)
                 .expectDownload(scanCode)
                 .mockFiles(
                     scanCode,
@@ -164,7 +165,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 .expectProjectRequest(projectCode)
                 .expectListScans(projectCode, listOf(scan))
                 .expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
-                .expectCreateScan(projectCode, scanCode, vcsInfo, "")
+                .expectCreateScan(projectCode, scanCode, vcsInfo, REVISION_EMPTY)
                 .expectDownload(scanCode)
                 .mockFiles(
                     scanCode,
@@ -211,7 +212,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 .expectProjectRequest(projectCode)
                 .expectListScans(projectCode, listOf(scan))
                 .expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
-                .expectCreateScan(projectCode, scanCode, vcsInfo, "")
+                .expectCreateScan(projectCode, scanCode, vcsInfo, REVISION_EMPTY)
                 .expectDownload(scanCode)
                 .mockFiles(
                     scanCode,
@@ -260,7 +261,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 .expectProjectRequest(projectCode)
                 .expectListScans(projectCode, listOf(scan))
                 .expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
-                .expectCreateScan(projectCode, scanCode, vcsInfo, "")
+                .expectCreateScan(projectCode, scanCode, vcsInfo, REVISION_EMPTY)
                 .expectDownload(scanCode)
                 .mockFiles(
                     scanCode,
@@ -311,10 +312,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 )
             }
 
-            summary.issues.forAtLeastOne {
-                it.message shouldBe "This scan has 0 file(s) pending identification in FossID. " +
-                    "Please review and resolve them at: https://www.example.org/fossid/index.html?action=scanview&sid=1"
-            }
+            summary.issues should beEmpty()
         }
 
         "mark a file with all snippets chosen as identified when the scan has been created in archive mode" {
@@ -363,7 +361,7 @@ class FossIdSnippetChoiceTest : WordSpec({
             ).summary
 
             summary.snippetFindings should beEmpty()
-            coVerify {
+            coVerify(exactly = 1) {
                 service.createScan(USER, API_KEY, projectCode, scanCode, null, null, comment)
                 service.removeUploadedContent(USER, API_KEY, scanCode)
                 service.uploadFile(USER, API_KEY, scanCode, any())
@@ -394,10 +392,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 )
             }
 
-            summary.issues.forAtLeastOne {
-                it.message shouldBe "This scan has 0 file(s) pending identification in FossID. " +
-                    "Please review and resolve them at: https://www.example.org/fossid/index.html?action=scanview&sid=1"
-            }
+            summary.issues should beEmpty()
         }
 
         "mark a file with only non relevant snippets for a given snippet location as identified" {
@@ -412,7 +407,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 .expectProjectRequest(projectCode)
                 .expectListScans(projectCode, listOf(scan))
                 .expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
-                .expectCreateScan(projectCode, scanCode, vcsInfo, "")
+                .expectCreateScan(projectCode, scanCode, vcsInfo, REVISION_EMPTY)
                 .expectDownload(scanCode)
                 .mockFiles(
                     scanCode,
@@ -439,12 +434,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 service.markAsIdentified(USER, API_KEY, scanCode, FILE_1, any())
             }
 
-            summary.issues.filter { it.severity > Severity.HINT } should beEmpty()
-
-            summary.issues.forAtLeastOne {
-                it.message shouldBe "This scan has 0 file(s) pending identification in FossID. " +
-                    "Please review and resolve them at: https://www.example.org/fossid/index.html?action=scanview&sid=1"
-            }
+            summary.issues should beEmpty()
         }
 
         "not mark a file with some non relevant snippets for a given snippet location as identified" {
@@ -459,7 +449,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 .expectProjectRequest(projectCode)
                 .expectListScans(projectCode, listOf(scan))
                 .expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
-                .expectCreateScan(projectCode, scanCode, vcsInfo, "")
+                .expectCreateScan(projectCode, scanCode, vcsInfo, REVISION_EMPTY)
                 .expectDownload(scanCode)
                 .mockFiles(
                     scanCode,
@@ -515,7 +505,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 .expectProjectRequest(projectCode)
                 .expectListScans(projectCode, listOf(scan))
                 .expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
-                .expectCreateScan(projectCode, scanCode, vcsInfo, "")
+                .expectCreateScan(projectCode, scanCode, vcsInfo, REVISION_EMPTY)
                 .expectDownload(scanCode)
                 .mockFiles(
                     scanCode,
@@ -560,7 +550,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 .expectProjectRequest(projectCode)
                 .expectListScans(projectCode, listOf(scan))
                 .expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
-                .expectCreateScan(projectCode, scanCode, vcsInfo, "")
+                .expectCreateScan(projectCode, scanCode, vcsInfo, REVISION_EMPTY)
                 .expectDownload(scanCode)
                 .mockFiles(
                     scanCode,
@@ -605,7 +595,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 .expectProjectRequest(projectCode)
                 .expectListScans(projectCode, listOf(scan))
                 .expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
-                .expectCreateScan(projectCode, scanCode, vcsInfo, "")
+                .expectCreateScan(projectCode, scanCode, vcsInfo, REVISION_EMPTY)
                 .expectDownload(scanCode)
                 .mockFiles(
                     scanCode,
@@ -653,7 +643,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 .expectProjectRequest(projectCode)
                 .expectListScans(projectCode, listOf(scan))
                 .expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
-                .expectCreateScan(projectCode, scanCode, vcsInfo, "")
+                .expectCreateScan(projectCode, scanCode, vcsInfo, REVISION_EMPTY)
                 .expectDownload(scanCode)
                 .mockFiles(
                     scanCode,
@@ -678,6 +668,48 @@ class FossIdSnippetChoiceTest : WordSpec({
             summary.snippetFindings should beEmpty()
         }
 
+        "add the license of already marked file with a snippet choice to the license findings (scan in archive mode)" {
+            val projectCode = PROJECT
+            val scanCode = scanCode(PROJECT, null)
+            val config = createConfig(deltaScans = false, fetchSnippetMatchedLines = true, isArchiveMode = true)
+            val vcsInfo = createVcsInfo()
+            val scan = createScan(vcsInfo.url, "${vcsInfo.revision}_other", scanCode)
+            val pkgId = createIdentifier(index = 42)
+
+            val choiceLocation = TextLocation(FILE_1, 10, 20)
+            val payload = OrtCommentPayload(mapOf("MIT" to listOf(choiceLocation)), 1, 0)
+            val comment = jsonMapper.writeValueAsString(mapOf(ORT_NAME to payload))
+            val markedAsIdentifiedFile = createMarkAsIdentifiedFile("MIT", FILE_1_ARCHIVE_MODE, comment)
+            FossIdRestService.create(config.serverUrl)
+                .expectProjectRequest(projectCode)
+                .expectListScans(projectCode, listOf(scan))
+                .expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
+                .expectCreateScan(projectCode, scanCode, vcsInfo, REVISION_EMPTY, isArchiveMode = true)
+                .expectRemoveUploadedContent(scanCode)
+                .expectUploadFile(scanCode)
+                .expectExtractArchives(scanCode)
+                .mockFiles(
+                    scanCode,
+                    markedFiles = listOf(markedAsIdentifiedFile)
+                )
+
+            val snippetChoices = createSnippetChoices(
+                vcsInfo.url,
+                createSnippetChoice(choiceLocation, PURL_1, "")
+            )
+            val fossId = createFossId(config)
+
+            val summary = fossId.scan(createPackage(pkgId, vcsInfo), snippetChoices = snippetChoices).summary
+
+            summary.licenseFindings.shouldBeSingleton {
+                it.license shouldBe "MIT".toSpdx()
+                it.location shouldBe choiceLocation
+            }
+
+            summary.issues.filter { it.severity > Severity.HINT } should beEmpty()
+            summary.snippetFindings should beEmpty()
+        }
+
         "add the license of marked as identified files that have been manually marked in the UI (legacy behavior)" {
             val projectCode = PROJECT
             val scanCode = scanCode(PROJECT, null)
@@ -691,7 +723,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 .expectProjectRequest(projectCode)
                 .expectListScans(projectCode, listOf(scan))
                 .expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
-                .expectCreateScan(projectCode, scanCode, vcsInfo, "")
+                .expectCreateScan(projectCode, scanCode, vcsInfo, REVISION_EMPTY)
                 .expectDownload(scanCode)
                 .mockFiles(
                     scanCode,
@@ -729,7 +761,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 .expectProjectRequest(projectCode)
                 .expectListScans(projectCode, listOf(scan))
                 .expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
-                .expectCreateScan(projectCode, scanCode, vcsInfo, "")
+                .expectCreateScan(projectCode, scanCode, vcsInfo, REVISION_EMPTY)
                 .expectDownload(scanCode)
                 .mockFiles(
                     scanCode,
@@ -775,6 +807,72 @@ class FossIdSnippetChoiceTest : WordSpec({
             }
         }
 
+        "put a marked as identified file back to pending if it has no snippet choice (scan in archive mode)" {
+            val projectCode = PROJECT
+            val scanCode = scanCode(PROJECT, null)
+            val config = createConfig(deltaScans = false, fetchSnippetMatchedLines = true, isArchiveMode = true)
+            val vcsInfo = createVcsInfo()
+            val scan = createScan(vcsInfo.url, "${vcsInfo.revision}_other", scanCode)
+            val pkgId = createIdentifier(index = 42)
+
+            val choiceLocation = TextLocation(FILE_1, 10, 20)
+            val payload = OrtCommentPayload(mapOf("MIT" to listOf(choiceLocation)), 1, 0)
+            val comment = jsonMapper.writeValueAsString(mapOf(ORT_NAME to payload))
+            val markedAsIdentifiedFile = createMarkAsIdentifiedFile("MIT", FILE_1_ARCHIVE_MODE, comment)
+            val service = FossIdRestService.create(config.serverUrl)
+                .expectProjectRequest(projectCode)
+                .expectListScans(projectCode, listOf(scan))
+                .expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
+                .expectCreateScan(projectCode, scanCode, vcsInfo, REVISION_EMPTY, isArchiveMode = true)
+                .expectRemoveUploadedContent(scanCode)
+                .expectUploadFile(scanCode)
+                .expectExtractArchives(scanCode)
+                .mockFiles(
+                    scanCode,
+                    markedFiles = listOf(markedAsIdentifiedFile),
+                    snippets = listOf(
+                        createSnippet(0, FILE_1, PURL_1),
+                        createSnippet(1, FILE_1, PURL_2),
+                        createSnippet(2, FILE_1, PURL_3)
+                    ),
+                    matchedLines = mapOf(
+                        0 to MatchedLines.create((10..20).toList(), (10..20).toList()),
+                        1 to MatchedLines.create((10..20).toList(), (10..20).toList()),
+                        2 to MatchedLines.create((20..30).toList(), (20..30).toList())
+                    )
+                )
+                // The unmark as identified call is made on the real snippet path.
+                .expectUnmarkAsIdentified(scanCode, FILE_1_ARCHIVE_MODE)
+
+            val fossId = createFossId(config)
+
+            val summary = fossId.scan(createPackage(pkgId, vcsInfo), snippetChoices = emptyList()).summary
+
+            summary.issues.forAtLeastOne {
+                it.message shouldBe "This scan has 1 file(s) pending identification in FossID. " +
+                    "Please review and resolve them at: https://www.example.org/fossid/index.html?action=scanview&sid=1"
+            }
+
+            summary.issues.filter { it.severity > Severity.HINT } should beEmpty()
+            summary.snippetFindings shouldHaveSize 2
+            summary.snippetFindings.first().apply {
+                sourceLocation.path shouldBe FILE_1
+                snippets.map { it.purl } shouldBe listOf(PURL_1, PURL_2)
+            }
+
+            summary.snippetFindings.last().apply {
+                sourceLocation.path shouldBe FILE_1
+                snippets.map { it.purl } shouldBe listOf(PURL_3)
+            }
+
+            coVerify(exactly = 1) {
+                service.removeUploadedContent(USER, API_KEY, scanCode)
+                service.uploadFile(USER, API_KEY, scanCode, any())
+                service.extractArchives(USER, API_KEY, scanCode, any())
+                service.unmarkAsIdentified(USER, API_KEY, scanCode, FILE_1_ARCHIVE_MODE, any())
+            }
+        }
+
         "put a marked as identified file back to pending if some of its snippet choices have been deleted" {
             val projectCode = PROJECT
             val scanCode = scanCode(PROJECT, null)
@@ -791,7 +889,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 .expectProjectRequest(projectCode)
                 .expectListScans(projectCode, listOf(scan))
                 .expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
-                .expectCreateScan(projectCode, scanCode, vcsInfo, "")
+                .expectCreateScan(projectCode, scanCode, vcsInfo, REVISION_EMPTY)
                 .expectDownload(scanCode)
                 .mockFiles(
                     scanCode,
@@ -850,7 +948,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 .expectProjectRequest(projectCode)
                 .expectListScans(projectCode, listOf(scan))
                 .expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
-                .expectCreateScan(projectCode, scanCode, vcsInfo, "")
+                .expectCreateScan(projectCode, scanCode, vcsInfo, REVISION_EMPTY)
                 .expectDownload(scanCode)
                 .mockFiles(
                     scanCode,
@@ -895,7 +993,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 .expectProjectRequest(projectCode)
                 .expectListScans(projectCode, listOf(scan))
                 .expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
-                .expectCreateScan(projectCode, scanCode, vcsInfo, "")
+                .expectCreateScan(projectCode, scanCode, vcsInfo, REVISION_EMPTY)
                 .expectDownload(scanCode)
                 .mockFiles(
                     scanCode,
@@ -940,7 +1038,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 .expectProjectRequest(projectCode)
                 .expectListScans(projectCode, listOf(scan))
                 .expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
-                .expectCreateScan(projectCode, scanCode, vcsInfo, "")
+                .expectCreateScan(projectCode, scanCode, vcsInfo, REVISION_EMPTY)
                 .expectDownload(scanCode)
                 .mockFiles(
                     scanCode,
@@ -983,7 +1081,7 @@ class FossIdSnippetChoiceTest : WordSpec({
                 .expectProjectRequest(projectCode)
                 .expectListScans(projectCode, listOf(scan))
                 .expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
-                .expectCreateScan(projectCode, scanCode, vcsInfo, "")
+                .expectCreateScan(projectCode, scanCode, vcsInfo, REVISION_EMPTY)
                 .expectDownload(scanCode)
                 .mockFiles(
                     scanCode,
@@ -1008,13 +1106,11 @@ class FossIdSnippetChoiceTest : WordSpec({
 
             summary.snippetFindings shouldHaveSize 2
 
-            summary.snippetFindings.first().apply { // one snippet is remaining for file 1
-                sourceLocation.path shouldBe FILE_1
-            }
+            // One snippet is remaining for file 1.
+            summary.snippetFindings.first().sourceLocation.path shouldBe FILE_1
 
-            summary.snippetFindings.last().apply { // one snippet for file 2, then the limit is reached
-                sourceLocation.path shouldBe FILE_2
-            }
+            // One snippet for file 2, then the limit is reached.
+            summary.snippetFindings.last().sourceLocation.path shouldBe FILE_2
 
             summary.issues.forAtLeastOne {
                 it.message shouldBe "The snippets limit of 2 has been reached. To see the possible remaining " +
@@ -1026,7 +1122,7 @@ class FossIdSnippetChoiceTest : WordSpec({
 })
 
 private fun createSnippetChoices(provenanceUrl: String, vararg snippetChoices: SnippetChoice) =
-    listOf(SnippetChoices(Provenance(provenanceUrl), snippetChoices.toList()))
+    listOf(SnippetChoices(SnippetProvenance(provenanceUrl), snippetChoices.toList()))
 
 private fun createSnippetChoice(location: TextLocation, purl: String? = null, comment: String) =
     SnippetChoice(

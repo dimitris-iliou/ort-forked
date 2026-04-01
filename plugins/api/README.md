@@ -82,6 +82,7 @@ To be able to use the compiler plugin, the configuration class must follow certa
 
 * All constructor arguments must be `val`s.
 * Constructor arguments must have one of the following types: `Boolean`, `Int`, `Long`, `Secret`, `String`, `List<String>`.
+  Also [supported](#enum-support) are enum types and lists of enum types.
 * Constructor arguments must not have a default value.
   Instead, the default value can be set by adding the `@OrtPluginOption` annotation to the property.
   This is required for code generation because KSP does not provide any details about default values of constructor arguments.
@@ -109,11 +110,14 @@ data class ExampleConfiguration(
     val timeout: Int,
     
     /** The API token to use for authentication. */
+    @OrtPluginOption(aliases = ["apiToken", "authToken"])
     val token: Secret?
 )
 ```
 
 Here, the `serverUrl` property has a default value, the `timeout` property is required, and the `token` property is optional.
+The `token` property also has two aliases defined which can be used as alternative names for the option in the plugin configuration.
+This is useful to provide backward compatibility when renaming options.
 
 The generated `ExampleAdvisorFactory` class will contain two factory functions:
 
@@ -121,9 +125,9 @@ The generated `ExampleAdvisorFactory` class will contain two factory functions:
 class ExampleAdvisorProviderFactory : AdviceProviderFactory {
     override fun create(config: PluginConfig): ExampleAdvisor {
         val configObject = ExampleConfiguration(
-            serverUrl = config.options["serverUrl"] ?: "https://example.com",
-            timeout = config.options["timeout"]?.toInt() ?: error("Option timeout is required but not set."),
-            token = config.secrets["token"]
+            serverUrl = parseStringOption("serverUrl", config),
+            timeout = parseIntegerOption("timeout", config),
+            token = parseNullableSecretOption("token", config)
         )
 
         return ExampleAdvisor(descriptor, configObject)
@@ -146,6 +150,59 @@ class ExampleAdvisorProviderFactory : AdviceProviderFactory {
     }
 }
 ```
+
+#### Enum Support
+
+If there is only a predefined set of values that a configuration option can take, it is recommended to use an enum type for the corresponding constructor argument.
+The compiler plugin will automatically handle the conversion from a string value to the enum constant.
+For example, the following configuration class uses an enum type for the `outputFormat` option:
+
+```kotlin
+enum class OutputFormat {
+    JSON,
+    XML,
+    YAML
+}
+
+data class ExampleConfiguration(
+    /** The output format to use. */
+    @OrtPluginOption(defaultValue = "JSON")
+    val outputFormat: OutputFormat
+)
+```
+
+It is possible to use lists of enum types as well:
+
+```kotlin
+data class ExampleConfiguration(
+    /** The output formats to use. */
+    @OrtPluginOption(defaultValue = "JSON,XML")
+    val outputFormats: List<OutputFormat>
+)
+```
+
+Values are parsed case-insensitively, so the values `json`, `JSON`, and `Json` are all valid and will be converted to the `OutputFormat.JSON` constant.
+If a desired value is not a valid JVM identifier (e.g. it contains hyphens), the `@OrtPluginEnumEntry` annotation can be used to define an alternative name for the enum constant:
+
+```kotlin
+enum class Version {
+    @OrtPluginEnumEntry(alternativeName = "1.0")
+    VERSION_1_0
+}
+```
+
+In this case, only the value `1.0` will be accepted in the plugin configuration to refer to the `Version.VERSION_1_0` constant.
+
+It is also possible to define a list of aliases for an enum constant, for example, to support backward compatibility when renaming enum entries:
+
+```kotlin
+enum class LogLevel {
+    @OrtPluginEnumEntry(alternativeNames = ["WARN", "W"])
+    WARNING
+}
+```
+
+Here, the values `WARNING`, `WARN` and `W` will all be mapped to the `LogLevel.WARNING` constant.
 
 ### Gradle Configuration
 

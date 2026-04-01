@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,8 +52,10 @@ import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
+import org.ossreviewtoolkit.model.utils.isScopeIncluded
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.MavenSupport
@@ -69,6 +71,9 @@ import org.ossreviewtoolkit.utils.ort.JavaBootstrapper
 import org.ossreviewtoolkit.utils.ort.createOrtTempFile
 
 import org.semver4j.Semver
+
+internal const val PROJECT_TYPE = "Gradle"
+internal const val PACKAGE_TYPE = "Maven"
 
 private val GRADLE_USER_HOME = Os.env["GRADLE_USER_HOME"]?.let { File(it) } ?: Os.userHomeDirectory.resolve(".gradle")
 
@@ -110,7 +115,7 @@ data class GradleConfig(
 class Gradle(
     override val descriptor: PluginDescriptor = GradleFactory.descriptor,
     private val config: GradleConfig
-) : PackageManager("Gradle") {
+) : PackageManager(PROJECT_TYPE) {
     // Gradle prefers Groovy ".gradle" files over Kotlin ".gradle.kts" files, but "build" files have to come before
     // "settings" files as we should consider "settings" files only if the same directory does not also contain a
     // "build" file.
@@ -168,6 +173,7 @@ class Gradle(
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {
@@ -280,8 +286,8 @@ class Gradle(
                     version = dependencyTreeModel.version
                 )
 
-                dependencyTreeModel.configurations.filterNot {
-                    excludes.isScopeExcluded(it.name)
+                dependencyTreeModel.configurations.filter {
+                    isScopeIncluded(it.name, excludes, includes)
                 }.forEach { configuration ->
                     graphBuilder.addDependencies(projectId, configuration.name, configuration.dependencies)
                 }

@@ -1,4 +1,4 @@
-# Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+# Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -51,8 +51,11 @@ ort:
     patentFilenames: ['patents']
     otherLicenseFilenames: ['readme*']
 
-  # Package configurations have to be unique by ID and provenance. Ensure that different providers do not provide
-  # configurations for the same package, see https://github.com/oss-review-toolkit/ort/issues/6972 for details.
+  # Package configuration providers are listed from highest to lowest priority. If multiple providers return
+  # configurations for the same package ID and provenance, the configuration from the higher-priority provider
+  # (listed first) takes precedence. Configurations must be unique by ID and provenance within a single provider.
+  # Ensure that different providers do not provide conflicting configurations for the same package, see
+  # https://github.com/oss-review-toolkit/ort/issues/6972 for details.
   packageConfigurationProviders:
   - type: DefaultDir
   - type: Dir
@@ -83,16 +86,8 @@ ort:
     options:
       serverUrl: 'https://api.clearlydefined.io'
       minTotalLicenseScore: 80
-  - type: SW360
-    options:
-      restUrl: 'https://your-sw360-rest-url'
-      authUrl: 'https://your-authentication-url'
-    secrets:
-      username: username
-      password: password
-      clientId: clientId
-      clientPassword: clientPassword
-      token: token
+  - type: Spring
+    enabled: false
 
   severeIssueThreshold: ERROR
   severeRuleViolationThreshold: ERROR
@@ -280,8 +275,6 @@ ort:
 
           treatPendingIdentificationsAsError: false
 
-          deleteUploadedArchiveAfterScan: true
-
         secrets:
           user: user
           apiKey: XYZ
@@ -339,15 +332,6 @@ ort:
           maximumPoolSize: 10
           minimumIdle: 600000
         type: PROVENANCE_BASED
-
-      sw360Configuration:
-        restUrl: 'https://your-sw360-rest-url'
-        authUrl: 'https://your-authentication-url'
-        username: username
-        password: password
-        clientId: clientId
-        clientPassword: clientPassword
-        token: token
 
     # Storage readers are listed from highest to lower priority, i.e. the first match wins.
     storageReaders: [local, postgres, http, aws, clearlyDefined]

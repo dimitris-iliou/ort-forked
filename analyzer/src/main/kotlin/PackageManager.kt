@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,9 +42,9 @@ import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.config.PackageManagerConfiguration
 import org.ossreviewtoolkit.model.config.RepositoryConfiguration
 import org.ossreviewtoolkit.model.createAndLogIssue
+import org.ossreviewtoolkit.model.utils.isPathIncluded
 import org.ossreviewtoolkit.plugins.api.Plugin
 import org.ossreviewtoolkit.utils.common.VCS_DIRECTORIES
-import org.ossreviewtoolkit.utils.common.collapseWhitespace
 import org.ossreviewtoolkit.utils.common.collectMessages
 import org.ossreviewtoolkit.utils.common.isSymbolicLink
 import org.ossreviewtoolkit.utils.ort.ORT_CONFIG_FILENAME
@@ -123,8 +123,18 @@ abstract class PackageManager(val projectType: String) : Plugin {
                 }
             }.filter { it.isDirectory }.forEach { dir ->
                 val filesInCurrentDir = dir.walk().maxDepth(1).filterTo(mutableListOf()) {
-                    val isIncluded = includes.isPathIncluded(rootPath, it.toPath())
-                    it.isFile && !excludes.isPathExcluded(rootPath, it.toPath()) && isIncluded
+                    val path = runCatching {
+                        it.toPath()
+                    }.getOrElse { e ->
+                        logger.warn {
+                            "Could not get the path for '$it'. It will not be included due to: ${e.collectMessages()}"
+                        }
+
+                        return@filterTo false
+                    }
+
+                    val relativePath = rootPath.relativize(path).invariantSeparatorsPathString
+                    it.isFile && isPathIncluded(relativePath, excludes, includes)
                 }
 
                 distinctPackageManagers.forEach { manager ->
@@ -222,13 +232,6 @@ abstract class PackageManager(val projectType: String) : Plugin {
             isPathExcluded(root.relativize(path).invariantSeparatorsPathString)
 
         /**
-         * Check whether the given [path] interpreted relatively against [root] is matched by a path include in this
-         * [Includes] object.
-         */
-        private fun Includes.isPathIncluded(root: Path, path: Path): Boolean =
-            isPathIncluded(root.relativize(path).invariantSeparatorsPathString)
-
-        /**
          * Get a fallback project name from the [definitionFile] path relative to the [analysisRoot]. This function
          * should be used if the project name cannot be determined from the project's metadata.
          */
@@ -298,10 +301,12 @@ abstract class PackageManager(val projectType: String) : Plugin {
      * to further stages. They are not interpreted by ORT, but can be used to configure behavior of custom package
      * manager implementations.
      */
+    @Suppress("LongParameterList")
     open fun resolveDependencies(
         analysisRoot: File,
         definitionFiles: List<File>,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): PackageManagerResult {
@@ -321,7 +326,7 @@ abstract class PackageManager(val projectType: String) : Plugin {
             val duration = measureTime {
                 runCatching {
                     result[definitionFile] =
-                        resolveDependencies(analysisRoot, definitionFile, excludes, analyzerConfig, labels)
+                        resolveDependencies(analysisRoot, definitionFile, excludes, includes, analyzerConfig, labels)
                 }.onFailure {
                     it.showStackTrace()
 
@@ -362,6 +367,7 @@ abstract class PackageManager(val projectType: String) : Plugin {
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult>
@@ -400,47 +406,6 @@ abstract class PackageManager(val projectType: String) : Plugin {
         }
     }
 }
-
-/**
- * Parse a string with metadata about an [author] that several package managers use and try to extract the author's
- * name, email address, and homepage. These properties are typically surrounded by specific delimiters, e.g. the email
- * address is often surrounded by angle brackets (see [emailDelimiters]) and the homepage is often surrounded by
- * parentheses (see [homepageDelimiters]). Return [AuthorInfo] for these properties where unavailable ones are set to
- * null.
- */
-fun parseAuthorString(
-    author: String?,
-    emailDelimiters: Pair<Char, Char> = '<' to '>',
-    homepageDelimiters: Pair<Char, Char> = '(' to ')'
-): Set<AuthorInfo> =
-    author?.split(',', '\n')?.mapTo(mutableSetOf()) { singleAuthor ->
-        var cleanedAuthor = singleAuthor
-        var email: String? = null
-        var homepage: String? = null
-
-        // Extract an email address and remove it from the original autgor string.
-        val e = emailDelimiters.toList().map { Regex.escape(it.toString()) }
-        val emailRegex = Regex("${e.first()}(.+@.+)${e.last()}")
-        cleanedAuthor = cleanedAuthor.replace(emailRegex) {
-            email = it.groupValues.last()
-            ""
-        }
-
-        // Extract a homepage URL and remove it from the original autgor string.
-        val h = homepageDelimiters.toList().map { Regex.escape(it.toString()) }
-        val homepageRegex = Regex("${h.first()}(.+(?:://|www|.).+)${h.last()}")
-        cleanedAuthor = cleanedAuthor.replace(homepageRegex) {
-            homepage = it.groupValues.last()
-            ""
-        }
-
-        AuthorInfo(cleanedAuthor.collapseWhitespace().ifEmpty { null }, email, homepage)
-    }.orEmpty()
-
-/**
- * Information about an author, including the [name], [email] address, and [homepage] URL.
- */
-data class AuthorInfo(val name: String?, val email: String?, val homepage: String?)
 
 private fun PackageManagerResult.addDependencyGraphIfMissing(): PackageManagerResult {
     // If the condition is true, then [CompatibilityDependencyNavigator] constructs a [DependencyGraphNavigator].

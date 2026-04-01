@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -72,6 +72,7 @@ data class PackageReference(
         val result = mutableSetOf<Identifier>()
 
         val queue: Deque<Pair<PackageReference, Int>> = LinkedList()
+
         fun enqueue(packages: Collection<PackageReference>, level: Int) {
             if (maxDepth !in 0..<level) {
                 packages.forEach { queue += Pair(it, level) }
@@ -79,6 +80,7 @@ data class PackageReference(
         }
 
         enqueue(dependencies, 1)
+
         while (queue.isNotEmpty()) {
             val (pkg, level) = queue.removeFirst()
 

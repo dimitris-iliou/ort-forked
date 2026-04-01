@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,12 +19,9 @@
 
 package org.ossreviewtoolkit.clients.fossid.model.rules
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties
-
 /**
  * An "ignore rule" allows specifying FossID which files need to be excluded from scan.
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
 data class IgnoreRule(
     /**
      * The id of the rule.

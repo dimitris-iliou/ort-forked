@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -86,15 +86,14 @@ class JiraNotifier(private val restClient: JiraRestClient) {
     /**
      * Return the issue for the given [issueKey].
      */
-    fun getIssue(issueKey: String): Issue? {
-        return runCatching {
+    fun getIssue(issueKey: String): Issue? =
+        runCatching {
             restClient.issueClient.getIssue(issueKey).claim()
         }.onFailure {
             logger.error {
                 "Could not retrieve the issue with the key '$issueKey' due to: ${it.collectMessages()}"
             }
         }.getOrNull()
-    }
 
     /**
      * Returns a [ProjectIssueBuilder] object, which can be used to do operations for the given [projectKey].

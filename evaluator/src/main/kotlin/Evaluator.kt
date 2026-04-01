@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ package org.ossreviewtoolkit.evaluator
 import java.time.Instant
 
 import kotlin.script.experimental.api.ScriptEvaluationConfiguration
+import kotlin.script.experimental.api.SourceCode
 import kotlin.script.experimental.api.constructorArgs
 import kotlin.script.experimental.api.scriptsInstancesSharing
 import kotlin.script.experimental.jvmhost.createJvmCompilationConfigurationFromTemplate
@@ -33,6 +34,7 @@ import org.ossreviewtoolkit.model.licenses.LicenseInfoResolver
 import org.ossreviewtoolkit.model.utils.DefaultResolutionProvider
 import org.ossreviewtoolkit.model.utils.ResolutionProvider
 import org.ossreviewtoolkit.model.utils.createLicenseInfoResolver
+import org.ossreviewtoolkit.utils.ort.Environment
 import org.ossreviewtoolkit.utils.scripting.ScriptRunner
 
 class Evaluator(
@@ -41,7 +43,7 @@ class Evaluator(
     resolutionProvider: ResolutionProvider = DefaultResolutionProvider.create(),
     licenseClassifications: LicenseClassifications = LicenseClassifications(),
     time: Instant = Instant.now()
-) : ScriptRunner() {
+) : ScriptRunner<EvaluatorRun>() {
     override val compConfig = createJvmCompilationConfigurationFromTemplate<RulesScriptTemplate>()
 
     override val evalConfig = ScriptEvaluationConfiguration {
@@ -49,16 +51,18 @@ class Evaluator(
         scriptsInstancesSharing(true)
     }
 
-    fun run(vararg scripts: String): EvaluatorRun {
+    override fun runScript(script: SourceCode) = runScripts(listOf(script))
+
+    fun runScripts(scripts: Collection<SourceCode>): EvaluatorRun {
         val startTime = Instant.now()
 
         val violations = scripts.flatMapTo(mutableListOf()) {
-            val scriptInstance = runScript(it).scriptInstance as RulesScriptTemplate
+            val scriptInstance = run(it).scriptInstance as RulesScriptTemplate
             scriptInstance.ruleViolations
         }
 
         val endTime = Instant.now()
 
-        return EvaluatorRun(startTime, endTime, violations)
+        return EvaluatorRun(startTime, endTime, Environment(), violations)
     }
 }

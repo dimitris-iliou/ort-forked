@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,8 +32,6 @@ import kotlinx.coroutines.withContext
 
 import org.apache.logging.log4j.kotlin.logger
 
-import org.ossreviewtoolkit.advisor.AdviceProvider
-import org.ossreviewtoolkit.advisor.AdviceProviderFactory
 import org.ossreviewtoolkit.model.AdvisorCapability
 import org.ossreviewtoolkit.model.AdvisorDetails
 import org.ossreviewtoolkit.model.AdvisorResult
@@ -47,6 +45,8 @@ import org.ossreviewtoolkit.model.vulnerabilities.Cvss2Rating
 import org.ossreviewtoolkit.model.vulnerabilities.Cvss3Rating
 import org.ossreviewtoolkit.model.vulnerabilities.Vulnerability
 import org.ossreviewtoolkit.model.vulnerabilities.VulnerabilityReference
+import org.ossreviewtoolkit.plugins.advisors.api.AdviceProvider
+import org.ossreviewtoolkit.plugins.advisors.api.AdviceProviderFactory
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.utils.common.collectMessages
@@ -224,7 +224,8 @@ private fun VulnerabilityCvss2View.getScoringSystemAndVector(): Pair<String, Str
     return scoringSystem to parsedVector
 }
 
-private val OriginView.identifier get() = "$externalNamespace:$externalId"
+private val OriginView.identifier
+    get() = "$externalNamespace:$externalId"
 
 private fun Map<Identifier, List<OriginView>>.getSummary(): String =
     buildString {
@@ -245,7 +246,8 @@ private fun Map<Identifier, List<OriginView>>.getSummary(): String =
         }
     }
 
-private val Package.blackDuckOriginId: String? get() = labels[BlackDuck.PACKAGE_LABEL_BLACK_DUCK_ORIGIN_ID]
+private val Package.blackDuckOriginId: String?
+    get() = labels[BlackDuck.PACKAGE_LABEL_BLACK_DUCK_ORIGIN_ID]
 
-private val Package.requestParam: String get() =
-    blackDuckOriginId?.let { "origin-id: '$it'" } ?: "purl: '$purl'"
+private val Package.requestParam: String
+    get() = blackDuckOriginId?.let { "origin-id: '$it'" } ?: "purl: '$purl'"

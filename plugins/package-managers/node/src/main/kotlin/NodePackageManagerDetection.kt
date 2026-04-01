@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -74,6 +74,7 @@ internal class NodePackageManagerDetection(private val definitionFiles: Collecti
         val managersFromFiles = managerTypesForProjectDir[projectDir].orEmpty()
         when {
             manager !in managersFromFiles -> return false
+
             managersFromFiles.size == 1 -> {
                 logger.info { "Detected '$definitionFile' to be the root of a(n) $manager project." }
                 return true

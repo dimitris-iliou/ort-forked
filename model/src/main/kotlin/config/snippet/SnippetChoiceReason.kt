@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ enum class SnippetChoiceReason {
     ORIGINAL_FINDING,
 
     /**
-     * Other reason.
+     * A fallback reason for the [SnippetChoiceReason] when none of the other reasons apply.
      */
     OTHER
 }

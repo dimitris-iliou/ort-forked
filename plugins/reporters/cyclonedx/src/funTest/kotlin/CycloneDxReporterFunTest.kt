@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2019 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,9 +33,16 @@ import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 
+import org.cyclonedx.Format
+import org.cyclonedx.model.Component
 import org.cyclonedx.parsers.JsonParser
 import org.cyclonedx.parsers.XmlParser
 
+import org.ossreviewtoolkit.model.Identifier
+import org.ossreviewtoolkit.model.OrtResult
+import org.ossreviewtoolkit.model.Project
+import org.ossreviewtoolkit.model.VcsInfo
+import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.plugins.licensefactproviders.spdx.SpdxLicenseFactProviderFactory
 import org.ossreviewtoolkit.plugins.reporters.cyclonedx.CycloneDxReporter.Companion.REPORT_BASE_FILENAME
 import org.ossreviewtoolkit.reporter.ORT_RESULT
@@ -54,7 +61,7 @@ class CycloneDxReporterFunTest : WordSpec({
         "create just one file" {
             val bomFileResults = CycloneDxReporterFactory.create(
                 singleBom = true,
-                outputFileFormats = listOf("json")
+                outputFileFormats = listOf(Format.JSON)
             ).generateReport(ReporterInput(ORT_RESULT), outputDir)
 
             bomFileResults.shouldBeSingleton {
@@ -65,7 +72,7 @@ class CycloneDxReporterFunTest : WordSpec({
         "be valid XML according to schema version $defaultSchemaVersion" {
             val bomFileResults = CycloneDxReporterFactory.create(
                 singleBom = true,
-                outputFileFormats = listOf("xml")
+                outputFileFormats = listOf(Format.XML)
             ).generateReport(ReporterInput(ORT_RESULT), outputDir)
 
             bomFileResults.shouldBeSingleton {
@@ -82,7 +89,7 @@ class CycloneDxReporterFunTest : WordSpec({
 
             val bomFileResults = CycloneDxReporterFactory.create(
                 singleBom = true,
-                outputFileFormats = listOf("xml")
+                outputFileFormats = listOf(Format.XML)
             ).generateReport(
                 ReporterInput(
                     ORT_RESULT_WITH_VULNERABILITIES,
@@ -105,7 +112,7 @@ class CycloneDxReporterFunTest : WordSpec({
         "the expected XML file even if some copyrights contain non printable characters" {
             val bomFileResults = CycloneDxReporterFactory.create(
                 singleBom = true,
-                outputFileFormats = listOf("xml")
+                outputFileFormats = listOf(Format.XML)
             ).generateReport(ReporterInput(ORT_RESULT_WITH_ILLEGAL_COPYRIGHTS), outputDir)
 
             bomFileResults.shouldBeSingleton {
@@ -119,7 +126,7 @@ class CycloneDxReporterFunTest : WordSpec({
         "be valid JSON according to schema version $defaultSchemaVersion" {
             val bomFileResults = CycloneDxReporterFactory.create(
                 singleBom = true,
-                outputFileFormats = listOf("json")
+                outputFileFormats = listOf(Format.JSON)
             ).generateReport(ReporterInput(ORT_RESULT_WITH_VULNERABILITIES), outputDir)
 
             bomFileResults.shouldBeSingleton {
@@ -136,10 +143,157 @@ class CycloneDxReporterFunTest : WordSpec({
 
             val bomFileResults = CycloneDxReporterFactory.create(
                 singleBom = true,
-                outputFileFormats = listOf("json")
+                outputFileFormats = listOf(Format.JSON)
             ).generateReport(
                 ReporterInput(
                     ORT_RESULT_WITH_VULNERABILITIES,
+                    licenseFactProvider = SpdxLicenseFactProviderFactory.create()
+                ),
+                outputDir
+            )
+
+            bomFileResults.shouldBeSingleton {
+                it shouldBeSuccess { bomFile ->
+                    bomFile shouldBe aFile()
+                    bomFile shouldNotBe emptyFile()
+
+                    val actualBom = bomFile.readText().patchCycloneDxResult()
+                    actualBom shouldEqualJson expectedBom
+                }
+            }
+        }
+
+        "create the expected JSON file if there are projects with different namespace and version" {
+            val expectedBom = readResource("/cyclonedx-reporter-expected-result-different-projects.json")
+            val otherProject = Project.EMPTY.copy(
+                id = Identifier("Maven:@other:foo:2.0.0"),
+                definitionFilePath = "other/foo-2.0.0/pom.xml",
+                vcs = VcsInfo(
+                    type = VcsType.GIT,
+                    url = "https://github.com/oss-review-toolkit/ort.git",
+                    revision = "main"
+                ),
+                vcsProcessed = VcsInfo(
+                    type = VcsType.GIT,
+                    url = "https://github.com/oss-review-toolkit/ort.git",
+                    revision = "main"
+                )
+            )
+            val ortResult = createResultWithAdditionalProject(otherProject)
+
+            val bomFileResults = CycloneDxReporterFactory.create(
+                singleBom = true,
+                outputFileFormats = listOf(Format.JSON)
+            ).generateReport(
+                ReporterInput(
+                    ortResult,
+                    licenseFactProvider = SpdxLicenseFactProviderFactory.create()
+                ),
+                outputDir
+            )
+
+            bomFileResults.shouldBeSingleton {
+                it shouldBeSuccess { bomFile ->
+                    bomFile shouldBe aFile()
+                    bomFile shouldNotBe emptyFile()
+
+                    val actualBom = bomFile.readText().patchCycloneDxResult()
+                    actualBom shouldEqualJson expectedBom
+                }
+            }
+        }
+
+        "create the expected JSON file if there is a single top-level project" {
+            val expectedBom = readResource("/cyclonedx-reporter-expected-result-top-level-project.json")
+            val otherProject = Project.EMPTY.copy(
+                id = Identifier("NPM:@ort:root-test-project:1.0"),
+                definitionFilePath = "package.json",
+                vcs = VcsInfo(
+                    type = VcsType.GIT,
+                    url = "https://github.com/oss-review-toolkit/ort.git",
+                    revision = "main"
+                ),
+                vcsProcessed = VcsInfo(
+                    type = VcsType.GIT,
+                    url = "https://github.com/oss-review-toolkit/ort.git",
+                    revision = "main"
+                )
+            )
+            val ortResult = createResultWithAdditionalProject(otherProject)
+
+            val bomFileResults = CycloneDxReporterFactory.create(
+                singleBom = true,
+                outputFileFormats = listOf(Format.JSON)
+            ).generateReport(
+                ReporterInput(
+                    ortResult,
+                    licenseFactProvider = SpdxLicenseFactProviderFactory.create()
+                ),
+                outputDir
+            )
+
+            bomFileResults.shouldBeSingleton {
+                it shouldBeSuccess { bomFile ->
+                    bomFile shouldBe aFile()
+                    bomFile shouldNotBe emptyFile()
+
+                    val actualBom = bomFile.readText().patchCycloneDxResult()
+                    actualBom shouldEqualJson expectedBom
+                }
+            }
+        }
+
+        "support configuring the type of the main component" {
+            val expectedBom = readResource("/cyclonedx-reporter-expected-result-type-override.json")
+
+            val bomFileResults = CycloneDxReporterFactory.create(
+                singleBom = true,
+                outputFileFormats = listOf(Format.JSON),
+                singleBomComponentType = Component.Type.LIBRARY
+            ).generateReport(
+                ReporterInput(
+                    ORT_RESULT_WITH_VULNERABILITIES,
+                    licenseFactProvider = SpdxLicenseFactProviderFactory.create()
+                ),
+                outputDir
+            )
+
+            bomFileResults.shouldBeSingleton {
+                it shouldBeSuccess { bomFile ->
+                    bomFile shouldBe aFile()
+                    bomFile shouldNotBe emptyFile()
+
+                    val actualBom = bomFile.readText().patchCycloneDxResult()
+                    actualBom shouldEqualJson expectedBom
+                }
+            }
+        }
+
+        "support configuring the name of the main component" {
+            val expectedBom = readResource("/cyclonedx-reporter-expected-result-name-override.json")
+            val topLevelProject = Project.EMPTY.copy(
+                id = Identifier("NPM:@ort:root-test-project:1.0"),
+                definitionFilePath = "package.json",
+                vcs = VcsInfo(
+                    type = VcsType.GIT,
+                    url = "https://github.com/oss-review-toolkit/ort.git",
+                    revision = "main"
+                ),
+                vcsProcessed = VcsInfo(
+                    type = VcsType.GIT,
+                    url = "https://github.com/oss-review-toolkit/ort.git",
+                    revision = "main"
+                )
+            )
+            val ortResult = createResultWithAdditionalProject(topLevelProject)
+
+            val bomFileResults = CycloneDxReporterFactory.create(
+                singleBom = true,
+                outputFileFormats = listOf(Format.JSON),
+                singleBomComponentName = "eric"
+            ).generateReport(
+                ReporterInput(
+                    ortResult,
                     licenseFactProvider = SpdxLicenseFactProviderFactory.create()
                 ),
                 outputDir
@@ -161,7 +315,7 @@ class CycloneDxReporterFunTest : WordSpec({
         "create one file per project" {
             val bomFileResults = CycloneDxReporterFactory.create(
                 singleBom = false,
-                outputFileFormats = listOf("json")
+                outputFileFormats = listOf(Format.JSON)
             ).generateReport(ReporterInput(ORT_RESULT_WITH_VULNERABILITIES), outputDir)
 
             bomFileResults shouldHaveSize 2
@@ -172,7 +326,7 @@ class CycloneDxReporterFunTest : WordSpec({
             val (bomFileResultWithFindings, bomFileResultWithoutFindings) =
                 CycloneDxReporterFactory.create(
                     singleBom = false,
-                    outputFileFormats = listOf("xml")
+                    outputFileFormats = listOf(Format.XML)
                 ).generateReport(ReporterInput(ORT_RESULT_WITH_VULNERABILITIES), outputDir).also {
                     it shouldHaveSize 2
                 }
@@ -194,7 +348,7 @@ class CycloneDxReporterFunTest : WordSpec({
             val (bomFileResultWithFindings, bomFileResultWithoutFindings) =
                 CycloneDxReporterFactory.create(
                     singleBom = false,
-                    outputFileFormats = listOf("json")
+                    outputFileFormats = listOf(Format.JSON)
                 ).generateReport(ReporterInput(ORT_RESULT_WITH_VULNERABILITIES), outputDir).also {
                     it shouldHaveSize 2
                 }
@@ -216,7 +370,7 @@ class CycloneDxReporterFunTest : WordSpec({
             val (bomFileResultWithFindings, bomFileResultWithoutFindings) =
                 CycloneDxReporterFactory.create(
                     singleBom = false,
-                    outputFileFormats = listOf("json")
+                    outputFileFormats = listOf(Format.JSON)
                 ).generateReport(
                     ReporterInput(
                         ORT_RESULT,
@@ -252,4 +406,16 @@ private fun String.patchCycloneDxResult(): String =
     ).replaceFirst(
         """(version[>"](\s*:\s*")?)[\w.+-]+""".toRegex(),
         "$1deadbeef"
+    )
+
+/**
+ * Create an [OrtResult] based on the standard test data that contains the additional [project].
+ */
+private fun createResultWithAdditionalProject(project: Project): OrtResult =
+    ORT_RESULT_WITH_VULNERABILITIES.copy(
+        analyzer = ORT_RESULT_WITH_VULNERABILITIES.analyzer?.copy(
+            result = requireNotNull(ORT_RESULT_WITH_VULNERABILITIES.analyzer).result.copy(
+                projects = ORT_RESULT_WITH_VULNERABILITIES.analyzer?.result?.projects.orEmpty() + project
+            )
+        )
     )

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.PackageLinkage
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.utils.DependencyHandler
+import org.ossreviewtoolkit.plugins.packagemanagers.maven.PACKAGE_TYPE
 import org.ossreviewtoolkit.utils.common.collectMessages
 import org.ossreviewtoolkit.utils.ort.showStackTrace
 
@@ -67,7 +68,7 @@ class MavenDependencyHandler(
 
     override fun identifierFor(dependency: DependencyNode): Identifier =
         Identifier(
-            type = if (isLocalProject(dependency)) projectType else "Maven",
+            type = if (isLocalProject(dependency)) projectType else PACKAGE_TYPE,
             namespace = dependency.artifact.groupId,
             name = dependency.artifact.artifactId,
             version = dependency.artifact.version

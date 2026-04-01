@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -155,9 +155,9 @@ class ExamplesFunTest : StringSpec({
             licenseClassifications = licenseFile.readValue()
         )
 
-        val script = takeExampleFile("example.rules.kts").readText()
+        val script = takeExampleFile("example.rules.kts")
 
-        val result = evaluator.run(script)
+        val result = evaluator.runScript(script)
 
         result.violations.map { it.rule } should containExactlyInAnyOrder(
             "COPYLEFT_LIMITED_IN_SOURCE",
@@ -190,9 +190,9 @@ class ExamplesFunTest : StringSpec({
             )
         )
 
-        val script = takeExampleFile("example.notifications.kts").readText()
+        val script = takeExampleFile("example.notifications.kts")
 
-        notifier.run(script)
+        notifier.runScript(script)
 
         greenMail.waitForIncomingEmail(1000, 1) shouldBe true
         val actualBody = GreenMailUtil.getBody(greenMail.receivedMessages.first())

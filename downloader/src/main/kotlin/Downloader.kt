@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ import java.net.URI
 import kotlin.time.TimeSource
 
 import org.apache.logging.log4j.kotlin.logger
+import org.apache.tika.Tika
 
 import org.ossreviewtoolkit.model.ArtifactProvenance
 import org.ossreviewtoolkit.model.HashAlgorithm
@@ -196,22 +197,28 @@ class Downloader(private val config: DownloaderConfiguration) {
                 "Bundler", "Gem" ->
                     " Please define the \"source_code_uri\" in the \"metadata\" of the Gemspec, see: " +
                         "https://guides.rubygems.org/specification-reference/#metadata"
+
                 "Gradle" ->
                     " Please make sure the published POM file includes the SCM connection, see: " +
                         "https://docs.gradle.org/current/userguide/publishing_maven.html#" +
                         "sec:modifying_the_generated_pom"
+
                 "Maven" ->
                     " Please define the \"connection\" tag within the \"scm\" tag in the POM file, see: " +
                         "https://maven.apache.org/pom.html#SCM"
+
                 "NPM" ->
                     " Please define the \"repository\" in the package.json file, see: " +
                         "https://docs.npmjs.com/cli/v7/configuring-npm/package-json#repository"
+
                 "PIP", "PyPI" ->
                     " Please make sure the setup.py defines the 'Source' attribute in 'project_urls', see: " +
                         "https://packaging.python.org/guides/distributing-packages-using-setuptools/#project-urls"
+
                 "SBT" ->
                     " Please make sure the published POM file includes the SCM connection, see: " +
                         "https://maven.apache.org/pom.html#SCM"
+
                 else -> ""
             }
 
@@ -306,6 +313,7 @@ class Downloader(private val config: DownloaderConfiguration) {
      * happens but the source code is only checked to be available. An [ArtifactProvenance] is returned on success or a
      * [DownloadException] is thrown in case of failure.
      */
+    @Suppress("ThrowsCount")
     fun downloadSourceArtifact(
         sourceArtifact: RemoteArtifact,
         outputDirectory: File,
@@ -317,9 +325,7 @@ class Downloader(private val config: DownloaderConfiguration) {
 
         verifyOutputDirectory(outputDirectory)
 
-        logger.info {
-            "Trying to download source artifact from ${sourceArtifact.url}..."
-        }
+        logger.info { "Trying to download source artifact from ${sourceArtifact.url}..." }
 
         // Some (Linux) file URIs do not start with "file://" but look like "file:/opt/android-sdk-linux".
         val isLocalFileUrl = sourceArtifact.url.startsWith("file:/")
@@ -350,41 +356,71 @@ class Downloader(private val config: DownloaderConfiguration) {
 
         if (sourceArtifact.hash.algorithm != HashAlgorithm.NONE) {
             if (sourceArtifact.hash.algorithm == HashAlgorithm.UNKNOWN) {
-                logger.warn {
-                    "Cannot verify source artifact with ${sourceArtifact.hash}, skipping verification."
-                }
+                logger.warn { "Cannot verify source artifact with ${sourceArtifact.hash}, skipping verification." }
             } else if (!sourceArtifact.hash.verify(sourceArchive)) {
                 tempDir?.safeDeleteRecursively()
                 throw DownloadException("Source artifact does not match expected ${sourceArtifact.hash}.")
             }
         }
 
-        try {
-            if (sourceArchive.extension == "gem") {
-                // Unpack the nested data archive for Ruby Gems.
-                val gemDirectory = createOrtTempDir("gem")
-                val dataFile = gemDirectory / "data.tar.gz"
+        if (sourceArchive.extension == "gem") {
+            // Unpack the nested data archive for Ruby Gems.
+            val gemDirectory = createOrtTempDir("gem")
+            val dataFile = gemDirectory / "data.tar.gz"
 
-                try {
-                    sourceArchive.unpack(gemDirectory)
-                    dataFile.unpack(outputDirectory)
-                } finally {
-                    gemDirectory.safeDeleteRecursively()
+            try {
+                sourceArchive.unpack(gemDirectory)
+                dataFile.unpack(outputDirectory)
+            } catch (e: IOException) {
+                logger.error {
+                    "Could not unpack source artifact '${sourceArchive.absolutePath}': ${e.collectMessages()}"
                 }
-            } else {
+
+                tempDir?.safeDeleteRecursively()
+                throw DownloadException(e)
+            } finally {
+                gemDirectory.safeDeleteRecursively()
+            }
+        } else if ("hex.pm/tarballs/" in sourceArtifact.url) {
+            // Unpack the nested contents archive for Hex packages.
+            val hexDirectory = createOrtTempDir("hex")
+            val contentsFile = hexDirectory / "contents.tar.gz"
+
+            try {
+                sourceArchive.unpack(hexDirectory)
+                contentsFile.unpack(outputDirectory)
+            } catch (e: IOException) {
+                logger.error {
+                    "Could not unpack Hex package '${sourceArchive.absolutePath}': ${e.collectMessages()}"
+                }
+
+                tempDir?.safeDeleteRecursively()
+                throw DownloadException(e)
+            } finally {
+                hexDirectory.safeDeleteRecursively()
+            }
+        } else {
+            try {
                 sourceArchive.unpackTryAllTypes(outputDirectory)
-            }
-        } catch (e: IOException) {
-            logger.error {
-                "Could not unpack source artifact '${sourceArchive.absolutePath}': ${e.collectMessages()}"
-            }
 
-            tempDir?.safeDeleteRecursively()
-            throw DownloadException(e)
-        }
+                logger.info { "Successfully unpacked ${sourceArtifact.url} to '${outputDirectory.absolutePath}'..." }
+            } catch (e: IOException) {
+                logger.warn {
+                    "Could not unpack source artifact '${sourceArchive.absolutePath}': ${e.collectMessages()}"
+                }
 
-        logger.info {
-            "Successfully unpacked ${sourceArtifact.url} to '${outputDirectory.absolutePath}'..."
+                val mimeType = Tika().detect(sourceArchive)
+                val isSourceCodeFile = (mimeType.startsWith("text/") && !mimeType.endsWith("html"))
+                    || (mimeType.startsWith("application/") && mimeType.endsWith("script"))
+
+                if (!isSourceCodeFile) throw DownloadException("The artifact does not seem to be a source code file", e)
+
+                logger.info {
+                    "Copying source code file '${sourceArchive.absolutePath}' to '${outputDirectory.absolutePath}'."
+                }
+
+                sourceArchive.copyTo(outputDirectory / sourceArchive.name)
+            }
         }
 
         tempDir?.safeDeleteRecursively()

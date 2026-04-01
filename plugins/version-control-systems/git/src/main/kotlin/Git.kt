@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -62,12 +62,7 @@ import org.ossreviewtoolkit.utils.ort.showStackTrace
 import org.semver4j.range.RangeList
 import org.semver4j.range.RangeListFactory
 
-// Replace prefixes of Git submodule repository URLs.
-private val REPOSITORY_URL_PREFIX_REPLACEMENTS = listOf(
-    "git://" to "https://"
-)
-
-object GitCommand : CommandLineTool {
+internal object GitCommand : CommandLineTool {
     private val versionRegex = Regex("[Gg]it [Vv]ersion (?<version>[\\d.a-z-]+)(\\s.+)?")
 
     override fun command(workingDir: File?) = "git"
@@ -137,6 +132,16 @@ class Git(
     override val priority = 50
     override val latestRevisionNames = listOf("HEAD", "@")
 
+    private val repositoryUrlPrefixReplacements = buildList {
+        // Replace prefixes of Git submodule repository URLs.
+        add("git://" to "https://")
+
+        if (config.replaceSshWithHttps) {
+            add("ssh://git@" to "https://")
+            add("git@github.com:" to "https://github.com/")
+        }
+    }
+
     override fun getVersion() = GitCommand.getVersion()
 
     override fun getDefaultBranchName(url: String): String {
@@ -174,6 +179,12 @@ class Git(
                     val globPatterns = getSparseCheckoutGlobPatterns() + path
 
                     gitInfoDir.resolve("sparse-checkout").writeText(globPatterns.joinToString("\n"))
+                }
+
+                repositoryUrlPrefixReplacements.groupBy(
+                    { it.second }, { it.first }
+                ).forEach { (replacement, prefixes) ->
+                    git.repository.config.setStringList("url", replacement, "insteadOf", prefixes)
                 }
 
                 git.repository.config.save()
@@ -271,7 +282,7 @@ class Git(
         }.mapCatching { fetchResult ->
             // TODO: Migrate this to JGit once sparse checkout (https://bugs.eclipse.org/bugs/show_bug.cgi?id=383772) is
             //       implemented. Also see the "reset" call below.
-            workingTree.runGit("checkout", revision)
+            workingTree.runGit("checkout", "--force", revision)
 
             // In case of a non-fixed revision (branch or tag) reset the working tree to ensure that the previously
             // fetched changes are applied.
@@ -309,29 +320,22 @@ class Git(
     private fun updateSubmodules(workingTree: GitWorkingTree) {
         if (!workingTree.getRootPath().resolve(".gitmodules").isFile) return
 
-        val recursive = "--recursive".takeIf { config.updateNestedSubmodules }
-
-        val insteadOf = REPOSITORY_URL_PREFIX_REPLACEMENTS.map { (prefix, replacement) ->
-            "url.$replacement.insteadOf $prefix"
+        val configArgs = repositoryUrlPrefixReplacements.flatMap { (prefix, replacement) ->
+            listOf("-c", "url.$replacement.insteadOf=$prefix")
         }
+
+        val recursive = "--recursive".takeIf { config.updateNestedSubmodules }
+        val updateArgs = listOfNotNull("submodule", "update", "--init", recursive)
 
         runCatching {
             // TODO: Migrate this to JGit once https://bugs.eclipse.org/bugs/show_bug.cgi?id=580731 is implemented.
-            val updateArgs = listOfNotNull(
-                "submodule", "update", "--init", recursive, "--depth", "${config.historyDepth}"
+            workingTree.runGit(
+                *configArgs.toTypedArray(), *updateArgs.toTypedArray(),
+                "--depth", "${config.historyDepth}"
             )
-            workingTree.runGit(*updateArgs.toTypedArray())
-
-            insteadOf.forEach {
-                val foreachArgs = listOfNotNull(
-                    "submodule", "foreach", recursive, "git config $it"
-                )
-                workingTree.runGit(*foreachArgs.toTypedArray())
-            }
         }.recover {
             // As Git's dumb HTTP transport does not support shallow capabilities, also try to not limit the depth.
-            val updateArgs = listOfNotNull("submodule", "update", recursive)
-            workingTree.runGit(*updateArgs.toTypedArray())
+            workingTree.runGit(*configArgs.toTypedArray(), *updateArgs.toTypedArray())
         }
     }
 

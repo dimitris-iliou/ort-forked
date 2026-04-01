@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,6 +37,7 @@ import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.Scope
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.packagemanagers.python.utils.PythonInspector
@@ -51,6 +52,8 @@ import org.ossreviewtoolkit.utils.ort.createOrtTempFile
 
 import org.semver4j.Semver
 import org.semver4j.range.RangeListFactory
+
+private const val PROJECT_TYPE = "Poetry"
 
 internal object PoetryCommand : CommandLineTool {
     override fun command(workingDir: File?) = "poetry"
@@ -68,7 +71,7 @@ internal object PoetryCommand : CommandLineTool {
 )
 class Poetry(
     override val descriptor: PluginDescriptor = PoetryFactory.descriptor, private val config: PipConfig
-) : PackageManager("Poetry") {
+) : PackageManager(PROJECT_TYPE) {
     companion object {
         /**
          * The name of the build system requirements and information file used by modern Python packages.
@@ -85,6 +88,7 @@ class Poetry(
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {

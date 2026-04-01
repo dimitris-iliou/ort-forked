@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,8 +35,9 @@ import io.kotest.matchers.shouldBe
 
 import java.io.File
 
-import org.ossreviewtoolkit.analyzer.PackageManagerFactory
+import org.ossreviewtoolkit.analyzer.determineEnabledPackageManagers
 import org.ossreviewtoolkit.model.OrtResult
+import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.OrtConfiguration
 import org.ossreviewtoolkit.model.config.ProviderPluginConfiguration
 import org.ossreviewtoolkit.model.mapper
@@ -77,12 +78,12 @@ class OrtMainFunTest : StringSpec() {
     }
 
     init {
-        "Enabling only Gradle works" {
+        "Enabling only a single package manager works" {
             val inputDir = tempdir()
 
             val result = OrtMain().test(
                 "-c", configFile.path,
-                "-P", "ort.analyzer.enabledPackageManagers=Gradle",
+                "-P", "ort.analyzer.enabledPackageManagers=Unmanaged",
                 "analyze",
                 "-i", inputDir.path,
                 "-o", outputDir.path
@@ -96,18 +97,21 @@ class OrtMainFunTest : StringSpec() {
 
             withClue(result.stderr) {
                 iterator.hasNext() shouldBe true
-                iterator.next().trim() shouldBe "Gradle"
+                iterator.next().trim() shouldBe "Unmanaged"
             }
         }
 
-        "Disabling only Gradle works" {
-            val expectedPackageManagers = PackageManagerFactory.ALL.values.filterNot { it.descriptor.id == "Gradle" }
+        "Disabling only a single package manager works" {
+            val expectedPackageManagers = AnalyzerConfiguration().determineEnabledPackageManagers().filterNot {
+                it.descriptor.id == "Unmanaged"
+            }
+
             val markerLine = "The following ${expectedPackageManagers.size} package manager(s) are enabled:"
             val inputDir = tempdir()
 
             val result = OrtMain().test(
                 "-c", configFile.path,
-                "-P", "ort.analyzer.disabledPackageManagers=Gradle",
+                "-P", "ort.analyzer.disabledPackageManagers=Unmanaged",
                 "analyze",
                 "-i", inputDir.path,
                 "-o", outputDir.path
@@ -130,8 +134,8 @@ class OrtMainFunTest : StringSpec() {
 
             val result = OrtMain().test(
                 "-c", configFile.path,
-                "-P", "ort.analyzer.enabledPackageManagers=Gradle,NPM",
-                "-P", "ort.analyzer.disabledPackageManagers=Gradle",
+                "-P", "ort.analyzer.enabledPackageManagers=Bundler,NPM",
+                "-P", "ort.analyzer.disabledPackageManagers=Bundler",
                 "analyze",
                 "-i", inputDir.path,
                 "-o", outputDir.path
@@ -174,7 +178,7 @@ class OrtMainFunTest : StringSpec() {
 
             OrtMain().test(
                 "-c", configFile.path,
-                "-P", "ort.analyzer.enabledPackageManagers=Gradle,NPM",
+                "-P", "ort.analyzer.enabledPackageManagers=Bundler,NPM",
                 "analyze",
                 "-i", inputDir.path,
                 "-o", outputDir.path
@@ -192,7 +196,7 @@ class OrtMainFunTest : StringSpec() {
 
             val result = OrtMain().test(
                 "-c", configFile.path,
-                "-P", "ort.analyzer.enabledPackageManagers=Gradle",
+                "-P", "ort.analyzer.enabledPackageManagers=Bundler",
                 "analyze",
                 "-i", inputDir.path,
                 "-o", outputDir.path,

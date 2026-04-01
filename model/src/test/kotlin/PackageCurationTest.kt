@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -341,7 +341,7 @@ class PackageCurationTest : WordSpec({
             result3.metadata.declaredLicensesProcessed.spdxExpression shouldBe
                 "Apache-2.0 AND BSD-3-Clause AND CC-BY-2.0".toSpdx()
 
-            result3.curations shouldContainExactly listOf(curation1, curation2, curation3).map { it.data }
+            result3.curations should containExactly(curation1.data, curation2.data, curation3.data)
         }
     }
 

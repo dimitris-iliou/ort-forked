@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import io.kotest.matchers.shouldBe
 
 import org.ossreviewtoolkit.model.RuleViolation
 import org.ossreviewtoolkit.model.Severity
+import org.ossreviewtoolkit.utils.common.enumSetOf
 
 class RuleViolationResolutionTest : WordSpec({
     "matches" should {
@@ -66,7 +67,7 @@ private fun ruleViolation(message: String) =
         rule = "",
         pkg = null,
         license = null,
-        licenseSource = null,
+        licenseSources = enumSetOf(),
         severity = Severity.ERROR,
         message = message,
         howToFix = ""

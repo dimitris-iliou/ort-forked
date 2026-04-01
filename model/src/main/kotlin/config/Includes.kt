@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2025 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,15 +21,18 @@ package org.ossreviewtoolkit.model.config
 
 import com.fasterxml.jackson.annotation.JsonInclude
 
-import org.ossreviewtoolkit.model.OrtResult
-import org.ossreviewtoolkit.model.Project
-
 data class Includes(
     /**
      * Path includes.
      */
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
-    val paths: List<PathInclude> = emptyList()
+    val paths: List<PathInclude> = emptyList(),
+
+    /**
+     * Scopes that will be included from all projects.
+     */
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    val scopes: List<ScopeInclude> = emptyList()
 ) {
     companion object {
         /**
@@ -41,15 +44,12 @@ data class Includes(
     }
 
     /**
-     * Return the [PathInclude]s matching the [definitionFilePath][Project.definitionFilePath].
-     */
-    fun findPathIncludes(project: Project, ortResult: OrtResult): List<PathInclude> {
-        val definitionFilePath = ortResult.getDefinitionFilePathRelativeToAnalyzerRoot(project)
-        return paths.filter { it.matches(definitionFilePath) }
-    }
-
-    /**
      * True if any [path include][paths] matches [path] or if there is no path includes.
      */
     fun isPathIncluded(path: String) = paths.isEmpty() || paths.any { it.matches(path) }
+
+    /**
+     * True if the scope with the given [scopeName] is included by this [Includes] configuration.
+     */
+    fun isScopeIncluded(scopeName: String): Boolean = scopes.isEmpty() || scopes.any { it.matches(scopeName) }
 }

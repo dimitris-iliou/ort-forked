@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,6 +51,7 @@ import org.ossreviewtoolkit.model.config.ScopeExclude
 import org.ossreviewtoolkit.model.config.ScopeExcludeReason
 import org.ossreviewtoolkit.model.mapper
 import org.ossreviewtoolkit.model.orEmpty
+import org.ossreviewtoolkit.model.orNone
 import org.ossreviewtoolkit.model.utils.toPurl
 import org.ossreviewtoolkit.plugins.packagecurationproviders.api.PackageCurationProviderFactory
 import org.ossreviewtoolkit.utils.common.expandTilde
@@ -102,7 +103,7 @@ internal class CreateAnalyzerResultFromPackageListCommand : OrtHelperCommand(
             id = Identifier("$PROJECT_TYPE::$projectName:"),
             vcs = projectVcs,
             vcsProcessed = projectVcs.normalize(),
-            scopeDependencies = setOfNotNull(
+            scopeDependencies = setOf(
                 packageList.dependencies.filterNot { it.isExcluded }.toScope(MAIN_SCOPE_NAME),
                 packageList.dependencies.filter { it.isExcluded }.toScope(EXCLUDED_SCOPE_NAME)
             )
@@ -155,6 +156,7 @@ private data class Dependency(
     val concludedLicense: SpdxExpression? = null,
     val description: String? = null,
     val homepageUrl: String? = null,
+    val authors: Set<String> = emptySet(),
     val isExcluded: Boolean = false,
     val isDynamicallyLinked: Boolean = false,
     val labels: Map<String, String> = emptyMap()
@@ -201,7 +203,8 @@ private fun Dependency.toPackage(): Package {
     return Package(
         id = id,
         purl = purl ?: id.toPurl(),
-        sourceArtifact = sourceArtifact?.let { RemoteArtifact(url = it.url, it.hash ?: Hash.NONE) }.orEmpty(),
+        authors = authors,
+        sourceArtifact = sourceArtifact?.let { RemoteArtifact(url = it.url, it.hash.orNone()) }.orEmpty(),
         vcs = vcsInfo,
         declaredLicenses = declaredLicenses,
         concludedLicense = concludedLicense,

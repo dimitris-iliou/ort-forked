@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2019 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -105,9 +105,9 @@ const PackagePaths = ({ paths }) => {
                             <Steps
                                 className="ort-package-path"
                                 current={stepItems.length - 1}
-                                direction="vertical"
+                                orientation="vertical"
                                 items={stepItems}
-                                progressDot={true}
+                                type="dot"
                                 size="small"
                             />
                         </List.Item>

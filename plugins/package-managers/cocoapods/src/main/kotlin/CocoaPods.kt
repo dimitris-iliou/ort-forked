@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,6 +34,7 @@ import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
@@ -45,6 +46,9 @@ import org.ossreviewtoolkit.utils.common.stashDirectories
 
 import org.semver4j.range.RangeList
 import org.semver4j.range.RangeListFactory
+
+internal const val PROJECT_TYPE = "CocoaPods"
+internal const val PACKAGE_TYPE = "Pod"
 
 private const val LOCKFILE_FILENAME = "Podfile.lock"
 private const val SCOPE_NAME = "dependencies"
@@ -73,7 +77,9 @@ internal object CocoaPodsCommand : CommandLineTool {
     description = "The CocoaPods package manager for Objective-C.",
     factory = PackageManagerFactory::class
 )
-class CocoaPods(override val descriptor: PluginDescriptor = CocoaPodsFactory.descriptor) : PackageManager("CocoaPods") {
+class CocoaPods(
+    override val descriptor: PluginDescriptor = CocoaPodsFactory.descriptor
+) : PackageManager(PROJECT_TYPE) {
     override val globsForDefinitionFiles = listOf("Podfile")
 
     private val dependencyHandler = PodDependencyHandler()
@@ -89,6 +95,7 @@ class CocoaPods(override val descriptor: PluginDescriptor = CocoaPodsFactory.des
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> =
@@ -97,20 +104,12 @@ class CocoaPods(override val descriptor: PluginDescriptor = CocoaPodsFactory.des
             CocoaPodsCommand.run("repo", "add-cdn", "trunk", "https://cdn.cocoapods.org", "--allow-root")
                 .requireSuccess()
 
-            try {
-                resolveDependenciesInternal(analysisRoot, definitionFile)
-            } finally {
-                // The cache entries are not re-usable across definition files because the keys do not contain the
-                // dependency version. If non-default Specs repositories were supported, then these would also need to
-                // be part of the key. As that's more complicated and not giving much performance prefer the more memory
-                // consumption friendly option of clearing the cache.
-                dependencyHandler.clearPodspecCache()
-            }
+            resolveDependenciesInternal(analysisRoot, definitionFile)
         }
 
     private fun resolveDependenciesInternal(analysisRoot: File, definitionFile: File): List<ProjectAnalyzerResult> {
         val workingDir = definitionFile.parentFile
-        val lockfile = workingDir / LOCKFILE_FILENAME
+        val lockfilePath = workingDir / LOCKFILE_FILENAME
         val issues = mutableListOf<Issue>()
 
         val projectId = Identifier(
@@ -131,29 +130,17 @@ class CocoaPods(override val descriptor: PluginDescriptor = CocoaPodsFactory.des
             scopeNames = setOf(SCOPE_NAME)
         )
 
-        if (lockfile.isFile) {
-            val lockfileData = lockfile.readText().parseLockfile()
+        if (lockfilePath.isFile) {
+            val lockfile = lockfilePath.readText().parseLockfile().withResolvedPaths(lockfilePath)
 
-            // Resolve paths of external sources relative to the lockfile.
-            val lockfileWithResolvedPaths = lockfileData.withResolvedPaths(lockfile)
+            dependencyHandler.setContext(lockfile)
 
-            // Convert direct dependencies with version constraints to pods with resolved versions.
-            val dependencies = lockfileWithResolvedPaths.dependencies.mapNotNull {
-                it.resolvedPod?.run {
-                    lockfileWithResolvedPaths.Pod(
-                        name,
-                        version,
-                        dependencies
-                    )
-                }
-            }
-
-            graphBuilder.addDependencies(projectId, SCOPE_NAME, dependencies)
+            graphBuilder.addDependencies(projectId, SCOPE_NAME, lockfile.getDirectDependencies())
         } else {
             issues += createAndLogIssue(
-                "Missing lockfile '${lockfile.relativeTo(analysisRoot).invariantSeparatorsPath}' for definition file " +
-                    "'${definitionFile.relativeTo(analysisRoot).invariantSeparatorsPath}'. The analysis of a Podfile " +
-                    "without a lockfile is not supported."
+                "Missing lockfile '${lockfilePath.relativeTo(analysisRoot).invariantSeparatorsPath}' " +
+                    "for definition file '${definitionFile.relativeTo(analysisRoot).invariantSeparatorsPath}'. " +
+                    "The analysis of a Podfile without a lockfile is not supported."
             )
         }
 
@@ -167,39 +154,17 @@ class CocoaPods(override val descriptor: PluginDescriptor = CocoaPodsFactory.des
 /**
  * Return a new [Lockfile] instance with all external source paths resolved relative to the given [lockfilePath].
  */
-internal fun Lockfile.withResolvedPaths(lockfilePath: File): Lockfile {
-    val resolvedExternalSources = externalSources.mapValues { entry ->
-        Lockfile.ExternalSource(
-            entry.value.path?.let { lockfilePath.resolveSibling(it).path },
-            entry.value.podspec?.let { lockfilePath.resolveSibling(it).path }
-        )
-    }
+internal fun Lockfile.withResolvedPaths(lockfilePath: File): Lockfile =
+    copy(
+        externalSources = externalSources.mapValues { entry ->
+            Lockfile.ExternalSource(
+                entry.value.path?.let { lockfilePath.resolveSibling(it).path },
+                entry.value.podspec?.let { lockfilePath.resolveSibling(it).path }
+            )
+        }
+    )
 
-    val pods = mutableListOf<Lockfile.Pod>()
-    val dependencies = mutableListOf<Lockfile.Dependency>()
-
-    val lockFile = Lockfile(pods, dependencies, resolvedExternalSources, checkoutOptions)
-
-    this.pods.forEach { pod ->
-        val resolvedPod = lockFile.Pod(
-            pod.name,
-            pod.version,
-            pod.dependencies.map { dependency ->
-                lockFile.Dependency(
-                    dependency.name,
-                    dependency.versionConstraint
-                )
-            }
-        )
-
-        pods += resolvedPod
-    }
-
-    this.dependencies.forEach { dependency ->
-        val resolvedDependency = lockFile.Dependency(dependency.name, dependency.versionConstraint)
-
-        dependencies += resolvedDependency
-    }
-
-    return lockFile
+internal fun Lockfile.getDirectDependencies(): List<Lockfile.Pod> {
+    val names = dependencies.mapTo(mutableSetOf()) { it.name }
+    return pods.filter { it.name in names }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2019 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,9 +30,18 @@ import org.ossreviewtoolkit.utils.test.matchExpectedResult
 
 @Tags("RequiresExternalTool")
 class CargoFunTest : StringSpec({
-    "Projects dependencies are detected correctly" {
+    "Project dependencies are detected correctly" {
         val definitionFile = getAssetFile("projects/synthetic/cargo/Cargo.toml")
         val expectedResultFile = getAssetFile("projects/synthetic/cargo-expected-output.yml")
+
+        val result = CargoFactory.create().resolveSingleProject(definitionFile)
+
+        result.toYaml() should matchExpectedResult(expectedResultFile, definitionFile)
+    }
+
+    "A Git source is correctly mapped to VCS information" {
+        val definitionFile = getAssetFile("projects/synthetic/cargo-git-source/Cargo.toml")
+        val expectedResultFile = getAssetFile("projects/synthetic/cargo-git-source-expected-output.yml")
 
         val result = CargoFactory.create().resolveSingleProject(definitionFile)
 

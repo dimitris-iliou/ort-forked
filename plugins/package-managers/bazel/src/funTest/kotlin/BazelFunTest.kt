@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -75,6 +75,15 @@ class BazelFunTest : StringSpec({
     "Dependencies are detected correctly with Bazel 8.0.0" {
         val definitionFile = getAssetFile("projects/synthetic/bazel-8.0/MODULE.bazel")
         val expectedResultFile = getAssetFile("projects/synthetic/bazel-8.0-expected-output.yml")
+
+        val result = BazelFactory.create().resolveSingleProject(definitionFile)
+
+        result.toYaml() should matchExpectedResult(expectedResultFile, definitionFile)
+    }
+
+    "Dependencies are detected correctly with Bazel when a module or a dependency has no version" {
+        val definitionFile = getAssetFile("projects/synthetic/bazel-7.0_modules_without_versions/MODULE.bazel")
+        val expectedResultFile = getAssetFile("projects/synthetic/bazel-7.0-no-version-expected-output.yml")
 
         val result = BazelFactory.create().resolveSingleProject(definitionFile)
 
@@ -165,6 +174,7 @@ class BazelFunTest : StringSpec({
         )
 
         val result = create("Bazel", PluginConfig(mapOf("useConan2" to "true"))).resolveSingleProject(definitionFile)
+
         result.toYaml() should matchExpectedResult(expectedResultFile, definitionFile)
     }
 
@@ -183,6 +193,7 @@ class BazelFunTest : StringSpec({
                 )
             )
         ).resolveSingleProject(definitionFile)
+
         result.toYaml() should matchExpectedResult(expectedResultFile, definitionFile)
     }
 

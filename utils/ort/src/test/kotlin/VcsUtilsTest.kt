@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,6 +52,8 @@ class VcsUtilsTest : WordSpec({
                     to "ssh://git@github.com/logicalparadox/idris.git",
                 "git@github.com:oss-review-toolkit/ort.git"
                     to "ssh://git@github.com/oss-review-toolkit/ort.git",
+                "git@git.sr.ht:~user/repo"
+                    to "ssh://git@git.sr.ht/~user/repo",
                 "ssh://user@gerrit.server.com:29418/parent/project"
                     to "ssh://user@gerrit.server.com:29418/parent/project"
             )

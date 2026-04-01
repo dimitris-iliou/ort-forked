@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +40,7 @@ import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.orEmpty
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
@@ -54,6 +55,9 @@ import org.ossreviewtoolkit.utils.ort.showStackTrace
 
 import org.semver4j.range.RangeList
 import org.semver4j.range.RangeListFactory
+
+private const val PROJECT_TYPE = "Composer"
+private const val PACKAGE_TYPE = "Composer"
 
 private const val COMPOSER_PHAR_BINARY = "composer.phar"
 private const val SCOPE_NAME_REQUIRE = "require"
@@ -89,7 +93,7 @@ internal object ComposerCommand : CommandLineTool {
     description = "The Composer package manager for PHP.",
     factory = PackageManagerFactory::class
 )
-class Composer(override val descriptor: PluginDescriptor = ComposerFactory.descriptor) : PackageManager("Composer") {
+class Composer(override val descriptor: PluginDescriptor = ComposerFactory.descriptor) : PackageManager(PROJECT_TYPE) {
     override val globsForDefinitionFiles = listOf("composer.json")
 
     override fun beforeResolution(
@@ -111,24 +115,21 @@ class Composer(override val descriptor: PluginDescriptor = ComposerFactory.descr
         definitionFiles: List<File>,
         analyzerConfig: AnalyzerConfiguration
     ): List<File> {
-        val projectFiles = definitionFiles.toMutableList()
-
         // Ignore definition files from vendor directories that reside next to other definition files, to avoid the
         // former from being recognized as projects.
-        var index = 0
-        while (index < projectFiles.size - 1) {
-            val projectFile = projectFiles[index++]
-            val vendorDir = projectFile.resolveSibling("vendor")
-            projectFiles.subList(index, projectFiles.size).removeAll { it.startsWith(vendorDir) }
+        val buildDirs = definitionFiles.map { it.resolveSibling("vendor") }
+        return definitionFiles.filterNot { definitionFile ->
+            buildDirs.any { buildDir ->
+                definitionFile.startsWith(buildDir)
+            }
         }
-
-        return projectFiles
     }
 
     override fun resolveDependencies(
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {
@@ -319,7 +320,7 @@ private fun PackageInfo.toPackage(): Package {
 
     return Package(
         id = Identifier(
-            type = "Composer",
+            type = PACKAGE_TYPE,
             namespace = rawName.substringBefore('/'),
             name = rawName.substringAfter('/'),
             version = version

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,6 @@ import org.ossreviewtoolkit.model.config.PostgresStorageConfiguration
 import org.ossreviewtoolkit.model.config.ScanStorageConfiguration
 import org.ossreviewtoolkit.model.config.ScannerConfiguration
 import org.ossreviewtoolkit.model.config.StorageType
-import org.ossreviewtoolkit.model.config.Sw360StorageConfiguration
 import org.ossreviewtoolkit.model.utils.DatabaseUtils
 import org.ossreviewtoolkit.scanner.provenance.NestedProvenance
 import org.ossreviewtoolkit.scanner.provenance.NestedProvenanceScanResult
@@ -41,7 +40,6 @@ import org.ossreviewtoolkit.scanner.storages.PackageBasedFileStorage
 import org.ossreviewtoolkit.scanner.storages.PackageBasedPostgresStorage
 import org.ossreviewtoolkit.scanner.storages.ProvenanceBasedFileStorage
 import org.ossreviewtoolkit.scanner.storages.ProvenanceBasedPostgresStorage
-import org.ossreviewtoolkit.scanner.storages.Sw360Storage
 import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.ort.ortDataDirectory
 import org.ossreviewtoolkit.utils.ort.storage.XZCompressedLocalFileStorage
@@ -128,7 +126,6 @@ private fun createStorage(config: ScanStorageConfiguration): ScanStorage =
         is FileBasedStorageConfiguration -> createFileBasedStorage(config)
         is PostgresStorageConfiguration -> createPostgresStorage(config)
         is ClearlyDefinedStorageConfiguration -> createClearlyDefinedStorage(config)
-        is Sw360StorageConfiguration -> createSw360Storage(config)
     }
 
 private fun createFileBasedStorage(config: FileBasedStorageConfiguration) =
@@ -142,11 +139,10 @@ private fun createPostgresStorage(config: PostgresStorageConfiguration) =
         StorageType.PACKAGE_BASED -> PackageBasedPostgresStorage(
             DatabaseUtils.createHikariDataSource(config = config.connection, applicationNameSuffix = "scanner")
         )
+
         StorageType.PROVENANCE_BASED -> ProvenanceBasedPostgresStorage(
             DatabaseUtils.createHikariDataSource(config = config.connection, applicationNameSuffix = "scanner")
         )
     }
 
 private fun createClearlyDefinedStorage(config: ClearlyDefinedStorageConfiguration) = ClearlyDefinedStorage(config)
-
-private fun createSw360Storage(config: Sw360StorageConfiguration) = Sw360Storage(config)

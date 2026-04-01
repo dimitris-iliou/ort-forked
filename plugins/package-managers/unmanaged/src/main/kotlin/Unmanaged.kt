@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,9 +33,12 @@ import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.utils.parseRepoManifestPath
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
+
+private const val PROJECT_TYPE = "Unmanaged"
 
 /**
  * A fake [PackageManager] for projects that do not use any of the known package managers, or no package manager at all.
@@ -47,7 +50,9 @@ import org.ossreviewtoolkit.plugins.api.PluginDescriptor
     description = "The Unmanaged package manager for projects that do not use any package manager.",
     factory = PackageManagerFactory::class
 )
-class Unmanaged(override val descriptor: PluginDescriptor = UnmanagedFactory.descriptor) : PackageManager("Unmanaged") {
+class Unmanaged(
+    override val descriptor: PluginDescriptor = UnmanagedFactory.descriptor
+) : PackageManager(PROJECT_TYPE) {
     // The empty list returned here deliberately causes this special package manager to never be considered in
     // PackageManager.findManagedFiles(). Instead, it will only be explicitly instantiated as part of
     // Analyzer.findManagedFiles().
@@ -61,6 +66,7 @@ class Unmanaged(override val descriptor: PluginDescriptor = UnmanagedFactory.des
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {

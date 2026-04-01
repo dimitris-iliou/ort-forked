@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,10 +36,10 @@ import org.ossreviewtoolkit.plugins.packagemanagers.node.parsePackageJson
 internal class YarnDependencyHandler(
     private val moduleInfoResolver: ModuleInfoResolver
 ) : DependencyHandler<YarnListNode> {
+    private lateinit var workingDir: File
+    private val projectDirs = mutableSetOf<File>()
     private val packageJsonForModuleId = mutableMapOf<String, PackageJson>()
     private val moduleDirForModuleId = mutableMapOf<String, File>()
-    private val projectDirs = mutableSetOf<File>()
-    private lateinit var workingDir: File
 
     fun setContext(workingDir: File, moduleDirs: Set<File>, projectDirs: Set<File>) {
         this.workingDir = workingDir
@@ -61,7 +61,7 @@ internal class YarnDependencyHandler(
 
     override fun identifierFor(dependency: YarnListNode): Identifier =
         Identifier(
-            type = if (dependency.isProject()) NodePackageManagerType.YARN.projectType else "NPM",
+            type = with(NodePackageManagerType.YARN) { if (dependency.isProject) projectType else packageType },
             namespace = dependency.moduleName.substringBefore("/", ""),
             name = dependency.moduleName.substringAfter("/"),
             version = dependency.moduleVersion
@@ -71,15 +71,14 @@ internal class YarnDependencyHandler(
         dependency.children.orEmpty().filter { it.name in packageJsonForModuleId }
 
     override fun linkageFor(dependency: YarnListNode): PackageLinkage =
-        PackageLinkage.DYNAMIC.takeUnless { dependency.isProject() } ?: PackageLinkage.PROJECT_DYNAMIC
+        PackageLinkage.DYNAMIC.takeUnless { dependency.isProject } ?: PackageLinkage.PROJECT_DYNAMIC
 
     override fun createPackage(dependency: YarnListNode, issues: MutableCollection<Issue>): Package? {
-        val packageJson = packageJsonForModuleId[dependency.name]?.takeUnless { dependency.isProject() } ?: return null
+        val packageJson = packageJsonForModuleId[dependency.name]?.takeUnless { dependency.isProject } ?: return null
 
         return parsePackage(packageJson, moduleInfoResolver)
     }
 
-    private fun YarnListNode.isProject(): Boolean = isProject(name)
-
-    private fun isProject(moduleId: String) = moduleDirForModuleId[moduleId] in projectDirs
+    private val YarnListNode.isProject: Boolean
+        get() = moduleDirForModuleId[name] in projectDirs
 }

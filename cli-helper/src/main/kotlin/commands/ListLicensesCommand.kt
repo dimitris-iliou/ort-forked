@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2019 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -239,8 +239,8 @@ private fun Map<SpdxExpression, List<TextLocationGroup>>.writeValueAsString(
     isPathExcluded: (String) -> Boolean,
     provenanceIndex: Int,
     includeLicenseTexts: Boolean = true
-): String {
-    return buildString {
+): String =
+    buildString {
         fun appendLineIndent(value: String, indent: Int) {
             require(indent > 0)
             appendLine(value.replaceIndent(" ".repeat(indent)))
@@ -272,7 +272,6 @@ private fun Map<SpdxExpression, List<TextLocationGroup>>.writeValueAsString(
             appendLine()
         }
     }
-}
 
 private fun Collection<TextLocation>.groupByText(baseDir: File): List<TextLocationGroup> {
     val resolvedLocations = mutableMapOf<String, MutableSet<TextLocation>>()
@@ -306,6 +305,7 @@ private fun TextLocation.resolve(baseDir: File): String? {
 private fun Provenance.writeValueAsString(): String =
     when (this) {
         is ArtifactProvenance -> "url=${sourceArtifact.url}, hash=${sourceArtifact.hash.value}"
+
         is RepositoryProvenance -> {
             "type=${vcsInfo.type}, url=${vcsInfo.url}, path=${vcsInfo.path}, revision=$resolvedRevision"
         }

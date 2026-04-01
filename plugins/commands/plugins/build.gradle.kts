@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2025 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ dependencies {
     implementation(projects.advisor)
     implementation(projects.analyzer)
     implementation(projects.downloader)
+    implementation(projects.plugins.advisors.advisorApi)
     implementation(projects.plugins.api)
     implementation(projects.plugins.packageConfigurationProviders.packageConfigurationProviderApi)
     implementation(projects.plugins.packageCurationProviders.packageCurationProviderApi)

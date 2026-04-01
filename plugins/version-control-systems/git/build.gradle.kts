@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,17 +28,12 @@ plugins {
 dependencies {
     api(projects.downloader)
     api(projects.model)
-    api(projects.utils.commonUtils) {
-        because("This is a CommandLineTool.")
-    }
 
-    api(libs.semver4j) {
-        because("This is a CommandLineTool.")
-    }
-
+    implementation(projects.utils.commonUtils)
     implementation(projects.utils.ortUtils)
 
     implementation(libs.jgit)
+    implementation(libs.semver4j)
 
     implementation(libs.jgit.ssh.apache) {
         exclude(group = "org.apache.sshd", module = "sshd-sftp")

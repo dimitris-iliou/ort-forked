@@ -1,20 +1,20 @@
-# Configuration of detekt rule sets, see https://arturbosch.github.io/detekt/comments.html.
+# Configuration of detekt rule sets, see https://detekt.dev/docs/intro.
 # This file only lists the differences to the default configuration at
-# https://github.com/arturbosch/detekt/blob/master/detekt-cli/src/main/resources/default-detekt-config.yml.
+# https://github.com/detekt/detekt/blob/main/detekt-core/src/main/resources/default-detekt-config.yml.
 
 complexity:
   CyclomaticComplexMethod:
-    threshold: 25
+    allowedComplexity: 25
   LongMethod:
-    threshold: 158
+    allowedLines: 158
   LongParameterList:
-    constructorThreshold: 11
-    functionThreshold: 8
+    allowedConstructorParameters: 11
+    allowedFunctionParameters: 8
   NestedBlockDepth:
-    threshold: 10
+    allowedDepth: 10
   TooManyFunctions:
-    thresholdInClasses: 19
-    thresholdInObjects: 14
+    allowedFunctionsPerClass: 19
+    allowedFunctionsPerObject: 14
 
 coroutines:
   InjectDispatcher:
@@ -22,12 +22,16 @@ coroutines:
 
 # Formatting rules are implemented via the ktlint plugin and are the only rules that support auto-formatting. However,
 # as ktlint does not allow to configure exceptions, some rules need to be disabled completely.
-formatting:
+ktlint:
   AnnotationOnSeparateLine:
     active: false
   ArgumentListWrapping:
     active: false
+  ChainMethodContinuation:
+    active: false
   ChainWrapping:
+    active: false
+  ClassSignature:
     active: false
   CommentWrapping:
     active: false
@@ -40,11 +44,15 @@ formatting:
     active: false
   MaximumLineLength:
     active: false
+  NoBlankLineInList:
+    active: false
   NoWildcardImports:
     active: false
   ParameterListWrapping:
     active: false
   SpacingBetweenDeclarationsWithAnnotations:
+    active: false
+  StringTemplateIndent:
     active: false
   TrailingCommaOnCallSite:
     active: true
@@ -79,12 +87,11 @@ style:
     excludes: ["**/clients/github-graphql/build/generated/**"]
   ReturnCount:
     active: false
-  SpacingBetweenPackageAndImports:
+  SpacingAfterPackageDeclaration:
     active: true
   ThrowsCount:
     max: 5
   WildcardImport:
-    excludes: ''
     excludeImports:
       - org.ossreviewtoolkit.helper.commands.*
       - org.ossreviewtoolkit.utils.spdx.SpdxLicense.*

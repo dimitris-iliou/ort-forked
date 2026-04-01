@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2019 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,8 @@ import lioshi from 'react-syntax-highlighter/dist/esm/styles/hljs/lioshi';
 
 import { Light as SyntaxHighlighter } from 'react-syntax-highlighter';
 
+import ToolsMetadataCards from './ToolsMetadataCards';
+
 const { Item } = Descriptions;
 
 SyntaxHighlighter.registerLanguage('yaml', yaml);
@@ -39,19 +41,9 @@ SyntaxHighlighter.registerLanguage('yaml', yaml);
 const AboutModal = ({ webAppOrtResult, isModalVisible, handleModalCancel }) => {
     const {
         labels,
-        metadata,
-        repositoryConfiguration
+        repositoryConfiguration,
+        toolsMetadata
     } = webAppOrtResult;
-
-    const analyzerStartDate = new Date(metadata.analyzerStartTime).toLocaleDateString(
-        undefined,
-        {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        }
-    );
 
     return (
         <Modal
@@ -71,7 +63,7 @@ const AboutModal = ({ webAppOrtResult, isModalVisible, handleModalCancel }) => {
                             label: (
                                 <span>
                                     <FileTextOutlined style={{ marginRight: 5 }}/>
-                                    Excludes (.ort.yml)
+                                    The .ort.yml file
                                 </span>
                             ),
                             key: 'ort-tabs-excludes',
@@ -129,6 +121,48 @@ const AboutModal = ({ webAppOrtResult, isModalVisible, handleModalCancel }) => {
                         });
                     }
 
+                    if (webAppOrtResult.hasPackageConfigurations()) {
+                        tabItems.push({
+                            label: (
+                                <span>
+                                    <FileTextOutlined style={{ marginRight: 5 }}/>
+                                    Package Configurations
+                                </span>
+                            ),
+                            key: 'ort-tabs-package-configurations',
+                            children: (
+                                <SyntaxHighlighter
+                                    language="yaml"
+                                    showLineNumbers={true}
+                                    style={lioshi}
+                                >
+                                    {webAppOrtResult.getPackageConfigurationsAsYaml()}
+                                </SyntaxHighlighter>
+                            )
+                        });
+                    }
+
+                    if (webAppOrtResult.hasPackageCurations()) {
+                        tabItems.push({
+                            label: (
+                                <span>
+                                    <FileTextOutlined style={{ marginRight: 5 }}/>
+                                    Package Curations
+                                </span>
+                            ),
+                            key: 'ort-tabs-package-curations',
+                            children: (
+                                <SyntaxHighlighter
+                                    language="yaml"
+                                    showLineNumbers={true}
+                                    style={lioshi}
+                                >
+                                    {webAppOrtResult.getPackageCurationsAsYaml()}
+                                </SyntaxHighlighter>
+                            )
+                        });
+                    }
+
                     tabItems.push({
                         label: (
                             <span>
@@ -168,17 +202,8 @@ const AboutModal = ({ webAppOrtResult, isModalVisible, handleModalCancel }) => {
                                         OSS Review Toolkit code repository
                                     </a> for further details.
                                 </p>
-                                {
-                                    !!analyzerStartDate
-                                    && (
-                                        <p>
-                                            This ORT report is based on an analysis started on
-                                            {' '}
-                                            {analyzerStartDate}
-                                            .
-                                        </p>
-                                    )
-                                }
+                                <h2>ORT Run Details</h2>
+                                <ToolsMetadataCards metadata={toolsMetadata} />
                             </span>
                         )
                     });

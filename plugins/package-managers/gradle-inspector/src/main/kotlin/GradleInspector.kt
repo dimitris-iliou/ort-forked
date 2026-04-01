@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,14 +45,17 @@ import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
+import org.ossreviewtoolkit.model.utils.isScopeIncluded
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.utils.common.Os
 import org.ossreviewtoolkit.utils.common.collectMessages
 import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.extractResource
+import org.ossreviewtoolkit.utils.common.fileSystemEncode
 import org.ossreviewtoolkit.utils.common.safeMkdirs
 import org.ossreviewtoolkit.utils.common.splitOnWhitespace
 import org.ossreviewtoolkit.utils.common.unquote
@@ -60,6 +63,8 @@ import org.ossreviewtoolkit.utils.ort.JavaBootstrapper
 import org.ossreviewtoolkit.utils.ort.ortToolsDirectory
 
 import org.semver4j.Semver
+
+private const val PROJECT_TYPE = "Gradle"
 
 /**
  * The names of Gradle (Groovy, Kotlin script) build files for a Gradle project.
@@ -82,6 +87,11 @@ data class GradleInspectorConfig(
      * properties.
      */
     val gradleVersion: String?,
+
+    /**
+     * A custom URL for direct JDK download. Overrides `javaVersion` if both are specified.
+     */
+    val customJdkUrl: String?,
 
     /**
      * The version of Java to use when analyzing projects. By default, the same Java version as for ORT itself it used.
@@ -108,7 +118,7 @@ data class GradleInspectorConfig(
 class GradleInspector(
     override val descriptor: PluginDescriptor = GradleInspectorFactory.descriptor,
     private val config: GradleInspectorConfig
-) : PackageManager("Gradle") {
+) : PackageManager(PROJECT_TYPE) {
     // Gradle prefers Groovy ".gradle" files over Kotlin ".gradle.kts" files, but "build" files have to come before
     // "settings" files as we should consider "settings" files only if the same directory does not also contain a
     // "build" file.
@@ -160,17 +170,30 @@ class GradleInspector(
                         addProgressListener(ProgressListener { logger.debug(it.displayName) })
                     }
 
-                    val javaHome = config.javaVersion
-                        ?.takeUnless { JavaBootstrapper.isRunningOnJdk(it) }
-                        ?.let {
-                            JavaBootstrapper.installJdk("TEMURIN", it).onFailure { e ->
+                    val javaHome = when {
+                        config.customJdkUrl != null -> {
+                            val installDir = ortToolsDirectory / "jdks" / config.customJdkUrl.fileSystemEncode()
+                            JavaBootstrapper.downloadJdk(config.customJdkUrl, installDir).onFailure { e ->
                                 issues += createAndLogIssue(e.collectMessages())
                             }.getOrNull()
-                        } ?: config.javaHome?.let { File(it) }
+                        }
 
-                    javaHome?.also {
-                        logger.info { "Setting Java home for project analysis to '$it'." }
-                        setJavaHome(it)
+                        config.javaVersion != null -> {
+                            if (!JavaBootstrapper.isRunningOnJdk(config.javaVersion)) {
+                                JavaBootstrapper.installJdk("TEMURIN", config.javaVersion).onFailure { e ->
+                                    issues += createAndLogIssue(e.collectMessages())
+                                }.getOrNull()
+                            } else {
+                                null
+                            }
+                        }
+
+                        else -> config.javaHome?.let { File(it) }
+                    }
+
+                    if (javaHome != null) {
+                        logger.info { "Setting Java home for project analysis to '$javaHome'. " }
+                        setJavaHome(javaHome)
                     }
                 }
                 .setJvmArguments(jvmArgs)
@@ -200,6 +223,7 @@ class GradleInspector(
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {
@@ -236,7 +260,7 @@ class GradleInspector(
         )
 
         dependencyTreeModel.configurations.filterNot {
-            excludes.isScopeExcluded(it.name)
+            !isScopeIncluded(it.name, excludes, includes)
         }.forEach { configuration ->
             graphBuilder.addDependencies(projectId, configuration.name, configuration.dependencies)
         }

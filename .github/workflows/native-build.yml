@@ -13,27 +13,27 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
       - name: Setup GraalVM
-        uses: graalvm/setup-graalvm@2a2412009026a83f51d179f92dc2b3fd4c8142df # v1
+        uses: graalvm/setup-graalvm@2149f395d36ce12ad4ee5d7f334b26bf081fa555 # v1.5.1
         with:
           distribution: graalvm
           java-version: 25
           native-image-job-reports: true
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@4d9f0ba0025fe599b4ebab900eb7f3a1d93ef4c2 # v5
+        uses: gradle/actions/setup-gradle@39e147cb9de83bb9910b8ef8bd7fff0ee20fcd6f # v6.0.1
       - name: Build Executable
         run: ./gradlew -P cliAnalyzerOnly=true --no-configuration-cache :cli:nativeCompile
       - name: Compress Executable
-        uses: crazy-max/ghaction-upx@db8cc9515a4a7ea1b312cb82fbeae6d716daf777 # v3
+        uses: crazy-max/ghaction-upx@c83f378efc804f828e988debb88ed6116feb2368 # v4.0.0
         with:
           files: cli/build/native/nativeCompile/ort
       - name: Upload Executable
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: ORT Analyzer-only
           path: cli/build/native/nativeCompile/ort
-          compression-level: 0
+          archive: false
           retention-days: 7

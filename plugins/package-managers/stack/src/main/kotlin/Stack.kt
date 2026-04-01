@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,6 +43,7 @@ import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.collectDependencies
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.utils.toPurl
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
@@ -54,6 +55,9 @@ import org.ossreviewtoolkit.utils.ort.okHttpClient
 
 import org.semver4j.range.RangeList
 import org.semver4j.range.RangeListFactory
+
+private const val PROJECT_TYPE = "Stack"
+private const val PACKAGE_TYPE = "Hackage"
 
 private const val EXTERNAL_SCOPE_NAME = "external"
 private const val TEST_SCOPE_NAME = "test"
@@ -84,7 +88,7 @@ internal object StackCommand : CommandLineTool {
     description = "The Stack package manager for Haskell.",
     factory = PackageManagerFactory::class
 )
-class Stack(override val descriptor: PluginDescriptor = StackFactory.descriptor) : PackageManager("Stack") {
+class Stack(override val descriptor: PluginDescriptor = StackFactory.descriptor) : PackageManager(PROJECT_TYPE) {
     override val globsForDefinitionFiles = listOf("stack.yaml")
 
     override fun beforeResolution(
@@ -97,6 +101,7 @@ class Stack(override val descriptor: PluginDescriptor = StackFactory.descriptor)
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {
@@ -165,14 +170,14 @@ class Stack(override val descriptor: PluginDescriptor = StackFactory.descriptor)
 
     private fun Dependency.toPackage(): Package {
         val id = Identifier(
-            type = "Hackage",
+            type = PACKAGE_TYPE,
             namespace = "",
             name = name,
             version = version
         )
 
         if (location == null || location.type == Location.TYPE_HACKAGE) {
-            okHttpClient.downloadCabalFile(id)?.let { return parseCabalFile(it, "Hackage") }
+            okHttpClient.downloadCabalFile(id)?.let { return parseCabalFile(it, PACKAGE_TYPE) }
         }
 
         return Package.EMPTY.copy(

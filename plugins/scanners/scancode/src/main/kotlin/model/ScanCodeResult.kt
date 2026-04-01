@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,7 +32,8 @@ import kotlinx.serialization.json.jsonPrimitive
 data class ScanCodeResult(
     val headers: List<HeaderEntry>,
     val files: List<FileEntry>,
-    val licenseReferences: List<LicenseReference>? = null // Available only with "--license-references".
+    // Available only with "--license-references".
+    val licenseReferences: List<LicenseReference>? = null
 )
 
 @Serializable

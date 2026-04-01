@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,8 +30,8 @@ import org.ossreviewtoolkit.model.RepositoryProvenance
 import org.ossreviewtoolkit.model.SourceCodeOrigin
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
+import org.ossreviewtoolkit.model.utils.hasIvyVersionRange
 import org.ossreviewtoolkit.model.utils.isApplicableIvyVersion
-import org.ossreviewtoolkit.model.utils.isVersionRange
 import org.ossreviewtoolkit.utils.common.replaceCredentialsInUri
 
 /**
@@ -86,7 +86,7 @@ data class PackageConfiguration(
             "A package configuration must contain at most one of 'sourceArtifactUrl', 'vcs' or 'sourceCodeOrigin'."
         }
 
-        if (id.isVersionRange()) {
+        if (id.hasIvyVersionRange()) {
             require(vcs == null && sourceArtifactUrl == null) {
                 "A package configuration cannot have a version range and a 'vcs' or 'sourceArtifactUrl'."
             }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -158,8 +158,8 @@ const FeatureList = [
         </p>
         <ul>
           <li>
-            Policy rules can use any data gathered by the ORT, including
-            license, copyright, and vulnerability information.
+            Policy rules can use any data gathered by ORT, including license,
+            copyright, and vulnerability information.
           </li>
           <li>
             Provides an in-built rule set based on the{' '}

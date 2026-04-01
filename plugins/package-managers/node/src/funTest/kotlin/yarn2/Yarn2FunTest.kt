@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -58,6 +58,17 @@ class Yarn2FunTest : StringSpec({
         val expectedResultFile = getAssetFile("projects/synthetic/yarn2/workspaces-expected-output.yml")
 
         val result = analyze(definitionFile.parentFile, packageManagers = setOf(Yarn2Factory())).getAnalyzerResult()
+
+        result.toYaml() should matchExpectedResult(expectedResultFile, definitionFile)
+    }
+
+    "Resolve dependencies for a Yarn 4 project with a dependency with a patch" {
+        val definitionFile = getAssetFile("projects/synthetic/yarn2/dependency-with-patch/package.json")
+        val expectedResultFile = getAssetFile("projects/synthetic/yarn2/dependency-with-patch-expected-output.yml")
+
+        val result = Yarn2Factory
+            .create(corepackEnabled = true)
+            .resolveSingleProject(definitionFile, resolveScopes = true)
 
         result.toYaml() should matchExpectedResult(expectedResultFile, definitionFile)
     }

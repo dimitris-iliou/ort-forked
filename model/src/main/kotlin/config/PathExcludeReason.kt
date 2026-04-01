@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,7 +52,7 @@ enum class PathExcludeReason {
     OPTIONAL_COMPONENT_OF,
 
     /**
-     * Any other reason which cannot be represented by any other element of [PathExcludeReason].
+     * A fallback reason for the [PathExcludeReason] when none of the other reasons apply.
      */
     OTHER,
 

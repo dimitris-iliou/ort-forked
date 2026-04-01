@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.context
 import com.github.ajalt.clikt.core.main
 import com.github.ajalt.clikt.core.subcommands
+import com.github.ajalt.clikt.core.terminal
 import com.github.ajalt.clikt.output.MordantHelpFormatter
 import com.github.ajalt.clikt.parameters.options.associate
 import com.github.ajalt.clikt.parameters.options.convert
@@ -43,6 +44,7 @@ import com.github.ajalt.mordant.rendering.VerticalAlign
 import com.github.ajalt.mordant.rendering.Widget
 import com.github.ajalt.mordant.table.ColumnWidth
 import com.github.ajalt.mordant.table.grid
+import com.github.ajalt.mordant.terminal.Terminal
 
 import kotlin.system.exitProcess
 
@@ -60,6 +62,7 @@ import org.ossreviewtoolkit.utils.common.replaceCredentialsInUri
 import org.ossreviewtoolkit.utils.ort.Environment
 import org.ossreviewtoolkit.utils.ort.ORT_CONFIG_FILENAME
 import org.ossreviewtoolkit.utils.ort.ORT_NAME
+import org.ossreviewtoolkit.utils.ort.OkHttpClientHelper
 import org.ossreviewtoolkit.utils.ort.ortConfigDirectory
 import org.ossreviewtoolkit.utils.ort.printStackTrace
 
@@ -120,6 +123,7 @@ class OrtMain : CliktCommand(ORT_NAME) {
 
         context {
             helpFormatter = { MordantHelpFormatter(context = it, REQUIRED_OPTION_MARKER, showDefaultValues = true) }
+            terminal = Terminal(nonInteractiveWidth = 200)
         }
 
         // Pass an empty PluginConfig here as commands are not configurable.
@@ -158,6 +162,8 @@ class OrtMain : CliktCommand(ORT_NAME) {
             ortConfig.deniedProcessEnvironmentVariablesSubstrings,
             ortConfig.allowedProcessEnvironmentVariableNames
         )
+
+        OkHttpClientHelper.enablePreemptiveAuthentication = ortConfig.downloader.enablePreemptiveAuthentication
 
         if (helpAll) {
             registeredSubcommands().forEach {

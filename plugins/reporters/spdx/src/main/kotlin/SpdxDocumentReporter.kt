@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2020 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import java.io.File
 import org.apache.logging.log4j.kotlin.logger
 
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
+import org.ossreviewtoolkit.plugins.api.OrtPluginEnumEntry
 import org.ossreviewtoolkit.plugins.api.OrtPluginOption
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.reporter.Reporter
@@ -37,15 +38,23 @@ import org.ossreviewtoolkit.utils.spdx.SpdxExpression
 import org.ossreviewtoolkit.utils.spdx.SpdxLicenseWithExceptionExpression
 import org.ossreviewtoolkit.utils.spdxdocument.SpdxModelMapper.FileFormat
 import org.ossreviewtoolkit.utils.spdxdocument.model.SPDX_VERSION_2_2
-import org.ossreviewtoolkit.utils.spdxdocument.model.SPDX_VERSION_2_3
 import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxDocument
+
+@Suppress("EnumEntryNameCase", "EnumNaming")
+enum class SpdxVersion {
+    @OrtPluginEnumEntry(alternativeName = "SPDX-2.2")
+    SPDX_2_2,
+
+    @OrtPluginEnumEntry(alternativeName = "SPDX-2.3")
+    SPDX_2_3
+}
 
 data class SpdxDocumentReporterConfig(
     /**
-     * The SPDX version to use. Only accepts [SPDX_VERSION_2_2] or [SPDX_VERSION_2_3]".
+     * The SPDX version to use.
      */
     @OrtPluginOption(defaultValue = SPDX_VERSION_2_2)
-    val spdxVersion: String,
+    val spdxVersion: SpdxVersion,
 
     /**
      * The comment to add to the [SpdxDocument.creationInfo].
@@ -72,16 +81,16 @@ data class SpdxDocumentReporterConfig(
     val documentComment: String?,
 
     /**
-     * The name of the generated [SpdxDocument].
+     * The name of the generated [SpdxDocument]. Defaults to the first project name from the ORT result if not set.
      */
-    @OrtPluginOption(defaultValue = "Unnamed document", aliases = ["document.name"])
-    val documentName: String,
+    @OrtPluginOption(aliases = ["document.name"])
+    val documentName: String?,
 
     /**
-     * The list of file formats to generate. Supported values are "YAML" and "JSON".
+     * The list of file formats to generate.
      */
     @OrtPluginOption(defaultValue = "YAML", aliases = ["output.file.formats"])
-    val outputFileFormats: List<String>,
+    val outputFileFormats: List<FileFormat>,
 
     /**
      * Toggle whether the output document should contain information on file granularity about files containing
@@ -112,9 +121,6 @@ class SpdxDocumentReporter(
     }
 
     override fun generateReport(input: ReporterInput, outputDir: File): List<Result<File>> {
-        val outputFileFormats = config.outputFileFormats
-            .mapTo(mutableSetOf()) { FileFormat.valueOf(it.uppercase()) }
-
         val spdxDocument = SpdxDocumentModelMapper.map(
             input.ortResult,
             input.licenseInfoResolver,
@@ -132,7 +138,7 @@ class SpdxDocumentReporter(
             }
         }
 
-        return outputFileFormats.map { fileFormat ->
+        return config.outputFileFormats.distinct().map { fileFormat ->
             runCatching {
                 outputDir.resolve("$REPORT_BASE_FILENAME.${fileFormat.fileExtension}").apply {
                     val spdx23Node = fileFormat.mapper.valueToTree<ObjectNode>(spdxDocument)
@@ -162,6 +168,7 @@ private fun SpdxDocument.getLicenseRefExceptions(): Set<String> {
 private fun SpdxExpression.getLicenseRefExceptions(result: MutableSet<String>) {
     when (this) {
         is SpdxCompoundExpression -> children.forEach { it.getLicenseRefExceptions(result) }
+
         is SpdxLicenseWithExceptionExpression -> if (isPresent() && exception.startsWith(LICENSE_REF_PREFIX)) {
             result.add(exception)
         }

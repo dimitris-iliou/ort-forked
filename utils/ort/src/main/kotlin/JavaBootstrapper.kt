@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,13 +45,15 @@ import org.ossreviewtoolkit.utils.common.unpack
 import org.semver4j.Semver
 
 object JavaBootstrapper {
-    private val discoService = DiscoService.create()
+    internal val discoService = DiscoService.create(client = OkHttpClientHelper.buildClient())
 
     /**
      * Return the single top-level directory contained in this directory, if any, or return this directory otherwise.
      */
-    private fun File.singleContainedDirectoryOrThis() =
-        walk().maxDepth(1).filter { it != this && it.isDirectory }.singleOrNull() ?: this
+    private fun File.singleContainedDirectoryOrThis(): File {
+        val dir = walk().maxDepth(1).singleOrNull { it != this && it.isDirectory } ?: this
+        return if (Os.isMac) dir / "Contents" / "Home" else dir
+    }
 
     /**
      * Return whether ORT is running on a JDK (not JRE) of the specified [version].
@@ -80,8 +82,11 @@ object JavaBootstrapper {
 
         val os = when (Os.Name.current) {
             Os.Name.LINUX -> OperatingSystem.LINUX
+
             Os.Name.MAC -> OperatingSystem.MACOS
+
             Os.Name.WINDOWS -> OperatingSystem.WINDOWS
+
             else -> return Result.failure(
                 IllegalArgumentException("No JDK package for unsupported operating system '${Os.Name.current}' found.")
             )
@@ -131,17 +136,25 @@ object JavaBootstrapper {
             return Result.failure(it)
         }
 
-        val installDir = (ortToolsDirectory / "jdks" / pkg.distribution / pkg.distributionVersion)
-            .apply {
-                if (isDirectory) {
-                    logger.info { "Not downloading the JDK again as the directory '$this' already exists." }
-                    return Result.success(singleContainedDirectoryOrThis())
-                }
+        return downloadJdk(
+            pkg.links.pkgDownloadRedirect,
+            ortToolsDirectory / "jdks" / pkg.distribution / pkg.distributionVersion
+        )
+    }
 
-                safeMkdirs()
+    /**
+     * Download a JDK from [url] and unpack it to [installDir]. Return a result with the actual installation directory.
+     */
+    fun downloadJdk(url: String, installDir: File): Result<File> {
+        with(installDir) {
+            if (isDirectory) {
+                logger.info { "Not downloading the JDK again as the directory '$this' already exists." }
+                return Result.success(singleContainedDirectoryOrThis())
             }
 
-        val url = pkg.links.pkgDownloadRedirect
+            safeMkdirs()
+        }
+
         logger.info { "Downloading the JDK package from $url..." }
 
         val (archive, downloadDuration) = measureTimedValue {

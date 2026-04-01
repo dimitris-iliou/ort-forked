@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -53,7 +53,7 @@ class FossId2023dot1Test : StringSpec({
         server.start()
 
         mockkObject(FossIdServiceWithVersion.Companion)
-        coEvery { FossIdServiceWithVersion.Companion.create(any()) } answers {
+        coEvery { FossIdServiceWithVersion.create(any()) } answers {
             VersionedFossIdService2021dot2(firstArg(), "2023.2.0")
         }
 

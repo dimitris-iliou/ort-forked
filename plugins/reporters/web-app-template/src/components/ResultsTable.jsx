@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,11 +18,12 @@
  */
 
 import {
-    useMemo,
-    useState
+    useMemo
 } from 'react';
 
 import {
+    CheckSquareOutlined,
+    CloseSquareOutlined,
     CloudDownloadOutlined,
     DeleteOutlined,
     EyeOutlined,
@@ -32,6 +33,7 @@ import {
     LaptopOutlined
 } from '@ant-design/icons';
 import {
+    Button,
     Col,
     Collapse,
     Dropdown,
@@ -39,18 +41,32 @@ import {
     Row,
     Space,
     Table,
+    Tag,
     Tooltip
 } from 'antd';
 
+import PackageConfigurations from './PackageConfigurations';
+import PackageCurations from './PackageCurations';
 import PackageDetails from './PackageDetails';
 import PackageFindingsTable from './PackageFindingsTable';
 import PackageLicenses from './PackageLicenses';
 import PackagePaths from './PackagePaths';
+import PackageScanResultsDetails from './PackageScanResultsDetails';
 import PathExcludesTable from './PathExcludesTable';
 import ScopeExcludesTable from './ScopeExcludesTable';
 import { getColumnSearchProps } from './Shared';
 
-const ResultsTable = ({ webAppOrtResult }) => {
+const ResultsTable = ({
+    columnsToShow,
+    filteredInfo,
+    pagination,
+    setColumnsToShow,
+    setFilteredInfo,
+    setPagination,
+    setSortedInfo,
+    sortedInfo,
+    webAppOrtResult
+}) => {
     // Convert packages as Antd only accepts vanilla objects as input
     const packages = useMemo(
         () => {
@@ -70,14 +86,17 @@ const ResultsTable = ({ webAppOrtResult }) => {
                         detectedLicensesProcessedText: Array.from(webAppPackage.detectedLicensesProcessed).join(', '),
                         effectiveLicense: webAppPackage.effectiveLicense || '',
                         excludeReasonsText: Array.from(webAppPackage.excludeReasons).join(', '),
+                        hasCurations: webAppPackage.hasCurations() || false,
+                        hasPackageConfigurations: webAppPackage.hasPackageConfigurations() || false,
                         homepageUrl: webAppPackage.homepageUrl || '',
                         id: webAppPackage.id,
                         isExcluded: webAppPackage.isExcluded,
                         isProject: webAppPackage.isProject,
                         key: webAppPackage.key,
+                        labels: webAppPackage.labels,
                         levels: webAppPackage.levels,
                         levelsText: Array.from(webAppPackage.levels).join(', '),
-                        repository: webAppPackage.vcsProcessedUrl || '',
+                        repository: webAppPackage.vcsProcessed.url || webAppPackage.vcs.url || null,
                         scopesText: Array.from(webAppPackage.scopeNames).join(', '),
                         scopeIndexes: webAppPackage.scopeIndexes
                     })
@@ -86,33 +105,7 @@ const ResultsTable = ({ webAppOrtResult }) => {
         []
     );
 
-    /* === Table state handling === */
-
-    // State variable for displaying table in various pages
-    const [pagination, setPagination] = useState({ current: 1, pageSize: 100 });
-
-    // State variable for filtering the contents of table columns
-    const filteredInfoDefault = {
-        excludes: [],
-        id: [],
-        homepageUrl: [],
-        vcsProcessedUrl: []
-    };
-    const [filteredInfo, setFilteredInfo] = useState(filteredInfoDefault);
-
-    // State variable for sorting table columns
-    const [sortedInfo, setSortedInfo] = useState({});
-
-    // State variable for showing or hiding table columns
-    const [columnsToShow, setColumnsToShow] = useState([
-        'declaredLicensesProcessed',
-        'detectedLicensesProcessed',
-        'levels',
-        'scopeIndexes'
-    ]);
-
     /* === Table columns === */
-
     const columns = [];
     let toggleColumnMenuItems = [];
 
@@ -512,22 +505,138 @@ const ResultsTable = ({ webAppOrtResult }) => {
         });
     }
 
-    toggleColumnMenuItems.push({ text: 'Repository', value: 'vcsProcessedUrl' });
-    if (columnsToShow.includes('vcsProcessedUrl')) {
+    toggleColumnMenuItems.push({ text: 'Labels', value: 'labels' });
+    if (columnsToShow.includes('labels')) {
         columns.push({
             align: 'left',
-            dataIndex: 'vcsProcessedUrl',
+            dataIndex: 'labels',
+            render: (record) => {
+                if (!(record instanceof Map) || record.size === 0) return null;
+                return (
+                    <Space
+                        className="ort-package-labels"
+                        orientation="vertical"
+                        size="small"
+                    >
+                        {[...record].map(([key, value]) => (
+                            <Tag key={key}>{`${key}-${value}`}</Tag>
+                        ))}
+                    </Space>
+                );
+            },
             responsive: ['md'],
-            sorter: (a, b) => a.vcsProcessedUrl.localeCompare(b.vcsProcessedUrl),
-            sortOrder: sortedInfo.field === 'vcsProcessedUrl' && sortedInfo.order,
-            textWrap: 'word-break',
-            title: 'Repository',
+            title: 'Labels',
+            width: '10%',
             ...getColumnSearchProps(
-                'vcsProcessedUrl',
-                filteredInfo.vcsProcessedUrl,
-                (value) => setFilteredInfo({ ...filteredInfo, vcsProcessedUrl: value })
+                'labels',
+                filteredInfo.labels,
+                (value) => setFilteredInfo({ ...filteredInfo, labels: value })
             )
         });
+    }
+
+    if (webAppOrtResult.hasPackageConfigurations()) {
+        toggleColumnMenuItems.push({ text: 'Package Configurations', value: 'packageConfigurationIndexes' });
+        if (columnsToShow.includes('packageConfigurationIndexes')) {
+            columns.push({
+                align: 'left',
+                filters: (() => [
+                    {
+                        text: (
+                            <span>
+                                <CheckSquareOutlined />
+                                {' '}
+                                Yes
+                            </span>
+                        ),
+                        value: true
+                    },
+                    {
+                        text: (
+                            <span>
+                                <CloseSquareOutlined />
+                                {' '}
+                                No
+                            </span>
+                        ),
+                        value: false
+                    }
+                ])(),
+                filteredValue: filteredInfo.curationsIndexes || null,
+                key: 'curationsIndexes',
+                onFilter: (value, record) => record.hasPackageConfigurations === value,
+                render: (record) => (
+                    record.hasPackageConfigurations
+                        ? (
+                            <span className="ort-excludes">
+                                <Tooltip
+                                    placement="right"
+                                    title="This package file findings have been corrected or excluded."
+                                >
+                                    <CheckSquareOutlined />
+                                </Tooltip>
+                            </span>
+                            )
+                        : (
+                            <CloseSquareOutlined />
+                            )
+                ),
+                title: 'Configs',
+                width: 85
+            });
+        }
+    }
+
+    if (webAppOrtResult.hasPackageCurations()) {
+        toggleColumnMenuItems.push({ text: 'Package Curations', value: 'curationIndexes' });
+        if (columnsToShow.includes('curationIndexes')) {
+            columns.push({
+                align: 'left',
+                filters: (() => [
+                    {
+                        text: (
+                            <span>
+                                <CheckSquareOutlined />
+                                {' '}
+                                Yes
+                            </span>
+                        ),
+                        value: true
+                    },
+                    {
+                        text: (
+                            <span>
+                                <CloseSquareOutlined />
+                                {' '}
+                                No
+                            </span>
+                        ),
+                        value: false
+                    }
+                ])(),
+                filteredValue: filteredInfo.curationIndexes || null,
+                key: 'curationIndexes',
+                onFilter: (value, record) => record.hasCurations === value,
+                render: (record) => (
+                    record.hasCurations
+                        ? (
+                            <span>
+                                <Tooltip
+                                    placement="right"
+                                    title="This package metadata has been corrected."
+                                >
+                                    <CheckSquareOutlined />
+                                </Tooltip>
+                            </span>
+                            )
+                        : (
+                            <CloseSquareOutlined />
+                            )
+                ),
+                title: 'Curations',
+                width: 95
+            });
+        }
     }
 
     toggleColumnMenuItems.push({ text: 'Project', value: 'projectIndexes' });
@@ -558,13 +667,37 @@ const ResultsTable = ({ webAppOrtResult }) => {
         });
     }
 
+    toggleColumnMenuItems.push({ text: 'Repository', value: 'repository' });
+    if (columnsToShow.includes('repository')) {
+        columns.push({
+            align: 'left',
+            dataIndex: 'repository',
+            responsive: ['md'],
+            filteredValue: filteredInfo.repository || null,
+            sorter: (a, b) => a.repository.localeCompare(b.repository),
+            sortOrder: sortedInfo.field === 'repository' && sortedInfo.order,
+            textWrap: 'word-break',
+            title: 'Repository',
+            ...getColumnSearchProps(
+                'repository',
+                filteredInfo.repository,
+                (value) => setFilteredInfo({ ...filteredInfo, repository: value })
+            )
+        });
+    }
+
     toggleColumnMenuItems = toggleColumnMenuItems.sort((a, b) => a.text.localeCompare(b.text));
 
     /* === Table event handling === */
 
     // Handle for clearing column filters and sorting changes
     const handleClearAllFiltersAndSorting = () => {
-        setFilteredInfo(filteredInfoDefault);
+        setFilteredInfo({
+            excludes: [],
+            id: [],
+            homepageUrl: [],
+            vcsProcessedUrl: []
+        });
         setSortedInfo({});
     };
 
@@ -599,14 +732,18 @@ const ResultsTable = ({ webAppOrtResult }) => {
         <div>
             <Row justify="end">
                 <Col>
-                    <Space
+                    <Space.Compact
                         style={{
                             marginBottom: 16
                         }}
                     >
-                        <Dropdown.Button
-                            icon={<EyeOutlined />}
-                            size="small"
+                        <Button
+                            icon={ <DeleteOutlined />}
+                            onClick={handleClearAllFiltersAndSorting}
+                        >
+                             Clear filters and sorters
+                        </Button>
+                        <Dropdown
                             menu={{
                                 className: 'ort-table-toggle-columns',
                                 items: toggleColumnMenuItems.map(
@@ -628,12 +765,10 @@ const ResultsTable = ({ webAppOrtResult }) => {
                                 onClick: handleToggleColumns,
                                 selectedKeys: columnsToShow
                             }}
-                            onClick={handleClearAllFiltersAndSorting}
                         >
-                            <DeleteOutlined />
-                            Clear filters and sorters
-                        </Dropdown.Button>
-                    </Space>
+                            <Button icon={<EyeOutlined />} />
+                        </Dropdown>
+                    </Space.Compact>
                 </Col>
             </Row>
             <Table
@@ -694,6 +829,64 @@ const ResultsTable = ({ webAppOrtResult }) => {
                                         });
                                     }
 
+                                    if (webAppPackage.hasFindings()) {
+                                        collapseItems.push({
+                                            label: 'Scan Results Details',
+                                            key: 'package-scan-results-details',
+                                            children: (
+                                                <PackageScanResultsDetails
+                                                    webAppPackage={webAppPackage}
+                                                />
+                                            )
+                                        });
+                                    }
+
+                                    if (webAppPackage.hasCurations()) {
+                                        collapseItems.push({
+                                            label: 'Package Curations',
+                                            key: 'package-curations',
+                                            children: (
+                                                <PackageCurations
+                                                    webAppPackage={webAppPackage}
+                                                />
+                                            )
+                                        });
+                                    }
+
+                                    if (webAppPackage.hasPackageConfigurations()) {
+                                        collapseItems.push({
+                                            label: 'Package Configurations',
+                                            key: 'package-configurations',
+                                            children: (
+                                                <PackageConfigurations
+                                                    webAppPackage={webAppPackage}
+                                                />
+                                            )
+                                        });
+                                    }
+
+                                    if (webAppPackage.hasLabels()) {
+                                        collapseItems.push({
+                                            label: 'Package Labels',
+                                            key: 'package-labels',
+                                            children: (
+                                                <Space
+                                                    className="ort-package-labels"
+                                                    size="small"
+                                                >
+                                                    {[...webAppPackage.labels].map(([key, value]) => (
+                                                        <Tag
+                                                            key={`package-label-${key}`}
+                                                            variant="outlined"
+                                                        >
+                                                            {`${key}=${value}`}
+                                                        </Tag>
+                                                    ))}
+                                                </Space>
+                                            )
+                                        });
+                                    }
+
                                     if (webAppPackage.hasPathExcludes()) {
                                         collapseItems.push({
                                             label: 'Path Excludes',
@@ -734,7 +927,7 @@ const ResultsTable = ({ webAppOrtResult }) => {
                     onChange: handlePaginationChange,
                     pageSize: pagination.pageSize,
                     pageSizeOptions: ['50', '100', '250', '500', '1000', '5000'],
-                    position: 'both',
+                    placement: 'both',
                     showSizeChanger: true
                 }}
                 onChange={handleTableChange}

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -59,7 +59,7 @@ class LicenseViewTest : WordSpec() {
         vararg licenses: Pair<String, LicenseSource>
     ): Matcher<List<Pair<SpdxSingleLicenseExpression, LicenseSource>>?> =
         transformingCollectionMatcher(
-            expected = licenses.toList(),
+            expected = licenses.asList(),
             matcher = ::containAll
         ) { list ->
             list.map { (expression, source) -> expression.toString() to source }

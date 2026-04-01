@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,6 +36,7 @@ import java.io.File
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.utils.common.ProcessCapture
 
 class NpmTest : WordSpec({
@@ -63,6 +64,7 @@ class NpmTest : WordSpec({
                     workingDir,
                     definitionFile,
                     Excludes.EMPTY,
+                    Includes.EMPTY,
                     AnalyzerConfiguration(allowDynamicVersions = true),
                     emptyMap()
                 )
@@ -116,6 +118,34 @@ class NpmTest : WordSpec({
                     "File exists: G:\\Git\\lsp-sample\\node_modules.staging " +
                     "Remove the existing file and try again, or run npm " +
                     "with --force to overwrite files recklessly."
+            )
+        }
+
+        "treat a single block of login error messages as one issue" {
+            val output = """
+                npm error code E401
+                npm error Incorrect or missing password.
+                npm error If you were trying to login, change your password, create an
+                npm error authentication token or enable two-factor authentication then
+                npm error that means you likely typed your password in incorrectly.
+                npm error Please try again, or recover your password at:
+                npm error   https://www.npmjs.com/forgot
+                npm error
+                npm error If you were doing some other operation then your saved credentials are
+                npm error probably out of date. To correct this please try logging in again with:
+                npm error   npm login
+            """.trimIndent()
+
+            output.lines().groupLines("npm error ") shouldBe listOf(
+                "Incorrect or missing password. " +
+                    "If you were trying to login, change your password, create an " +
+                    "authentication token or enable two-factor authentication then " +
+                    "that means you likely typed your password in incorrectly. " +
+                    "Please try again, or recover your password at: " +
+                    "https://www.npmjs.com/forgot " +
+                    "If you were doing some other operation then your saved credentials are " +
+                    "probably out of date. To correct this please try logging in again with: " +
+                    "npm login"
             )
         }
     }

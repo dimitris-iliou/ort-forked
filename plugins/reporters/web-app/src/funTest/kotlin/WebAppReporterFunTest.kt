@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ class WebAppReporterFunTest : WordSpec({
 
             reportFileResults.shouldBeSingleton {
                 it shouldBeSuccess { reportFile ->
-                    reportFile.length() should beInRange(1599000L..1629000L)
+                    reportFile.length() should beInRange(1930000L..2000000L)
                 }
             }
         }

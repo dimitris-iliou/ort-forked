@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,7 +43,7 @@ data class AnalyzerConfiguration(
     val allowDynamicVersions: Boolean = false,
 
     /**
-     * A list of the case-insensitive names of package managers that are enabled. Disabling a package manager in
+     * A list of the case-insensitive IDs of package manager plugins that are enabled. Disabling a package manager in
      * [disabledPackageManagers] overrides enabling it here.
      */
     val enabledPackageManagers: List<String> = listOf(
@@ -55,16 +55,20 @@ data class AnalyzerConfiguration(
         "CocoaPods",
         "Composer",
         "Conan",
+        "Gleam",
         "GoMod",
         "GradleInspector",
         "Maven",
+        "Mix",
         "NPM",
         "NuGet",
+        "OrtProjectFile",
         "PIP",
         "Pipenv",
         "PNPM",
         "Poetry",
         "Pub",
+        "Rebar3",
         "SBT",
         "SpdxDocumentFile",
         "Stack",
@@ -76,13 +80,13 @@ data class AnalyzerConfiguration(
     ),
 
     /**
-     * A list of the case-insensitive names of package managers that are disabled. Disabling a package manager in this
-     * list overrides [enabledPackageManagers].
+     * A list of the case-insensitive IDs of package manager plugins that are disabled. Disabling a package manager in
+     * this list overrides [enabledPackageManagers].
      */
     val disabledPackageManagers: List<String>? = null,
 
     /**
-     * Package manager specific configurations. The key needs to match the name of the package manager class, e.g.
+     * Package manager specific configurations. The key needs to match the ID of the package manager plugin, e.g.
      * "NuGet" for the NuGet package manager.
      */
     @ConfigAlias("analyzers")
@@ -115,7 +119,9 @@ data class AnalyzerConfiguration(
     fun merge(override: RepositoryAnalyzerConfiguration): AnalyzerConfiguration {
         val mergedPackageManagers = when {
             packageManagers == null -> override.packageManagers
+
             override.packageManagers == null -> packageManagers
+
             else -> {
                 val keys = sortedSetOf(String.CASE_INSENSITIVE_ORDER).apply {
                     addAll(packageManagers.keys)

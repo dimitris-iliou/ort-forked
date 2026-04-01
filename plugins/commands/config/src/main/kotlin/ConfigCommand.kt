@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,6 +31,8 @@ import com.github.ajalt.clikt.parameters.types.file
 import com.github.ajalt.mordant.rendering.Theme
 
 import org.ossreviewtoolkit.model.config.OrtConfiguration
+import org.ossreviewtoolkit.model.config.RepositoryConfiguration
+import org.ossreviewtoolkit.model.readValue
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.commands.api.OrtCommand
@@ -99,9 +101,19 @@ class ConfigCommand(descriptor: PluginDescriptor = ConfigCommandFactory.descript
             runCatching {
                 OrtConfiguration.load(file = this)
             }.onSuccess {
-                echo("The syntax of the configuration file '$this' is valid.")
+                echo(Theme.Default.success("The file '$canonicalPath' contains valid global ORT configuration."))
+            }.recoverCatching {
+                @Suppress("TooGenericExceptionCaught")
+                try {
+                    readValue<RepositoryConfiguration>()
+                } catch (t: Throwable) {
+                    throw t.initCause(it)
+                }
+            }.onSuccess {
+                echo(Theme.Default.success("The file '$canonicalPath' contains valid repository ORT configuration."))
             }.onFailure {
-                echo(Theme.Default.danger(it.collectMessages()))
+                val message = "The file '$canonicalPath' neither contains valid global nor repository ORT configuration"
+                echo(Theme.Default.danger("$message: ${it.collectMessages()}"))
                 throw ProgramResult(2)
             }
         }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
+import com.squareup.kotlinpoet.MemberName
 import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
@@ -34,6 +35,7 @@ import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.asClassName
 import com.squareup.kotlinpoet.ksp.writeTo
 
+import org.ossreviewtoolkit.plugins.api.EnumEntry
 import org.ossreviewtoolkit.plugins.api.PluginConfig
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.api.PluginOption
@@ -130,6 +132,7 @@ class PluginFactoryGenerator(private val codeGenerator: CodeGenerator) {
     /**
      * Generate the code block to initialize the config object from the [PluginConfig].
      */
+    @Suppress("CyclomaticComplexMethod")
     private fun getConfigFromMapInitializer(configType: TypeName, pluginOptions: List<PluginOption>) =
         CodeBlock.builder().apply {
             add("val configObject = %T(\n", configType)
@@ -137,58 +140,12 @@ class PluginFactoryGenerator(private val codeGenerator: CodeGenerator) {
             pluginOptions.forEach { option ->
                 add("    ${option.name} = ")
 
-                fun readOption(name: String) =
-                    when (option.type) {
-                        PluginOptionType.BOOLEAN -> add("config.options[%S]?.toBooleanStrict()", name)
-                        PluginOptionType.INTEGER -> add("config.options[%S]?.toInt()", name)
-                        PluginOptionType.LONG -> add("config.options[%S]?.toLong()", name)
-                        PluginOptionType.SECRET -> add("config.secrets[%S]?.let { %T(it) }", name, Secret::class)
-                        PluginOptionType.STRING -> add("config.options[%S]", name)
-                        PluginOptionType.STRING_LIST -> add(
-                            "config.options[%S]?.split(',')?.map { it.trim() }",
-                            name
-                        )
-                    }
+                val parserFunction = MemberName(
+                    "org.ossreviewtoolkit.plugins.api",
+                    if (option.isNullable) "parseNullable${option.type}Option" else "parse${option.type}Option"
+                )
 
-                // Add code to read the option from the options or secrets maps based on its type.
-                readOption(option.name)
-
-                // Add code to handle aliases.
-                option.aliases.forEach { alias ->
-                    add(" ?: ")
-                    readOption(alias)
-                }
-
-                // Add the default value if present.
-                option.defaultValue?.let { defaultValue ->
-                    when (option.type) {
-                        PluginOptionType.BOOLEAN -> add(" ?: %L", defaultValue.toBoolean())
-                        PluginOptionType.INTEGER -> add(" ?: %L", defaultValue.toInt())
-                        PluginOptionType.LONG -> add(" ?: %LL", defaultValue.toLong())
-                        PluginOptionType.SECRET -> add(" ?: %T(%S)", Secret::class, defaultValue)
-                        PluginOptionType.STRING -> add(" ?: %S", defaultValue)
-                        PluginOptionType.STRING_LIST -> {
-                            if (defaultValue.isEmpty()) {
-                                add(" ?: emptyList()")
-                            } else {
-                                add(" ?: listOf(")
-
-                                defaultValue.split(',').forEach { value ->
-                                    add("%S,", value.trim())
-                                }
-
-                                add(")")
-                            }
-                        }
-                    }
-                }
-
-                // Throw exception if the option is required but not set.
-                if (option.isRequired) {
-                    add(" ?: error(%S)", "Option ${option.name} is required but not set.")
-                }
-
-                add(",\n")
+                add("%M(%S, config),\n", parserFunction, option.name)
             }
 
             // TODO: Decide if an exception should be thrown if the options or secrets maps contain values that do not
@@ -197,10 +154,24 @@ class PluginFactoryGenerator(private val codeGenerator: CodeGenerator) {
             add(")\n\n")
         }.build()
 
+    private fun mapValueToEnumEntry(value: String, option: PluginOption): String =
+        option.enumEntries?.find { entry -> (entry.alternativeName ?: entry.name) == value }?.name
+            ?: error(
+                "No enum entry found for value '$value' of option '${option.name}' in plugin with enum type " +
+                    "'${option.enumType}'."
+            )
+
+    @Suppress("CyclomaticComplexMethod")
     private fun getConfigArguments(pluginOptions: List<PluginOption>) =
         pluginOptions.map { option ->
+            val enumClassName = option.enumType?.let {
+                ClassName(it.substringBeforeLast('.'), it.substringAfterLast('.'))
+            }
+
             val type = when (option.type) {
                 PluginOptionType.BOOLEAN -> Boolean::class.asClassName()
+                PluginOptionType.ENUM -> checkNotNull(enumClassName)
+                PluginOptionType.ENUM_LIST -> List::class.asClassName().parameterizedBy(checkNotNull(enumClassName))
                 PluginOptionType.INTEGER -> Int::class.asClassName()
                 PluginOptionType.LONG -> Long::class.asClassName()
                 PluginOptionType.SECRET -> Secret::class.asClassName()
@@ -214,10 +185,41 @@ class PluginFactoryGenerator(private val codeGenerator: CodeGenerator) {
                 val codeBlock = CodeBlock.builder().apply {
                     when (option.type) {
                         PluginOptionType.BOOLEAN -> add("%L", defaultValue.toBoolean())
+
+                        PluginOptionType.ENUM -> {
+                            add(
+                                "%T.%L",
+                                checkNotNull(enumClassName),
+                                mapValueToEnumEntry(defaultValue, option)
+                            )
+                        }
+
+                        PluginOptionType.ENUM_LIST -> {
+                            if (defaultValue.isEmpty()) {
+                                add("emptyList()")
+                            } else {
+                                add("listOf(")
+
+                                defaultValue.split(',').forEach { value ->
+                                    add(
+                                        "%T.%L,",
+                                        checkNotNull(enumClassName),
+                                        mapValueToEnumEntry(value.trim(), option)
+                                    )
+                                }
+
+                                add(")")
+                            }
+                        }
+
                         PluginOptionType.INTEGER -> add("%L", defaultValue.toInt())
+
                         PluginOptionType.LONG -> add("%LL", defaultValue.toLong())
+
                         PluginOptionType.SECRET -> add("%T(%S)", Secret::class, defaultValue)
+
                         PluginOptionType.STRING -> add("%S", defaultValue)
+
                         PluginOptionType.STRING_LIST -> {
                             if (defaultValue.isEmpty()) {
                                 add("emptyList()")
@@ -284,24 +286,71 @@ class PluginFactoryGenerator(private val codeGenerator: CodeGenerator) {
                     |            name = %S,
                     |            description = %S,
                     |            type = %T.%L,
-                    |            defaultValue = %S,
-                    |            aliases = listOf(
+                    |            enumType = %S,
+                    |
                     """.trimMargin(),
                     PluginOption::class,
                     it.name,
                     it.description,
                     PluginOptionType::class,
                     it.type.name,
-                    it.defaultValue
+                    it.enumType
                 )
 
-                it.aliases.forEach { alias ->
-                    add("                %S,", alias)
+                it.enumEntries?.let { enumEntries ->
+                    if (enumEntries.isNotEmpty()) {
+                        add("            enumEntries = listOf(\n")
+
+                        enumEntries.forEach { entry ->
+                            add(
+                                """
+                                |                %T(
+                                |                  name = %S,
+                                |                  alternativeName = %S, 
+                                |
+                                """.trimMargin(),
+                                EnumEntry::class,
+                                entry.name,
+                                entry.alternativeName
+                            )
+
+                            if (entry.aliases.isNotEmpty()) {
+                                add("                  aliases = listOf(\n")
+
+                                entry.aliases.forEach { alias ->
+                                    add("                      %S,\n", alias)
+                                }
+
+                                add("                  )\n")
+                            } else {
+                                add("                  aliases = emptyList()\n")
+                            }
+
+                            add("                ),\n")
+                        }
+
+                        add("            ),\n")
+                    } else {
+                        add("            enumEntries = emptyList(),\n")
+                    }
+                } ?: add("            enumEntries = null,\n")
+
+                add("            defaultValue = %S,\n", it.defaultValue)
+
+                if (it.aliases.isNotEmpty()) {
+                    add("            aliases = listOf(\n")
+
+                    it.aliases.forEach { alias ->
+                        add("                %S,\n", alias)
+                    }
+
+                    add("            ),\n")
+                } else {
+                    add("            aliases = emptyList(),\n")
                 }
 
                 add(
                     """    
-                    |            ),
                     |            isNullable = %L,
                     |            isRequired = %L
                     |        ),

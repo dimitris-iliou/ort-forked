@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,83 +35,76 @@ import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.orEmpty
 import org.ossreviewtoolkit.model.utils.DependencyHandler
-import org.ossreviewtoolkit.model.utils.toPurl
 import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.searchUpwardFor
 
 internal class PodDependencyHandler : DependencyHandler<Lockfile.Pod> {
+    private lateinit var lockfile: Lockfile
     private val podspecCache = mutableMapOf<String, Podspec>()
+    private val podsForName = mutableMapOf<String, Lockfile.Pod>()
 
-    fun clearPodspecCache() = podspecCache.clear()
+    fun setContext(lockfile: Lockfile) {
+        this.lockfile = lockfile
+
+        // The cache entries are not reusable across definition files because the keys do not contain the
+        // dependency version. If non-default Specs repositories were supported, then these would also need to
+        // be part of the key. As that's more complicated and not giving much performance prefer the more memory
+        // consumption friendly option of clearing the cache.
+        podspecCache.clear()
+        podsForName.clear()
+
+        lockfile.pods.associateByTo(podsForName) { it.name }
+    }
 
     override fun identifierFor(dependency: Lockfile.Pod): Identifier =
         with(dependency) {
             // The version written to the lockfile matches the version specified in the project's ".podspec" file at the
             // given revision, so the same version might be used in different revisions. To still get a unique
             // identifier, append the revision to the version.
+            val checkoutOption = lockfile.checkoutOptions[dependency.name]
             val revision = checkoutOption?.commit ?: checkoutOption?.tag ?: checkoutOption?.branch
             val uniqueVersion = listOfNotNull(version, revision).joinToString("-")
-            Identifier("Pod", "", name, uniqueVersion)
+            Identifier(PACKAGE_TYPE, "", name, uniqueVersion)
         }
 
     override fun dependenciesFor(dependency: Lockfile.Pod): List<Lockfile.Pod> =
-        dependency.dependencies.mapNotNull { it.resolvedPod }
+        dependency.dependencies.mapNotNull { podsForName[it.name] }
 
     override fun linkageFor(dependency: Lockfile.Pod): PackageLinkage = PackageLinkage.DYNAMIC
 
     override fun createPackage(dependency: Lockfile.Pod, issues: MutableCollection<Issue>): Package {
-        val id = identifierFor(dependency)
+        val checkoutOption = lockfile.checkoutOptions[dependency.name]
+        val podspec = getPodspec(dependency.name, dependency.version)
+        val vcs = checkoutOption?.toVcsInfo() ?: podspec?.toVcsInfo().orEmpty()
 
-        if (dependency.checkoutOption != null) {
-            val (url, revision) = with(dependency.checkoutOption) {
-                val revision = commit ?: tag ?: branch
-                git.orEmpty() to revision.orEmpty()
-            }
+        return Package(
+            id = identifierFor(dependency),
+            authors = emptySet(),
+            declaredLicenses = setOfNotNull(podspec?.license?.takeUnless { it.isEmpty() }),
+            description = podspec?.summary.orEmpty(),
+            homepageUrl = podspec?.homepage.orEmpty(),
+            binaryArtifact = RemoteArtifact.EMPTY,
+            sourceArtifact = podspec?.source?.http?.let { RemoteArtifact(it, Hash.NONE) }.orEmpty(),
+            vcs = vcs,
+            vcsProcessed = processPackageVcs(vcs, podspec?.homepage.orEmpty())
+        )
+    }
 
-            return Package(
-                id = id,
-                declaredLicenses = emptySet(),
-                description = "",
-                homepageUrl = url,
-                binaryArtifact = RemoteArtifact.EMPTY,
-                sourceArtifact = RemoteArtifact.EMPTY,
-                vcs = VcsInfo(VcsType.GIT, url, revision)
-            )
-        }
-
-        val basePodName = dependency.name.substringBefore('/')
-        val podspec = podspecCache.getOrPut(basePodName) {
+    private fun getPodspec(name: String, version: String): Podspec? {
+        val basename = name.substringBefore('/')
+        return podspecCache.getOrPut(basename) {
             // Lazily only call the pod CLI if the podspec is not available from the external source.
+            val externalSource = lockfile.externalSources[name]
             val podspecFile = sequence {
-                yield(dependency.externalSource?.path?.let { "$it/$basePodName.podspec" })
-                yield(dependency.externalSource?.podspec)
-                yield(getPodspecPath(basePodName, dependency.version))
+                yield(externalSource?.path?.let { "$it/$basename.podspec" })
+                yield(externalSource?.podspec)
+                yield(getPodspecPath(basename, version))
             }.firstNotNullOfOrNull { path ->
                 path?.let { File(it) }?.takeIf { it.isFile }
             }
 
-            podspecFile?.parsePodspecFile() ?: return Package.EMPTY.copy(id = id, purl = id.toPurl())
+            podspecFile?.parsePodspecFile() ?: return null
         }
-
-        val vcs = podspec.source?.git?.let { url ->
-            VcsInfo(
-                type = VcsType.GIT,
-                url = url,
-                revision = podspec.source.tag.orEmpty()
-            )
-        }.orEmpty()
-
-        return Package(
-            id = id,
-            authors = emptySet(),
-            declaredLicenses = setOfNotNull(podspec.license.takeUnless { it.isEmpty() }),
-            description = podspec.summary,
-            homepageUrl = podspec.homepage,
-            binaryArtifact = RemoteArtifact.EMPTY,
-            sourceArtifact = podspec.source?.http?.let { RemoteArtifact(it, Hash.NONE) }.orEmpty(),
-            vcs = vcs,
-            vcsProcessed = processPackageVcs(vcs, podspec.homepage)
-        )
     }
 
     private fun File.parsePodspecFile(): Podspec? {
@@ -137,7 +130,7 @@ internal class PodDependencyHandler : DependencyHandler<Lockfile.Pod> {
 
         return runCatching {
             // Convert the Ruby podspec file to JSON.
-            CocoaPodsCommand.run(parentFile, "ipc", "spec", "--silent", patchedPodspecFile.absolutePath)
+            CocoaPodsCommand.run(parentFile, "ipc", "spec", "--silent", patchedPodspecFile.canonicalPath)
                 .requireSuccess()
                 .stdout
         }.onFailure { e ->
@@ -173,4 +166,28 @@ internal class PodDependencyHandler : DependencyHandler<Lockfile.Pod> {
 
         return podspecProcess.stdout.trim()
     }
+
+    override fun areDependenciesEqual(dependenciesA: List<Lockfile.Pod>, dependenciesB: List<Lockfile.Pod>): Boolean {
+        if (dependenciesA === dependenciesB) return true
+        if (dependenciesA.isEmpty() && dependenciesB.isEmpty()) return true
+
+        val propertiesA = dependenciesA.mapTo(mutableSetOf()) { it.name to it.version }
+        val propertiesB = dependenciesB.mapTo(mutableSetOf()) { it.name to it.version }
+        return propertiesA == propertiesB
+    }
+}
+
+private fun Podspec.toVcsInfo(): VcsInfo? =
+    source?.git?.let { url ->
+        VcsInfo(
+            type = VcsType.GIT,
+            url = url,
+            revision = source.tag.orEmpty()
+        )
+    }
+
+private fun Lockfile.CheckoutOption.toVcsInfo(): VcsInfo? {
+    val revision = commit ?: tag ?: branch ?: return null
+    val url = git ?: return null
+    return VcsInfo(VcsType.GIT, url, revision)
 }

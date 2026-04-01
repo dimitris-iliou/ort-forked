@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2019 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,6 +43,7 @@ import org.ossreviewtoolkit.model.RemoteArtifact
 import org.ossreviewtoolkit.model.Scope
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.orEmpty
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
@@ -53,6 +54,9 @@ import org.ossreviewtoolkit.utils.common.withoutPrefix
 import org.ossreviewtoolkit.utils.ort.DeclaredLicenseProcessor
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
 import org.ossreviewtoolkit.utils.spdx.SpdxOperator
+
+private const val PROJECT_TYPE = "Cargo"
+private const val PACKAGE_TYPE = "Crate"
 
 private const val DEFAULT_KIND_NAME = "normal"
 private const val DEV_KIND_NAME = "dev"
@@ -75,7 +79,7 @@ internal object CargoCommand : CommandLineTool {
     description = "The Cargo package manager for Rust.",
     factory = PackageManagerFactory::class
 )
-class Cargo(override val descriptor: PluginDescriptor = CargoFactory.descriptor) : PackageManager("Cargo") {
+class Cargo(override val descriptor: PluginDescriptor = CargoFactory.descriptor) : PackageManager(PROJECT_TYPE) {
     override val globsForDefinitionFiles = listOf("Cargo.toml")
 
     /**
@@ -150,6 +154,7 @@ class Cargo(override val descriptor: PluginDescriptor = CargoFactory.descriptor)
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {
@@ -186,7 +191,7 @@ class Cargo(override val descriptor: PluginDescriptor = CargoFactory.descriptor)
 
                 val pkg = packageById.getValue(node.id)
                 PackageReference(
-                    id = Identifier("Crate", "", pkg.name, pkg.version),
+                    id = Identifier(PACKAGE_TYPE, "", pkg.name, pkg.version),
                     linkage = if (pkg.isProject(analysisRoot)) PackageLinkage.PROJECT_STATIC else PackageLinkage.STATIC,
                     dependencies = dependencyNodes.toPackageReferences()
                 )
@@ -250,12 +255,13 @@ private fun CargoMetadata.Package.toPackage(hashes: Map<String, String>): Packag
     // https://github.com/rust-lang/cargo/pull/4920
     val declaredLicensesProcessed = DeclaredLicenseProcessor.process(declaredLicenses, operator = SpdxOperator.OR)
 
-    val vcs = repository?.let { VcsHost.parseUrl(it) }.orEmpty()
+    val vcs = (source.takeIf { it?.startsWith("git+https://") == true } ?: repository)
+        ?.let { VcsHost.parseUrl(it) }.orEmpty()
     val vcsProcessed = getLocalPath()?.let { PackageManager.processProjectVcs(it) } ?: vcs.normalize()
 
     return Package(
         id = Identifier(
-            type = "Crate",
+            type = PACKAGE_TYPE,
             // Note that Rust / Cargo do not support package namespaces, see:
             // https://samsieber.tech/posts/2020/09/registry-structure-influence/
             namespace = "",
@@ -290,24 +296,14 @@ private fun CargoMetadata.Package.parseDeclaredLicenses(): Set<String> {
     return declaredLicenses
 }
 
-// Match source dependencies that directly reference git repositories. The specified tag or branch
-// name is ignored (i.e. not captured) in favor of the actual commit hash that they currently refer
-// to.
-// See https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#specifying-dependencies-from-git-repositories
-// for the specification for this kind of dependency.
-private val GIT_DEPENDENCY_REGEX = Regex("git\\+(https://.*)\\?(?:rev|tag|branch)=.+#([0-9a-fA-F]{7,40})")
+private fun CargoMetadata.Package.parseSourceArtifact(hashes: Map<String, String>): RemoteArtifact? =
+    when (source) {
+        "registry+https://github.com/rust-lang/crates.io-index" -> {
+            val url = "https://crates.io/api/v1/crates/$name/$version/download"
+            val key = "$name $version ($source)"
+            val hash = Hash.create(hashes[key].orEmpty())
+            return RemoteArtifact(url, hash)
+        }
 
-private fun CargoMetadata.Package.parseSourceArtifact(hashes: Map<String, String>): RemoteArtifact? {
-    val source = source ?: return null
-
-    if (source == "registry+https://github.com/rust-lang/crates.io-index") {
-        val url = "https://crates.io/api/v1/crates/$name/$version/download"
-        val key = "$name $version ($source)"
-        val hash = Hash.create(hashes[key].orEmpty())
-        return RemoteArtifact(url, hash)
+        else -> null
     }
-
-    val match = GIT_DEPENDENCY_REGEX.matchEntire(source) ?: return null
-    val (url, hash) = match.destructured
-    return RemoteArtifact(url, Hash.create(hash))
-}

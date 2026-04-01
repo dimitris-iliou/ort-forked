@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2019 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -61,10 +61,8 @@ class ConanFunTest : StringSpec({
         patchActualResult(result.toYaml()) should matchExpectedResult(expectedResultFile, definitionFile)
     }
 
-    /**
-     * This test cannot complete successfully when you run it locally as `package id` differs depending on operating
-     * system. The `package id` is set to the one calculated on Linux.
-     */
+    // This test cannot complete successfully when you run it locally as `package id` differs depending on operating
+    // system. The `package id` is set to the one calculated on Linux.
     "Project dependencies are detected correctly with the lockfile".config(enabled = Os.isLinux) {
         val definitionFile = getAssetFile("projects/synthetic/conan-py-lockfile/conanfile.py")
         val expectedResultFile = getAssetFile("projects/synthetic/conan-expected-output-py-lockfile.yml")
@@ -97,9 +95,7 @@ class ConanFunTest : StringSpec({
         patchActualResult(result.toYaml()) should matchExpectedResult(expectedResultFile, definitionFile)
     }
 
-    /**
-     * Same test as above, but with Conan 2.
-     */
+    // Same test as above, but with Conan 2.
     "Project dependencies are detected correctly with Conan 2 and the lockfile".config(enabled = Os.isLinux) {
         val definitionFile = getAssetFile("projects/synthetic/conan-py-lockfile/conanfile.py")
         val expectedResultFile = getAssetFile("projects/synthetic/conan-expected-output-py-lockfile.yml")

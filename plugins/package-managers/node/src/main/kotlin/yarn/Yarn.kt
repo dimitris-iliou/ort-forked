@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,10 +36,12 @@ import org.ossreviewtoolkit.analyzer.PackageManagerFactory
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.packagemanagers.node.ModuleInfoResolver
+import org.ossreviewtoolkit.plugins.packagemanagers.node.NodeCommand
 import org.ossreviewtoolkit.plugins.packagemanagers.node.NodePackageManager
 import org.ossreviewtoolkit.plugins.packagemanagers.node.NodePackageManagerType
 import org.ossreviewtoolkit.plugins.packagemanagers.node.PackageJson
@@ -49,8 +51,8 @@ import org.ossreviewtoolkit.plugins.packagemanagers.node.getInstalledModulesDirs
 import org.ossreviewtoolkit.plugins.packagemanagers.node.getNames
 import org.ossreviewtoolkit.plugins.packagemanagers.node.parsePackageJson
 import org.ossreviewtoolkit.utils.common.CommandLineTool
-import org.ossreviewtoolkit.utils.common.DirectoryStash
 import org.ossreviewtoolkit.utils.common.Os
+import org.ossreviewtoolkit.utils.common.ProcessCapture
 import org.ossreviewtoolkit.utils.common.alsoIfNull
 
 import org.semver4j.range.RangeList
@@ -60,6 +62,20 @@ internal object YarnCommand : CommandLineTool {
     override fun command(workingDir: File?) = if (Os.isWindows) "yarn.cmd" else "yarn"
 
     override fun getVersionRequirement(): RangeList = RangeListFactory.create("1.3.* - 1.22.*")
+
+    override fun run(vararg args: CharSequence, workingDir: File?, environment: Map<String, String>): ProcessCapture =
+        super.run(
+            *args,
+            workingDir = workingDir,
+            environment = environment.toMutableMap().apply {
+                if (NodeCommand.hasUseSystemCaOption) {
+                    compute("NODE_OPTIONS") { _, options ->
+                        // Additional whitespaces do not matter when separating options.
+                        "${options.orEmpty()} --use-system-ca"
+                    }
+                }
+            }
+        )
 }
 
 /**
@@ -73,8 +89,6 @@ internal object YarnCommand : CommandLineTool {
 class Yarn(override val descriptor: PluginDescriptor = YarnFactory.descriptor) :
     NodePackageManager(NodePackageManagerType.YARN) {
     override val globsForDefinitionFiles = listOf(NodePackageManagerType.DEFINITION_FILE)
-
-    private lateinit var stash: DirectoryStash
 
     private val moduleInfoResolver = ModuleInfoResolver.create { workingDir, moduleId ->
         val process = YarnCommand.run(workingDir, "info", "--json", moduleId)
@@ -93,19 +107,13 @@ class Yarn(override val descriptor: PluginDescriptor = YarnFactory.descriptor) :
         super.beforeResolution(analysisRoot, definitionFiles, analyzerConfig)
 
         YarnCommand.checkVersion()
-
-        val directories = definitionFiles.mapTo(mutableSetOf()) { it.resolveSibling("node_modules") }
-        stash = DirectoryStash(directories)
-    }
-
-    override fun afterResolution(analysisRoot: File, definitionFiles: List<File>) {
-        stash.close()
     }
 
     override fun resolveDependencies(
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {
@@ -116,7 +124,7 @@ class Yarn(override val descriptor: PluginDescriptor = YarnFactory.descriptor) :
         val workspaceModuleDirs = getWorkspaceModuleDirs(workingDir)
         handler.setContext(workingDir, getInstalledModulesDirs(workingDir), workspaceModuleDirs)
 
-        val scopes = Scope.entries.filterNot { scope -> scope.isExcluded(excludes) }
+        val scopes = Scope.entries.filterNot { scope -> scope.isExcluded(excludes, includes) }
         val moduleInfosForScope = scopes.associateWith { scope ->
             listModules(workingDir, scope).removeDanglingLinks(workingDir).resolveVersions().undoDeduplication()
         }
@@ -240,13 +248,17 @@ private val YarnListNode.moduleReference: ModuleReference get() {
     )
 }
 
-internal val YarnListNode.moduleAlias: String get() = moduleReference.alias ?: moduleName
+internal val YarnListNode.moduleAlias: String
+    get() = moduleReference.alias ?: moduleName
 
-internal val YarnListNode.moduleName: String get() = moduleReference.name
+internal val YarnListNode.moduleName: String
+    get() = moduleReference.name
 
-internal val YarnListNode.moduleVersion: String get() = moduleReference.version
+internal val YarnListNode.moduleVersion: String
+    get() = moduleReference.version
 
-internal val YarnListNode.linkPath: String? get() = moduleReference.linkPath
+internal val YarnListNode.linkPath: String?
+    get() = moduleReference.linkPath
 
 private fun List<YarnListNode>.removeDanglingLinks(workingDir: File): List<YarnListNode> =
     map {
@@ -282,7 +294,7 @@ private fun List<YarnListNode>.undoDeduplication(): List<YarnListNode> {
         // Disregard entries which are not a dependency, but only installed in the module's dir for de-duplication.
         if (color == null) return null
 
-        val childrenAncestorIds = ancestorNames + setOfNotNull(name)
+        val childrenAncestorIds = ancestorNames + name
         val replacedNode = replacements[name] ?: this.copy(name = name)
 
         return replacedNode.copy(
@@ -306,7 +318,7 @@ private fun List<YarnListNode>.undoDeduplication(): List<YarnListNode> {
  * line option '--network-timeout'.
  */
 internal fun parseYarnInfo(stdout: String, stderr: String): PackageJson? =
-    extractDataNodes(stdout, "inspect").firstOrNull()?.let(::parsePackageJson).alsoIfNull {
+    extractDataNodes(stdout, "inspect").firstOrNull()?.let(::parsePackageJson).alsoIfNull { _ ->
         extractDataNodes(stderr, "warning").forEach {
             logger.info { "Warning running Yarn info: ${it.jsonPrimitive.content}" }
         }

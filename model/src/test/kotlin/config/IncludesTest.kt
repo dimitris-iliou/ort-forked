@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2025 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,6 +50,8 @@ class IncludesTest : WordSpec() {
     private val pathInclude1 = PathInclude("path1", PathIncludeReason.SOURCE_OF, "")
     private val pathInclude2 = PathInclude("path2", PathIncludeReason.SOURCE_OF, "")
     private val pathInclude3 = PathInclude("path3", PathIncludeReason.SOURCE_OF, "")
+    private val scopeInclude1 = ScopeInclude("scope1", ScopeIncludeReason.SOURCE_OF, "")
+    private val scopeInclude2 = ScopeInclude("scope2", ScopeIncludeReason.SOURCE_OF, "")
 
     private val scope1 = Scope("scope1", setOf(PackageReference(packageId)))
     private val scope2 = Scope("scope2", setOf(PackageReference(packageId)))
@@ -64,8 +66,8 @@ class IncludesTest : WordSpec() {
         )
     }
 
-    private fun setIncludes(paths: List<PathInclude> = emptyList()) {
-        setIncludes(Includes(paths = paths))
+    private fun setIncludes(paths: List<PathInclude> = emptyList(), scopes: List<ScopeInclude> = emptyList()) {
+        setIncludes(Includes(paths = paths, scopes = scopes))
     }
 
     private fun setIncludes(includes: Includes) {
@@ -75,7 +77,8 @@ class IncludesTest : WordSpec() {
 
     private fun setProjects(vararg projects: Project) {
         val packages = mutableSetOf<Package>()
-        if (packageId in projects.flatMap { ortResult.dependencyNavigator.projectDependencies(it) }) packages += pkg.metadata
+        val allProjectDependencies = projects.flatMap { ortResult.dependencyNavigator.projectDependencies(it) }
+        if (packageId in allProjectDependencies) packages += pkg.metadata
         val analyzerResult = ortResult.analyzer!!.result.copy(
             projects = projects.toSet(),
             packages = packages
@@ -143,6 +146,45 @@ class IncludesTest : WordSpec() {
                 )
 
                 ortResult.isExcluded(project1.id) shouldBe false
+            }
+
+            "return true if some scope includes are defined but all projects depending on a package are not included" {
+                setProjects(
+                    project1.copy(scopeDependencies = setOf(scope1)),
+                    project2.copy(scopeDependencies = setOf(scope2))
+                )
+
+                setIncludes(
+                    scopes = listOf(ScopeInclude("scope3", ScopeIncludeReason.SOURCE_OF, ""))
+                )
+
+                ortResult.isExcluded(packageId) shouldBe true
+            }
+
+            "return false if all projects depending on a package are included by scope includes" {
+                setProjects(
+                    project1.copy(scopeDependencies = setOf(scope1)),
+                    project2.copy(scopeDependencies = setOf(scope2))
+                )
+
+                setIncludes(
+                    scopes = listOf(scopeInclude1, scopeInclude2)
+                )
+
+                ortResult.isExcluded(packageId) shouldBe false
+            }
+
+            "return false if only part of the projects depending on a package are included by scope includes" {
+                setProjects(
+                    project1.copy(scopeDependencies = setOf(scope1)),
+                    project2.copy(scopeDependencies = setOf(scope2))
+                )
+
+                setIncludes(
+                    scopes = listOf(scopeInclude1)
+                )
+
+                ortResult.isExcluded(packageId) shouldBe false
             }
         }
 

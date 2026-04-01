@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,11 +38,13 @@ dependencies {
     api(libs.kotlinx.coroutines)
     api(libs.okhttp)
 
-    implementation(projects.clients.foojay)
+    implementation(projects.clients.foojayClient)
 
     implementation(libs.awsS3)
     implementation(libs.commonsCompress)
     implementation(libs.xz)
+
+    funTestImplementation(libs.mockk)
 
     testImplementation(libs.mockk)
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2025 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,7 +51,7 @@ internal class ConanV2Handler(private val conan: Conan) : ConanVersionHandler {
 
     override fun getConanStoragePath(): File = getConanHome().resolve("p")
 
-    override fun process(definitionFile: File, lockfileName: String?): HandlerResults {
+    override fun process(definitionFile: File, lockfileName: String?, conanProfile: File?): HandlerResults {
         val workingDir = definitionFile.parentFile
 
         // Create a default build profile.
@@ -59,35 +59,34 @@ internal class ConanV2Handler(private val conan: Conan) : ConanVersionHandler {
             conan.command.run(workingDir, "profile", "detect")
         }
 
+        val extraArgs = buildList {
+            if (conanProfile != null) {
+                add("-pr")
+                add(conanProfile.toRelativeString(definitionFile.parentFile))
+            } else {
+                addAll(DUMMY_COMPILER_SETTINGS)
+            }
+
+            if (lockfileName != null) {
+                conan.verifyLockfileBelongsToProject(workingDir, lockfileName)
+                add("-l")
+                add(lockfileName)
+            }
+        }.toTypedArray()
+
         val jsonFile = createOrtTempDir().resolve("info.json")
-        if (lockfileName != null) {
-            conan.verifyLockfileBelongsToProject(workingDir, lockfileName)
-            conan.command.run(
-                workingDir,
-                "graph",
-                "info",
-                "-f",
-                "json",
-                "-l",
-                lockfileName,
-                "--out-file",
-                jsonFile.absolutePath,
-                *DUMMY_COMPILER_SETTINGS,
-                definitionFile.name
-            ).requireSuccess()
-        } else {
-            conan.command.run(
-                workingDir,
-                "graph",
-                "info",
-                "-f",
-                "json",
-                "--out-file",
-                jsonFile.absolutePath,
-                *DUMMY_COMPILER_SETTINGS,
-                definitionFile.name
-            ).requireSuccess()
-        }
+
+        conan.command.run(
+            workingDir,
+            "graph",
+            "info",
+            "-f",
+            "json",
+            "--out-file",
+            jsonFile.absolutePath,
+            *extraArgs,
+            definitionFile.name
+        ).requireSuccess()
 
         val pkgInfosV2 = parsePackageInfosV2(jsonFile).also { jsonFile.parentFile.safeDeleteRecursively() }
 
@@ -175,11 +174,12 @@ internal class ConanV2Handler(private val conan: Conan) : ConanVersionHandler {
      * Return the map of packages and their identifiers which are contained in [pkgInfos].
      */
     private fun parsePackages(pkgInfos: List<PackageInfoV2>): Map<String, Package> =
-        // Package types are filtered because "conan graph info" return too many packages.
-        pkgInfos.filter { it.packageType == PackageType.STATIC_LIBRARY }.associate { pkgInfo ->
-            val pkg = parsePackage(pkgInfo)
-            "${pkg.id.name}:${pkg.id.version}" to pkg
-        }
+        pkgInfos
+            .filterNot { it.packageType == PackageType.APPLICATION || it.packageType == PackageType.BUILD_SCRIPTS }
+            .associate { pkgInfo ->
+                val pkg = parsePackage(pkgInfo)
+                "${pkg.id.name}:${pkg.id.version}" to pkg
+            }
 
     /**
      * Return the [Package] parsed from the given [pkgInfo].
@@ -256,7 +256,7 @@ private fun findProjectPackageInfo(pkgInfos: List<PackageInfoV2>, definitionFile
  */
 private fun parsePackageId(pkgInfo: PackageInfoV2) =
     Identifier(
-        type = "Conan",
+        type = PACKAGE_TYPE,
         namespace = "",
         name = pkgInfo.name,
         version = pkgInfo.version

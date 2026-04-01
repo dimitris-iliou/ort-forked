@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ repositories {
 
     exclusiveContent {
         forRepository {
-            maven("https://repo.eclipse.org/content/groups/releases")
+            maven("https://repo.eclipse.org/content/repositories/releases")
         }
 
         filter {
@@ -72,9 +72,25 @@ repositories {
     }
 }
 
+configurations.all {
+    resolutionStrategy.dependencySubstitution {
+        substitute(module("org.lz4:lz4-java"))
+            .using(module("at.yawk.lz4:lz4-java:1.10.4"))
+            .because("lz4-java is unmaintained and vulnerable to CVE‐2025‐12183")
+    }
+}
+
 tasks.withType<Jar>().configureEach {
     manifest {
         attributes["Implementation-Version"] = version
+    }
+}
+
+normalization {
+    runtimeClasspath {
+        metaInf {
+            ignoreAttribute("Implementation-Version")
+        }
     }
 }
 

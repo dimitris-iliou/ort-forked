@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2020 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,8 +36,6 @@ import org.ossreviewtoolkit.utils.spdx.SpdxLicense
 import org.ossreviewtoolkit.utils.spdxdocument.SpdxModelMapper.FileFormat
 import org.ossreviewtoolkit.utils.spdxdocument.SpdxModelMapper.fromJson
 import org.ossreviewtoolkit.utils.spdxdocument.SpdxModelMapper.fromYaml
-import org.ossreviewtoolkit.utils.spdxdocument.model.SPDX_VERSION_2_2
-import org.ossreviewtoolkit.utils.spdxdocument.model.SPDX_VERSION_2_3
 import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxDocument
 import org.ossreviewtoolkit.utils.test.InputFormat
 import org.ossreviewtoolkit.utils.test.matchJsonSchema
@@ -52,7 +50,7 @@ class SpdxDocumentReporterFunTest : WordSpec({
         "create the expected JSON document for a synthetic scan result" {
             val expectedResult = readResource("/v2.2.2/synthetic-scan-result-expected-output.spdx.json")
 
-            val jsonSpdxDocument = generateReport(ORT_RESULT, FileFormat.JSON, SPDX_VERSION_2_2)
+            val jsonSpdxDocument = generateReport(ORT_RESULT, FileFormat.JSON, SpdxVersion.SPDX_2_2)
 
             jsonSpdxDocument should matchJsonSchema(schemaJson)
             jsonSpdxDocument shouldBe patchExpectedResult(
@@ -64,7 +62,7 @@ class SpdxDocumentReporterFunTest : WordSpec({
         "create the expected YAML document for a synthetic scan result" {
             val expectedResult = readResource("/v2.2.2/synthetic-scan-result-expected-output.spdx.yml")
 
-            val yamlSpdxDocument = generateReport(ORT_RESULT, FileFormat.YAML, SPDX_VERSION_2_2)
+            val yamlSpdxDocument = generateReport(ORT_RESULT, FileFormat.YAML, SpdxVersion.SPDX_2_2)
 
             yamlSpdxDocument should matchJsonSchema(schemaJson, InputFormat.YAML)
             yamlSpdxDocument shouldBe patchExpectedResult(
@@ -77,13 +75,25 @@ class SpdxDocumentReporterFunTest : WordSpec({
             val jsonSpdxDocument = generateReport(
                 ORT_RESULT,
                 FileFormat.JSON,
-                SPDX_VERSION_2_2,
+                SpdxVersion.SPDX_2_2,
                 fileInformationEnabled = false
             )
             val document = fromJson<SpdxDocument>(jsonSpdxDocument)
 
             jsonSpdxDocument should matchJsonSchema(schemaJson)
             document.files should beEmpty()
+        }
+
+        "use the project name as document name when no document name is configured" {
+            val jsonSpdxDocument = generateReport(
+                ORT_RESULT,
+                FileFormat.JSON,
+                SpdxVersion.SPDX_2_2,
+                documentName = null
+            )
+            val document = fromJson<SpdxDocument>(jsonSpdxDocument)
+
+            document.name shouldBe "proj1"
         }
     }
 
@@ -93,7 +103,7 @@ class SpdxDocumentReporterFunTest : WordSpec({
         "create the expected JSON document for a synthetic scan result" {
             val expectedResult = readResource("/v2.3/synthetic-scan-result-expected-output.spdx.json")
 
-            val jsonSpdxDocument = generateReport(ORT_RESULT, FileFormat.JSON, SPDX_VERSION_2_3)
+            val jsonSpdxDocument = generateReport(ORT_RESULT, FileFormat.JSON, SpdxVersion.SPDX_2_3)
 
             jsonSpdxDocument should matchJsonSchema(schemaJson)
             jsonSpdxDocument shouldBe patchExpectedResult(
@@ -105,7 +115,7 @@ class SpdxDocumentReporterFunTest : WordSpec({
         "create the expected YAML document for a synthetic scan result" {
             val expectedResult = readResource("/v2.3/synthetic-scan-result-expected-output.spdx.yml")
 
-            val yamlSpdxDocument = generateReport(ORT_RESULT, FileFormat.YAML, SPDX_VERSION_2_3)
+            val yamlSpdxDocument = generateReport(ORT_RESULT, FileFormat.YAML, SpdxVersion.SPDX_2_3)
 
             yamlSpdxDocument should matchJsonSchema(schemaJson, InputFormat.YAML)
             yamlSpdxDocument shouldBe patchExpectedResult(
@@ -118,7 +128,7 @@ class SpdxDocumentReporterFunTest : WordSpec({
             val jsonSpdxDocument = generateReport(
                 ORT_RESULT,
                 FileFormat.JSON,
-                SPDX_VERSION_2_3,
+                SpdxVersion.SPDX_2_3,
                 fileInformationEnabled = false
             )
             val document = fromJson<SpdxDocument>(jsonSpdxDocument)
@@ -132,8 +142,9 @@ class SpdxDocumentReporterFunTest : WordSpec({
 private fun TestConfiguration.generateReport(
     ortResult: OrtResult,
     format: FileFormat,
-    spdxVersion: String,
-    fileInformationEnabled: Boolean = true
+    spdxVersion: SpdxVersion,
+    fileInformationEnabled: Boolean = true,
+    documentName: String? = "some document name"
 ): String {
     val config = SpdxDocumentReporterConfig(
         spdxVersion = spdxVersion,
@@ -141,9 +152,9 @@ private fun TestConfiguration.generateReport(
         creationInfoPerson = "some creation info person",
         creationInfoOrganization = "some creation info organization",
         documentComment = "some document comment",
-        documentName = "some document name",
+        documentName = documentName,
         fileInformationEnabled = fileInformationEnabled,
-        outputFileFormats = listOf(format.name)
+        outputFileFormats = listOf(format)
     )
 
     return SpdxDocumentReporter(config = config)

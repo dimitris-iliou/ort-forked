@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,12 +28,16 @@ import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.packagemanagers.nuget.utils.NuGetInspector
 import org.ossreviewtoolkit.plugins.packagemanagers.nuget.utils.toOrtPackages
 import org.ossreviewtoolkit.plugins.packagemanagers.nuget.utils.toOrtProject
+
+private const val PROJECT_TYPE = "NuGet"
+internal const val PACKAGE_TYPE = "NuGet"
 
 data class NuGetConfig(
     /**
@@ -52,7 +56,7 @@ data class NuGetConfig(
     factory = PackageManagerFactory::class
 )
 class NuGet(override val descriptor: PluginDescriptor = NuGetFactory.descriptor, config: NuGetConfig) :
-    PackageManager("NuGet") {
+    PackageManager(PROJECT_TYPE) {
     override val globsForDefinitionFiles = listOf("*.csproj", "*.fsproj", "*.vcxproj", "packages.config")
 
     private val nugetConfig = config.nugetConfigFile?.let { File(it) }
@@ -61,6 +65,7 @@ class NuGet(override val descriptor: PluginDescriptor = NuGetFactory.descriptor,
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@
 
 package org.ossreviewtoolkit.analyzer
 
+import org.apache.logging.log4j.kotlin.logger
+
 import org.ossreviewtoolkit.downloader.VcsHost
 import org.ossreviewtoolkit.model.AnalyzerResult
 import org.ossreviewtoolkit.model.DependencyGraph
@@ -29,6 +31,7 @@ import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
 import org.ossreviewtoolkit.model.utils.convertToDependencyGraph
@@ -40,7 +43,7 @@ class AnalyzerResultBuilder {
     private val issues = mutableMapOf<Identifier, List<Issue>>()
     private val dependencyGraphs = mutableMapOf<String, DependencyGraph>()
 
-    fun build(excludes: Excludes = Excludes.EMPTY): AnalyzerResult {
+    fun build(excludes: Excludes = Excludes.EMPTY, includes: Includes = Includes.EMPTY): AnalyzerResult {
         val duplicates = (projects.map { it.toPackage() } + packages).getDuplicates { it.id }
         require(duplicates.isEmpty()) {
             "Unable to create the AnalyzerResult as it contains packages and projects with the same ids: " +
@@ -48,7 +51,7 @@ class AnalyzerResultBuilder {
         }
 
         return AnalyzerResult(projects, packages, issues, dependencyGraphs)
-            .convertToDependencyGraph(excludes)
+            .convertToDependencyGraph(excludes, includes)
             .resolvePackageManagerDependencies()
     }
 
@@ -117,14 +120,39 @@ private fun AnalyzerResult.resolvePackageManagerDependencies(): AnalyzerResult {
     val handler = PackageManagerDependencyHandler(this)
     val navigator = DependencyGraphNavigator(dependencyGraphs)
 
+    // Exit early if no graph contains placeholder nodes for package manager dependencies to avoid expensive graph
+    // reconstruction in those regular cases.
+    val hasPackageManagerDependencies = dependencyGraphs.any { (packageManagerName, graph) ->
+        graph.scopes.any { (_, rootIndices) ->
+            val nodes = navigator.dependenciesAccessor(packageManagerName, graph, rootIndices)
+            nodes.any { it.isPackageManagerDependency }
+        }
+    }
+
+    if (!hasPackageManagerDependencies) return this
+
+    logger.info { "Resolving package manager dependencies across ${dependencyGraphs.size} graphs." }
+
+    // Resolve package manager dependencies by constructing new graphs that have the placeholder nodes replaced with
+    // copies of the referenced nodes.
     val graphs = dependencyGraphs.mapValues { (packageManagerName, graph) ->
         val builder = DependencyGraphBuilder(handler)
 
+        logger.info { "Resolving dependencies for $packageManagerName across ${graph.scopes.size} scope(s)." }
+
         graph.scopes.forEach { (scopeName, rootIndices) ->
-            navigator.dependenciesAccessor(packageManagerName, graph, rootIndices).forEach { node ->
-                handler.resolvePackageManagerDependency(node).forEach {
-                    builder.addDependency(scopeName, it)
-                }
+            val nodes = navigator.dependenciesAccessor(packageManagerName, graph, rootIndices)
+            val resolvableNodes = nodes.flatMap { node ->
+                handler.resolvePackageManagerDependency(node)
+            }
+
+            resolvableNodes.forEach { node ->
+                // TODO: Adding a dependency internally calls `areDependenciesEqual()`, but the implementation from
+                //       `PackageManagerDependencyHandler` and not any package-manager-specific override, meaning that
+                //       optimizations done there are lost here. Ideally, this would be solved by changing the whole
+                //       algorithm to not reconstruct the graph by copying all nodes, but by only replacing the
+                //       placeholder nodes for package manager dependencies with references to the respective graphs.
+                builder.addDependency(scopeName, node)
             }
         }
 

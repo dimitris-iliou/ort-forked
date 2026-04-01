@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -78,17 +78,14 @@ class FossIdNamingProvider(
         scanCodeNamingPattern: String,
         scanCodeVariables: Map<String, String>
     ): String {
-        val noBranchScanCode =
-            replaceNamingConventionVariables(
-                scanCodeNamingPattern.replace("#branch", ""),
-                scanCodeVariables
-            )
+        val noBranchScanCode = replaceNamingConventionVariables(
+            scanCodeNamingPattern.replace("#branch", ""),
+            scanCodeVariables
+        )
 
         require(noBranchScanCode.length < MAX_SCAN_CODE_LEN) {
-            throw IllegalArgumentException(
-                "FossID scan code '$noBranchScanCode' exceeds the limit of $MAX_SCAN_CODE_LEN characters. " +
-                    "Please consider a shorter naming scan pattern."
-            )
+            "FossID scan code '$noBranchScanCode' exceeds the limit of $MAX_SCAN_CODE_LEN characters. " +
+                "Please consider a shorter naming scan pattern."
         }
 
         val maxBranchNameLength = MAX_SCAN_CODE_LEN - noBranchScanCode.length

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2019 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -109,13 +109,14 @@ data class OrtConfiguration(
 
     /**
      * The package curation providers to use. Defaults to providers for the default [ORT_PACKAGE_CURATIONS_FILENAME] and
-     * [ORT_PACKAGE_CURATIONS_DIRNAME] configuration locations. The order of this list defines the priority of the
-     * providers: Providers that appear earlier in the list can overwrite curations for the same package from providers
-     * that appear later in the list.
+     * [ORT_PACKAGE_CURATIONS_DIRNAME] configuration locations as well as the provider for Spring packages. The order of
+     * this list defines the priority of the providers: Providers that appear earlier in the list can overwrite
+     * curations for the same package from providers that appear later in the list.
      */
     val packageCurationProviders: List<ProviderPluginConfiguration> = listOf(
         ProviderPluginConfiguration(type = "DefaultDir"),
-        ProviderPluginConfiguration(type = "DefaultFile")
+        ProviderPluginConfiguration(type = "DefaultFile"),
+        ProviderPluginConfiguration(type = "Spring")
     ),
 
     /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ package org.ossreviewtoolkit.plugins.scanners.fossid
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.matchers.collections.beEmpty
 import io.kotest.matchers.collections.containExactly
+import io.kotest.matchers.collections.shouldBeSingleton
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.should
@@ -112,6 +113,114 @@ class FossIdSnippetMappingTest : WordSpec({
                 snippets.map { it.purl } should containExactly("pkg:github/vdurmont/semver4j@3.1.0")
             }
         }
+
+        "accept snippets without any artifact or purl" {
+            val issues = mutableListOf<Issue>()
+            val listSnippets = flowOf(
+                "src/main/java/Tokenizer.java" to
+                    setOf(
+                        createSnippet(
+                            1,
+                            MatchType.FULL,
+                            "",
+                            "MIT",
+                            "src/main/java/com/vdurmont/semver4j/Tokenizer.java"
+                        ).copy(
+                            author = "com/vdurmont",
+                            artifact = "semver4j",
+                            version = "3.1.0",
+                            url = "https://repo1.maven.org/maven2/com/vdurmont/semver4j/3.1.0/",
+                            purl = null
+                        ),
+                        createSnippet(
+                            2,
+                            MatchType.FULL,
+                            "pkg:maven/com.vdurmont/semver4j@3.1.0",
+                            "MIT",
+                            "com/vdurmont/semver4j/Tokenizer.java"
+                        ).copy(
+                            author = "com/vdurmont",
+                            artifact = null,
+                            version = "3.1.0",
+                            url = "https://repo1.maven.org/maven2/com/vdurmont/semver4j/3.1.0/",
+                            purl = null
+                        )
+                    )
+            )
+            val rawResults = RawResults(
+                emptyList(),
+                emptyList(),
+                emptyList(),
+                emptyList(),
+                listSnippets,
+                emptyMap()
+            )
+
+            val mappedSnippets = mapSnippetFindings(
+                rawResults,
+                500,
+                issues,
+                emptyMap(),
+                emptyList(),
+                mutableSetOf()
+            )
+
+            issues should beEmpty()
+            mappedSnippets.shouldBeSingleton { finding ->
+                with(finding.snippets) {
+                    this shouldHaveSize 2
+                    first().purl shouldBe "pkg:maven/com/vdurmont/semver4j@3.1.0"
+                    last().purl shouldBe "pkg:generic/com/vdurmont/https%3A%2F%2Frepo1.maven.org%2Fmaven2%2Fcom%2F" +
+                        "vdurmont%2Fsemver4j%2F3.1.0%2F@3.1.0"
+                }
+            }
+        }
+
+        "map github url to purl" {
+            val issues = mutableListOf<Issue>()
+            val listSnippets = flowOf(
+                "src/main/java/Tokenizer.java" to
+                    setOf(
+                        createSnippet(
+                            2,
+                            MatchType.FULL,
+                            "pkg:maven/com.vdurmont/semver4j@3.1.0",
+                            "MIT",
+                            "com/vdurmont/semver4j/Tokenizer.java"
+                        ).copy(
+                            author = "com/vdurmont",
+                            artifact = null,
+                            version = "3.1.0",
+                            url = "https://github.com/MartinPulec/UltraGrid/archive/refs/heads/devel.tar.gz",
+                            purl = null
+                        )
+                    )
+            )
+            val rawResults = RawResults(
+                emptyList(),
+                emptyList(),
+                emptyList(),
+                emptyList(),
+                listSnippets,
+                emptyMap()
+            )
+
+            val mappedSnippets = mapSnippetFindings(
+                rawResults,
+                500,
+                issues,
+                emptyMap(),
+                emptyList(),
+                mutableSetOf()
+            )
+
+            issues should beEmpty()
+            mappedSnippets.shouldBeSingleton { finding ->
+                finding.snippets.shouldBeSingleton { snippet ->
+                    snippet.purl shouldBe "pkg:github/martinpulec/ultragrid@3.1.0"
+                }
+            }
+        }
     }
 })
 
@@ -146,4 +255,5 @@ private fun createSnippet(id: Int, matchType: MatchType, purl: String, license: 
     )
 
 private fun IntRange.toPolymorphicList() = toList().toPolymorphicList()
+
 private fun List<Int>.toPolymorphicList() = PolymorphicList(this)

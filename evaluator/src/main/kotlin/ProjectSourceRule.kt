@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -127,6 +127,7 @@ open class ProjectSourceRule(
     fun projectSourceHasFile(vararg patterns: String): RuleMatcher =
         object : RuleMatcher {
             override val description = "projectSourceHasFile('${patterns.joinToString()}')"
+
             override fun matches(): Boolean = projectSourceFindFiles(*patterns).isNotEmpty()
         }
 

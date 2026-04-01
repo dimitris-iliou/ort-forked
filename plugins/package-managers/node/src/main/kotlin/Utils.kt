@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -169,7 +169,7 @@ internal fun parsePackage(packageJson: PackageJson, moduleInfoResolver: ModuleIn
 
     var vcsFromPackage = parseVcsInfo(packageJson)
 
-    val id = Identifier("NPM", namespace, name, version)
+    val id = Identifier(NodePackageManagerType.NPM.packageType, namespace, name, version)
 
     val hasIncompleteData = description.isEmpty() || homepageUrl.isEmpty() || downloadUrl.isEmpty()
         || hash == Hash.NONE || vcsFromPackage == VcsInfo.EMPTY
@@ -234,8 +234,8 @@ internal fun splitNamespaceAndName(rawName: String): Pair<String, String> {
     return Pair(namespace, name)
 }
 
-internal val PackageJson.moduleId: String get() =
-    buildString {
+internal val PackageJson.moduleId: String
+    get() = buildString {
         append(name.orEmpty())
         if (!version.isNullOrBlank()) {
             append("@")
@@ -265,7 +265,7 @@ internal fun getInstalledModulesDirs(projectDir: File): Set<File> {
 * This handles both regular modules and namespaced (@organization) modules.
 */
 private fun getChildModuleDirs(moduleDir: File): Set<File> {
-    val nodeModulesDir = moduleDir.resolve("node_modules").takeIf { it.isDirectory } ?: return emptySet()
+    val nodeModulesDir = moduleDir.resolve(NODE_MODULES_DIRNAME).takeIf { it.isDirectory } ?: return emptySet()
 
     fun File.isModuleDir(): Boolean =
         isDirectory && !isHidden && !name.startsWith("@") && resolve(NodePackageManagerType.DEFINITION_FILE).isFile

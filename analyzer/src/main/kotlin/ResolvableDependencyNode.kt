@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,20 +24,33 @@ import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.Issue
 import org.ossreviewtoolkit.model.PackageLinkage
 
+/**
+ * A dependency graph node to represent a dependency between different package managers.
+ */
 sealed class ResolvableDependencyNode : DependencyNode
 
+/**
+ * A dependency graph node to represent a dependency on a project with the given [id] and [linkage], where only the
+ * given direct [dependencies] of the project are taken into account.
+ */
 class ProjectScopeDependencyNode(
     override val id: Identifier,
     override val linkage: PackageLinkage,
-    override val issues: List<Issue>,
     private val dependencies: Sequence<DependencyNode>
 ) : ResolvableDependencyNode() {
+    override val issues: List<Issue> = emptyList()
+
     override fun <T> visitDependencies(block: (Sequence<DependencyNode>) -> T): T = block(dependencies)
 }
 
+/**
+ * A dependency graph node that wraps a regular non-package-manager-dependency in a [ResolvableDependencyNode] to be
+ * representable in a common dependency graph.
+ */
 class DependencyNodeDelegate(private val node: DependencyNode) : ResolvableDependencyNode() {
     override val id: Identifier = node.id
     override val linkage = node.linkage
     override val issues = node.issues
+
     override fun <T> visitDependencies(block: (Sequence<DependencyNode>) -> T): T = node.visitDependencies(block)
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2025 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -188,7 +188,36 @@ abstract class GeneratePluginDocsTask : DefaultTask() {
                     }
 
                     option["default"]?.also {
-                        appendLine("![Default](https://img.shields.io/badge/Default-$it-darkgreen)")
+                        val escaped = it.toString()
+                            .replace("-", "--")
+                            .replace("_", "__")
+                            .replace(" ", "_")
+                        appendLine("![Default](https://img.shields.io/badge/Default-$escaped-darkgreen)")
+                    }
+
+                    val aliases = option["aliases"] as List<*>
+                    if (aliases.isNotEmpty()) {
+                        appendLine()
+                        append("***Alias")
+                        if (aliases.size > 1) append("es")
+                        appendLine(":** ${aliases.joinToString { "`$it`" }}*")
+                    }
+
+                    val enumEntries = (option["enumEntries"] as List<*>?)?.map { it as Map<*, *> }
+                    if (enumEntries?.isNotEmpty() == true) {
+                        appendLine()
+                        appendLine("**Possible values:**")
+                        appendLine(enumEntries.joinToString { entry ->
+                            buildString {
+                                append("`${entry["alternativeName"] ?: entry["name"]}`")
+                                val aliases = entry["aliases"] as List<*>
+                                if (aliases.isNotEmpty()) {
+                                    append(" (alias")
+                                    if (aliases.size > 1) append("es")
+                                    append(": ${aliases.joinToString { "`$it`" }})")
+                                }
+                            }
+                        })
                     }
 
                     appendLine()

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -104,6 +104,11 @@ data class Hash(
             acc + 31 * (index + (c.digitToIntOrNull() ?: 0))
         }
 }
+
+/**
+ * Return this [Hash] if not null or else [Hash.NONE].
+ */
+fun Hash?.orNone(): Hash = this ?: Hash.NONE
 
 private class StringLowercaseConverter : StdConverter<String, String>() {
     override fun convert(value: String): String = value.lowercase()

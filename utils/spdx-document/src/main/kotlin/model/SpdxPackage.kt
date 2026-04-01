@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2020 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ import org.ossreviewtoolkit.utils.spdx.isSpdxExpressionOrNotPresent
  */
 data class SpdxPackage(
     /**
-     * A unique identifier for this [SpdxPackage] within a SPDX document.
+     * A unique identifier for this [SpdxPackage] within an SPDX document.
      */
     @JsonProperty("SPDXID")
     val spdxId: String,

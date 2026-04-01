@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -74,8 +74,8 @@ import org.ossreviewtoolkit.utils.ort.ortConfigDirectory
 class AnalyzeCommand(descriptor: PluginDescriptor = AnalyzeCommandFactory.descriptor) : OrtCommand(descriptor) {
     private val inputDir by option(
         "--input-dir", "-i",
-        help = "The project directory to analyze. May point to a definition file if only a single package manager is " +
-            "enabled."
+        help = "The project directory to analyze. May point to a definition file, but only if just a single package" +
+            "manager is enabled, and the definition file does not depend on any further definition files."
     ).convert { it.expandTilde() }
         .file(mustExist = true, canBeFile = true, canBeDir = true, mustBeWritable = false, mustBeReadable = true)
         .convert { it.absoluteFile.normalize() }
@@ -170,6 +170,8 @@ class AnalyzeCommand(descriptor: PluginDescriptor = AnalyzeCommandFactory.descri
                 }
             }
 
+            // This only adds those package curation providers that are both enabled in the ORT configuration (which is
+            // the default) and available in the classpath.
             addAll(PackageCurationProviderFactory.create(ortConfig.packageCurationProviders))
         }
 

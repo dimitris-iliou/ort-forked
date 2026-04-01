@@ -6,14 +6,14 @@ project:
   declared_licenses_processed: {}
   vcs:
     type: "Git"
-    url: "<REPLACE_URL_PROCESSED>"
-    revision: "<REPLACE_REVISION>"
-    path: "<REPLACE_PATH>"
+    url: "<REPLACE_VCS_PROCESSED_URL>"
+    revision: "<REPLACE_VCS_REVISION>"
+    path: "<REPLACE_VCS_PATH>"
   vcs_processed:
     type: "Git"
-    url: "<REPLACE_URL_PROCESSED>"
-    revision: "<REPLACE_REVISION>"
-    path: "<REPLACE_PATH>"
+    url: "<REPLACE_VCS_PROCESSED_URL>"
+    revision: "<REPLACE_VCS_REVISION>"
+    path: "<REPLACE_VCS_PATH>"
   homepage_url: ""
   scopes:
   - name: "dev"
@@ -769,12 +769,12 @@ packages:
       algorithm: "SHA-256"
   vcs:
     type: "Git"
-    url: "https://github.com/bazelbuild/rules_shell"
+    url: "https://github.com/bazel-contrib/rules_shell"
     revision: ""
     path: ""
   vcs_processed:
     type: "Git"
-    url: "https://github.com/bazelbuild/rules_shell.git"
+    url: "https://github.com/bazel-contrib/rules_shell.git"
     revision: ""
     path: ""
 - id: "Bazel::stardoc:0.7.1"

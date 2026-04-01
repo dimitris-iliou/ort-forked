@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,8 +26,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
-import kotlinx.serialization.descriptors.SerialDescriptor
-import kotlinx.serialization.descriptors.buildClassSerialDescriptor
 import kotlinx.serialization.descriptors.listSerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
@@ -112,7 +110,7 @@ private data class PackageInfoV2Raw(
                 homepage = it.homepage,
                 label = it.label,
                 requires = it.dependencies.values.filter { dep ->
-                    dep.direct && dep.libs && dep.visible
+                    dep.direct && dep.visible
                 }.map { dep2 -> dep2.ref },
                 buildRequires = it.dependencies.values.filter { dep ->
                     dep.build && dep.direct
@@ -139,7 +137,7 @@ internal data class Graph(
 internal data class PackageV2(
     val ref: String,
     val author: String? = null,
-    @Serializable(with = StringListSerializer::class)
+    @Serializable(StringListSerializer::class)
     val license: List<String> = emptyList(),
     val homepage: String? = null,
     val url: String? = null,
@@ -185,10 +183,8 @@ internal data class DependencyReference(
  * A (de)serialized for the list of licenses: the JSON can contain either null, string or an array of string for this
  * property.
  */
-object StringListSerializer : KSerializer<List<String>> {
-    override val descriptor: SerialDescriptor = buildClassSerialDescriptor("StringList") {
-        element("value", listSerialDescriptor<String>())
-    }
+private object StringListSerializer : KSerializer<List<String>> {
+    override val descriptor = listSerialDescriptor<String>()
 
     override fun serialize(encoder: Encoder, value: List<String>) {
         encoder.encodeSerializableValue(ListSerializer(String.serializer()), value)

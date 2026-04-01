@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -92,7 +92,8 @@ private data class PinV1(
 @Serializable
 internal data class SwiftPackageRegistryConfiguration(
     val version: Int,
-    val registries: Map<String, Registry> = emptyMap() // Map contains the mapping SCOPE <-> Registry
+    // Map contains the mapping SCOPE <-> Registry.
+    val registries: Map<String, Registry> = emptyMap()
 ) {
     @Serializable
     data class Registry(

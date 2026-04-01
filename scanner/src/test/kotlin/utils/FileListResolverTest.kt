@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -82,7 +82,9 @@ class FileListResolverTest : WordSpec({
             val resolver = FileListResolver(
                 storage = object : ProvenanceFileStorage {
                     override fun hasData(provenance: KnownProvenance) = true
+
                     override fun getData(provenance: KnownProvenance) = null
+
                     override fun putData(provenance: KnownProvenance, data: InputStream, size: Long) =
                         throw IOException()
                 },
@@ -139,7 +141,9 @@ class FileListResolverTest : WordSpec({
             val resolver = FileListResolver(
                 storage = object : ProvenanceFileStorage {
                     override fun hasData(provenance: KnownProvenance) = false
+
                     override fun getData(provenance: KnownProvenance) = null
+
                     override fun putData(provenance: KnownProvenance, data: InputStream, size: Long) =
                         throw IOException()
                 },

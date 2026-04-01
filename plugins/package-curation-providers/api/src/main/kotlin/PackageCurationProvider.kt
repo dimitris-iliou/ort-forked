@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,7 +29,8 @@ import org.ossreviewtoolkit.plugins.api.Plugin
 interface PackageCurationProvider : Plugin {
     /**
      * Return all available [PackageCuration]s which are applicable to any of the given [packages].
+     *
+     * TODO: Maybe make this a suspend function, then all implementing classes could deal with coroutines more easily.
      */
-    // TODO: Maybe make this a suspend function, then all implementing classes could deal with coroutines more easily.
     fun getCurationsFor(packages: Collection<Package>): Set<PackageCuration>
 }

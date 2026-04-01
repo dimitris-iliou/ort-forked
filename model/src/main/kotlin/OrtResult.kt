@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +40,8 @@ import org.ossreviewtoolkit.model.config.RuleViolationResolution
 import org.ossreviewtoolkit.model.config.VulnerabilityResolution
 import org.ossreviewtoolkit.model.config.orEmpty
 import org.ossreviewtoolkit.model.utils.ResolutionProvider
+import org.ossreviewtoolkit.model.utils.isPathIncluded
+import org.ossreviewtoolkit.model.utils.isScopeIncluded
 import org.ossreviewtoolkit.model.vulnerabilities.Vulnerability
 import org.ossreviewtoolkit.utils.common.zipWithSets
 import org.ossreviewtoolkit.utils.spdx.SpdxLicenseChoice
@@ -135,10 +137,10 @@ data class OrtResult(
         projects.forEach { project ->
             dependencyNavigator.scopeNames(project).forEach { scopeName ->
                 dependencyNavigator.scopeDependencies(project, scopeName).forEach { dependencies ->
-                    val isScopeExcluded = getExcludes().isScopeExcluded(scopeName)
+                    val isScopeIncluded = isScopeIncluded(scopeName, getExcludes(), getIncludes())
                     allDependencies += dependencies
 
-                    if (!isProjectExcluded(project.id) && !isScopeExcluded) {
+                    if (!isProjectExcluded(project.id) && isScopeIncluded) {
                         includedDependencies += dependencies
                     }
                 }
@@ -193,16 +195,8 @@ data class OrtResult(
         getProjects().associateBy(
             { project -> project.id },
             { project ->
-                val pathExcludes = getExcludes().findPathExcludes(project, this)
-                val pathIncludes = getIncludes().findPathIncludes(project, this)
-
-                val isExcluded = if (getIncludes() == Includes.EMPTY) {
-                    // No includes are defined. It is excluded if it has path excludes.
-                    pathExcludes.isNotEmpty()
-                } else {
-                    // Some includes are defined. It is excluded if it has no path includes or has path excludes.
-                    pathIncludes.isEmpty() || pathExcludes.isNotEmpty()
-                }
+                val definitionFilePath = getDefinitionFilePathRelativeToAnalyzerRoot(project)
+                val isExcluded = !isPathIncluded(definitionFilePath, getExcludes(), getIncludes())
 
                 ProjectEntry(
                     project = project,
@@ -273,6 +267,10 @@ data class OrtResult(
      * analyzer root is the input directory of the analyzer.
      */
     fun getFilePathRelativeToAnalyzerRoot(project: Project, path: String): String {
+        if (project.id.type.startsWith("SPDX", ignoreCase = true) && project.vcsProcessed == VcsInfo.EMPTY) {
+            return project.definitionFilePath
+        }
+
         val vcsPath = relativeProjectVcsPath.getValue(project.id)
 
         requireNotNull(vcsPath) {
@@ -341,6 +339,19 @@ data class OrtResult(
     ): Map<Identifier, Set<Issue>> =
         advisor?.getIssues().orEmpty().filterIssues(omitExcluded, omitResolved, minSeverity)
 
+    /**
+     * Return all de-duplicated advisor [Issue]s that originate from advisor providers that have completely failed to
+     * be created or fetched results for. If [omitResolved] is set to true, resolved issues are omitted from the result.
+     * Issues with [severity][Issue.severity] below [minSeverity] are omitted from the result.
+     */
+    fun getAdvisorProviderIssues(
+        omitResolved: Boolean = false,
+        minSeverity: Severity = Severity.entries.min()
+    ): Set<Issue> =
+        advisor?.providerIssues.orEmpty().filterTo(mutableSetOf()) {
+            (!omitResolved || !isResolved(it)) && it.severity >= minSeverity
+        }
+
     private fun Map<Identifier, Set<Issue>>.filterIssues(
         omitExcluded: Boolean = false,
         omitResolved: Boolean = false,
@@ -380,7 +391,10 @@ data class OrtResult(
      */
     @JsonIgnore
     fun getOpenIssues(minSeverity: Severity = Severity.WARNING) =
-        getIssues(omitExcluded = true, omitResolved = true, minSeverity = minSeverity).values.flatten().distinct()
+        buildList {
+            getIssues(omitExcluded = true, omitResolved = true, minSeverity = minSeverity).values.forEach { addAll(it) }
+            addAll(getAdvisorProviderIssues(omitResolved = true, minSeverity = minSeverity))
+        }.distinct()
 
     /**
      * Return a list of [PackageConfiguration]s for the given [packageId] and [provenance].

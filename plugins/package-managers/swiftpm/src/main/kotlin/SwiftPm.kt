@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,6 +43,7 @@ import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.orEmpty
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
@@ -53,11 +54,12 @@ import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.toUri
 import org.ossreviewtoolkit.utils.ort.normalizeVcsUrl
 
+private const val PROJECT_TYPE = "SwiftPM"
+private const val PACKAGE_TYPE = "Swift"
+
 private const val PACKAGE_SWIFT_NAME = "Package.swift"
 private const val PACKAGE_RESOLVED_NAME = "Package.resolved"
 private const val REGISTRY_CONFIGURATION_PATH = ".swiftpm/configuration/registries.json"
-
-private const val PACKAGE_TYPE = "Swift"
 
 private const val DEPENDENCIES_SCOPE_NAME = "dependencies"
 
@@ -76,21 +78,20 @@ internal object SwiftCommand : CommandLineTool {
     description = "The Swift Package Manager for Swift.",
     factory = PackageManagerFactory::class
 )
-class SwiftPm(override val descriptor: PluginDescriptor = SwiftPmFactory.descriptor) : PackageManager("SwiftPM") {
+class SwiftPm(override val descriptor: PluginDescriptor = SwiftPmFactory.descriptor) : PackageManager(PROJECT_TYPE) {
     override val globsForDefinitionFiles = listOf(PACKAGE_SWIFT_NAME, PACKAGE_RESOLVED_NAME)
 
     override fun mapDefinitionFiles(
         analysisRoot: File,
         definitionFiles: List<File>,
         analyzerConfig: AnalyzerConfiguration
-    ): List<File> {
-        return definitionFiles.filterNot { file -> ".build/checkouts" in file.path }
-    }
+    ): List<File> = definitionFiles.filterNot { file -> ".build/checkouts" in file.path }
 
     override fun resolveDependencies(
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {

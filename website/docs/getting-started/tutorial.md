@@ -24,7 +24,7 @@ It will guide through the main steps for running ORT:
 ORT is tested to run on Linux, macOS, and Windows.
 This tutorial assumes that you are running on Linux, but it should be easy to adapt the commands to macOS or Windows.
 
-In addition to Java (version >= 11), for some supported package managers and Version Control Systems, additional tools need to be installed.
+In addition to Java (version >= 21), for some supported package managers and Version Control Systems, additional tools need to be installed.
 In the context of this tutorial, the following tools are required:
 
 * Git (any recent version will do)
@@ -47,7 +47,7 @@ To build the command line interface run:
 
 ```shell
 cd ort
-./gradlew installDist
+./gradlew :cli:installDist
 ```
 
 This will create the script to run ORT at `cli/build/install/ort/bin/ort`.

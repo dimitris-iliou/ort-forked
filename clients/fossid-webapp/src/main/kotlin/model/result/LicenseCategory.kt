@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,12 +19,17 @@
 
 package org.ossreviewtoolkit.clients.fossid.model.result
 
+/**
+ * The category of a license in the FossId Knowledge Base. The list of license categories is visible at:
+ * https://<FossID server>/help/en/web-application/license_categories.html.
+ */
 enum class LicenseCategory {
     COMMERCIAL,
     NON_COMMERCIAL,
     NON_LICENSE,
     PERMISSIVE,
     SOURCE_AVAILABLE,
+    SOURCE_AVAILABLE_NC,
     STRONG_COPYLEFT,
     UNCATEGORIZED,
     WEAK_COPYLEFT

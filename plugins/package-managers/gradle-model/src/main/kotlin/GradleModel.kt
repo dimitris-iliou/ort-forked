@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,7 +43,7 @@ interface OrtDependency {
     val version: String
     val classifier: String
     val extension: String
-    val variants: Set<String>
+    val variants: Map<String, Map<String, String>>
     val dependencies: List<OrtDependency>
     val error: String?
     val warning: String?

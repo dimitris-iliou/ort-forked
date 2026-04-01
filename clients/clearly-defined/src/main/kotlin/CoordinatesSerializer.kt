@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,6 +36,7 @@ internal object CoordinatesSerializer : KSerializer<Coordinates> by stringSerial
         require(decoder is JsonDecoder)
         return when (val element = decoder.decodeJsonElement()) {
             is JsonPrimitive -> Coordinates(element.content)
+
             is JsonObject -> Coordinates(
                 ComponentType.fromString(element.getValue("type").jsonPrimitive.content),
                 Provider.fromString(element.getValue("provider").jsonPrimitive.content),
@@ -43,6 +44,7 @@ internal object CoordinatesSerializer : KSerializer<Coordinates> by stringSerial
                 element.getValue("name").jsonPrimitive.content,
                 element["revision"]?.jsonPrimitive?.content
             )
+
             else -> throw IllegalArgumentException("Unsupported JSON element $element.")
         }
     }

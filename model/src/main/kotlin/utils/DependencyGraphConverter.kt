@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import org.ossreviewtoolkit.model.PackageLinkage
 import org.ossreviewtoolkit.model.PackageReference
 import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 
 /**
  * An object that supports the conversion of [AnalyzerResult]s to the dependency graph format.
@@ -45,42 +46,46 @@ import org.ossreviewtoolkit.model.config.Excludes
 object DependencyGraphConverter {
     /**
      * Convert the given [result], so that all dependencies are represented as dependency graphs. During conversion,
-     * apply the scope excludes defined in [excludes]. If the [result] already contains a dependency graph that covers
-     * all projects, it is returned as is.
+     * apply the scope includes/excludes defined in [includes] and [excludes]. If the [result] already contains a
+     * dependency graph that covers all projects, it is returned as is.
      */
-    fun convert(result: AnalyzerResult, excludes: Excludes = Excludes.EMPTY): AnalyzerResult {
+    fun convert(
+        result: AnalyzerResult,
+        excludes: Excludes = Excludes.EMPTY,
+        includes: Includes = Includes.EMPTY
+    ): AnalyzerResult {
         val projectsToConvert = result.projectsWithScopes()
         if (projectsToConvert.isEmpty()) return result
 
-        val graphs = buildDependencyGraphs(projectsToConvert, excludes)
+        val graphs = buildDependencyGraphs(projectsToConvert, excludes, includes)
         val allGraphs = result.dependencyGraphs + graphs
 
-        val filteredPackages = if (excludes.scopes.isEmpty()) {
-            result.packages
-        } else {
-            filterExcludedPackages(allGraphs.values, result.packages)
-        }
+        val filteredPackages = filterExcludedPackages(allGraphs.values, result.packages, excludes, includes)
 
         return result.copy(
             dependencyGraphs = allGraphs,
-            projects = result.projects.mapTo(mutableSetOf()) { it.convertToScopeNames(excludes) },
+            projects = result.projects.mapTo(mutableSetOf()) { it.convertToScopeNames(excludes, includes) },
             packages = filteredPackages
         )
     }
 
     /**
-     * Create and populate [DependencyGraphBuilder]s for the given [projects] taking [excludes] into account. The
-     * resulting map contains one fully initialized graph builder for each package manager involved which can be
-     * used to obtain the [DependencyGraph] and all packages.
+     * Create and populate [DependencyGraphBuilder]s for the given [projects] taking [includes] and [excludes] into
+     * account. The resulting map contains one fully initialized graph builder for each package manager involved which
+     * can be used to obtain the [DependencyGraph] and all packages.
      */
-    private fun buildDependencyGraphs(projects: Set<Project>, excludes: Excludes): Map<String, DependencyGraph> {
+    private fun buildDependencyGraphs(
+        projects: Set<Project>,
+        excludes: Excludes,
+        includes: Includes
+    ): Map<String, DependencyGraph> {
         val graphs = mutableMapOf<String, DependencyGraph>()
 
         projects.groupBy { it.id.type }.forEach { (type, projectsForType) ->
             val builder = DependencyGraphBuilder(ScopesDependencyHandler)
 
             projectsForType.forEach { project ->
-                project.scopes.filterNot { excludes.isScopeExcluded(it.name) }.forEach { scope ->
+                project.scopes.filter { isScopeIncluded(it.name, excludes, includes) }.forEach { scope ->
                     val scopeName = DependencyGraph.qualifyScope(project.id, scope.name)
                     scope.dependencies.forEach { dependency ->
                         builder.addDependency(scopeName, dependency)
@@ -96,12 +101,19 @@ object DependencyGraphConverter {
 
     /**
      * Filter out all [packages] that are no longer referenced by one of the given [dependency graphs][graphs]. These
-     * packages have been subject of scope excludes.
+     * packages have been subject of scope excludes or not included by scope includes.
+     * If no scope [includes] and no scope [excludes] are defined, the original set of [packages] is returned as is.
      */
     private fun filterExcludedPackages(
         graphs: Collection<DependencyGraph>,
-        packages: Collection<Package>
+        packages: Set<Package>,
+        excludes: Excludes,
+        includes: Includes
     ): Set<Package> {
+        if (includes.scopes.isEmpty() && excludes.scopes.isEmpty()) {
+            return packages
+        }
+
         val includedPackages = graphs.flatMapTo(mutableSetOf()) { it.packages }
         return packages.filterTo(mutableSetOf()) { it.id in includedPackages }
     }
@@ -115,12 +127,14 @@ object DependencyGraphConverter {
 
     /**
      * Convert the dependency representation used by this [Project] to the dependency graph format, i.e. a set of
-     * scope names. Use the given [excludes] to filter out excluded scopes. Return the same project if this format is
-     * already in use.
+     * scope names. Use the given [excludes] and [includes] to filter out excluded scopes. Return the same project if
+     * this format is already in use.
      */
-    private fun Project.convertToScopeNames(excludes: Excludes): Project =
+    private fun Project.convertToScopeNames(excludes: Excludes, includes: Includes): Project =
         takeIf { scopeNames != null } ?: copy(
-            scopeNames = scopes.filterNot { excludes.isScopeExcluded(it.name) }.mapTo(mutableSetOf()) { it.name },
+            scopeNames = scopes.filter {
+                isScopeIncluded(it.name, excludes, includes)
+            }.mapTo(mutableSetOf()) { it.name },
             scopeDependencies = null
         )
 
@@ -139,9 +153,9 @@ object DependencyGraphConverter {
 
         override fun createPackage(dependency: PackageReference, issues: MutableCollection<Issue>): Package? = null
 
-        override fun issuesForDependency(dependency: PackageReference): List<Issue> = dependency.issues
+        override fun issuesFor(dependency: PackageReference): List<Issue> = dependency.issues
     }
 }
 
-fun AnalyzerResult.convertToDependencyGraph(excludes: Excludes = Excludes.EMPTY) =
-    DependencyGraphConverter.convert(this, excludes)
+fun AnalyzerResult.convertToDependencyGraph(excludes: Excludes = Excludes.EMPTY, includes: Includes = Includes.EMPTY) =
+    DependencyGraphConverter.convert(this, excludes, includes)

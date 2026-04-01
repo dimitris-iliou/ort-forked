@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 package org.ossreviewtoolkit.plugins.packagemanagers.node
 
 import java.io.File
+import java.io.IOException
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -39,6 +40,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.serializer
 
+import org.ossreviewtoolkit.analyzer.guessNameFromEmail
 import org.ossreviewtoolkit.analyzer.parseAuthorString
 import org.ossreviewtoolkit.plugins.packagemanagers.node.PackageJson.Author
 import org.ossreviewtoolkit.plugins.packagemanagers.node.PackageJson.Repository
@@ -49,9 +51,32 @@ internal fun parsePackageJson(file: File): PackageJson = parsePackageJson(file.r
 
 internal fun parsePackageJson(json: String): PackageJson = parsePackageJson(JSON.parseToJsonElement(json))
 
-internal fun parsePackageJsons(jsons: String): List<PackageJson> =
+internal fun parsePackageJsons(jsons: String): List<Result<PackageJson>> =
     jsons.byteInputStream().use { input ->
-        JSON.decodeToSequence<JsonElement>(input).mapTo(mutableListOf()) { parsePackageJson(it) }
+        JSON.decodeToSequence<JsonElement>(input).mapTo(mutableListOf()) { element ->
+            runCatching {
+                parsePackageJson(element)
+            }.recoverCatching {
+                if (element !is JsonObject) throw it
+
+                // Try to enrich the exception with more package details that are still available.
+                val name = (element["name"] as? JsonPrimitive)?.content
+                val version = (element["version"] as? JsonPrimitive)?.content
+                val homepage = (element["homepage"] as? JsonPrimitive)?.content
+                val gitHead = (element["gitHead"] as? JsonPrimitive)?.content
+
+                val message = buildString {
+                    append("Error parsing package JSON metadata for package")
+                    if (name != null) append(" named '$name'")
+                    if (version != null) append(" in version $version")
+                    if (homepage != null) append(" hosted at $homepage")
+                    if (homepage != null) append(" in revision $gitHead")
+                    append(".")
+                }
+
+                throw IOException(message, it)
+            }
+        }
     }
 
 internal fun parsePackageJson(element: JsonElement): PackageJson {
@@ -152,20 +177,30 @@ data class PackageJson(
 private object AuthorListSerializer : JsonTransformingSerializer<List<Author>>(serializer<List<Author>>()) {
     override fun transformDeserialize(element: JsonElement): JsonElement =
         when (element) {
-            is JsonObject -> JsonArray(listOf(element))
-            is JsonPrimitive -> JsonArray(element.toAuthorObject())
+            is JsonObject, is JsonPrimitive -> JsonArray(element.toAuthorObject())
             is JsonArray -> JsonArray(element.flatMap { it.toAuthorObject() })
         }
 
     private fun JsonElement.toAuthorObject(): List<JsonElement> =
         when (this) {
-            is JsonObject -> listOf(this)
+            is JsonObject -> when {
+                get("name") == null -> {
+                    val name = get("email")?.let { guessNameFromEmail(it.jsonPrimitive.content) }
+                    val nameEntry = "name" to JsonPrimitive(name)
+                    listOf(JsonObject(this + nameEntry))
+                }
 
-            is JsonPrimitive -> {
-                parseAuthorString(contentOrNull)
-                    .filter { it.name != null }
-                    .map { Author(checkNotNull(it.name), it.email, it.homepage) }
-                    .map { JSON.encodeToJsonElement(it) }
+                else -> listOf(this)
+            }
+
+            is JsonPrimitive -> parseAuthorString(contentOrNull).mapNotNull { info ->
+                when {
+                    info.name != null -> Author(checkNotNull(info.name), info.email, info.homepage)
+                    info.email == null -> null
+                    else -> Author(guessNameFromEmail(checkNotNull(info.email)), info.email, info.homepage)
+                }
+            }.map {
+                JSON.encodeToJsonElement(it)
             }
 
             else -> throw SerializationException("Unexpected JSON element.")

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2020 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import com.fasterxml.jackson.databind.deser.std.StdDeserializer
  * This class deserializes a String containing 0/1 to boolean.
  * Null string leads to null Boolean.
  */
-class IntBooleanDeserializer : StdDeserializer<Boolean>(Boolean::class.java) {
+internal class IntBooleanDeserializer : StdDeserializer<Boolean>(Boolean::class.java) {
     override fun deserialize(p: JsonParser, ctxt: DeserializationContext): Boolean =
         when (val text = p.text) {
             "0" -> false

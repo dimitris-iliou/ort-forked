@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2025 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -115,15 +115,73 @@ internal class TargetHandler(
      * Maven dependencies. There are also options to change the default resolution mechanism for such dependencies.
      * If this is done, Tycho sometimes creates alternative identifiers for the dependencies. This function attempts
      * to find the original Maven coordinates for affected artifacts. They are needed to retrieve the correct metadata.
-     * Result is *null* if no matching Maven dependency is found.
+     * There are cases where no unique mapping can be found, especially if Tycho automatically wraps a Maven artifact to
+     * an OSGi bundle. In such cases, there may be a number of potential candidates for the original Maven artifact
+     * which are returned as a [List]. The caller should then try all of these candidates to find the correct one. If
+     * no mapping can be found, result is an empty [List].
      */
-    fun mapToMavenDependency(tychoArtifact: Artifact): Artifact? =
-        mavenDependencies[tychoArtifact.artifactId]?.also { dep ->
+    fun mapToMavenDependency(tychoArtifact: Artifact): List<Artifact> {
+        // Strip the "wrapped." prefix that might have been added by Tycho's automatic bundle wrapping mechanism
+        // (missingManifest="generate") to find the original Maven artifact.
+        val unwrappedArtifactId = tychoArtifact.artifactId.removePrefix("wrapped.")
+
+        return mavenDependencies[unwrappedArtifactId]?.let { dep ->
             logger.info {
                 "Mapping Tycho artifact '${tychoArtifact.groupId}:${tychoArtifact.artifactId}' to Maven " +
                     "dependency '${dep.groupId}:${dep.artifactId}'."
             }
+
+            listOf(dep)
+        } ?: if (unwrappedArtifactId != tychoArtifact.artifactId) {
+            logger.info {
+                "Handling a wrapped Tycho artifact '${tychoArtifact.artifactId}' by enumerating all candidates."
+            }
+
+            createCandidatesForWrappedArtifact(tychoArtifact, unwrappedArtifactId)
+        } else {
+            emptyList()
         }
+    }
+
+    /**
+     * Generate potential candidates for the original Maven artifact for the given [tychoArtifact] which has been
+     * wrapped by Tycho's automatic bundle wrapping mechanism (missingManifest="generate"). For such wrapped artifacts,
+     * Tycho generates an artifact ID by concatenating the group ID and artifact ID of the original Maven dependency
+     * using a dot as separator and adding a "wrapped." prefix. This transformation cannot be reversed in a unique way
+     * if the original Maven artifactId contains dots. Therefore, this function generates a list of all combinations
+     * of group and artifact IDs resulting in the given [unwrappedArtifactId].
+     */
+    private fun createCandidatesForWrappedArtifact(
+        tychoArtifact: Artifact,
+        unwrappedArtifactId: String
+    ): List<Artifact> {
+        val candidates = mutableListOf<Artifact>()
+
+        tailrec fun generateCandidates(groupId: String, artifactId: String) {
+            val newGroupId = groupId.substringBeforeLast('.')
+            if (newGroupId != groupId) {
+                val newArtifactComponent = groupId.substringAfterLast('.')
+                val newArtifactId = if (artifactId.isEmpty()) {
+                    newArtifactComponent
+                } else {
+                    "$newArtifactComponent.$artifactId"
+                }
+
+                candidates += DefaultArtifact(
+                    newGroupId,
+                    newArtifactId,
+                    tychoArtifact.classifier,
+                    "jar", // Always set to "jar", the Tycho artifact may have "pom" instead.
+                    tychoArtifact.version
+                )
+
+                generateCandidates(newGroupId, newArtifactId)
+            }
+        }
+
+        generateCandidates(unwrappedArtifactId, "")
+        return candidates
+    }
 }
 
 /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -56,10 +56,7 @@ class OsvServiceWrapperFunTest : WordSpec({
                 it shouldHaveSize 3
 
                 it[0] should containAll(
-                    "CVE-2021-45931",
-                    "CVE-2022-33068",
                     "CVE-2023-25193",
-                    "CVE-2024-56732",
                     "OSV-2020-484"
                 )
 

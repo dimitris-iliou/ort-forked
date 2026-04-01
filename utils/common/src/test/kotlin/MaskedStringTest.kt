@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -62,7 +62,7 @@ class MaskedStringTest : StringSpec({
         masked1 shouldBe masked2
         masked1 shouldNotBe masked3
         masked1 shouldNotBe masked4
-        masked1 shouldNotBe Object()
+        masked1 shouldNotBe Any()
     }
 
     "unmaskedStrings() returns unmasked strings" {

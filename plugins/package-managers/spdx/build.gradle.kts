@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2025 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,20 +27,13 @@ dependencies {
     api(projects.model)
 
     implementation(projects.downloader)
-    implementation(projects.utils.commonUtils)
     implementation(projects.utils.ortUtils)
-    implementation(projects.utils.spdxDocument)
     implementation(projects.utils.spdxUtils)
 
-    implementation(jacksonLibs.jacksonCore)
-    implementation(jacksonLibs.jacksonDatabind)
-    implementation(libs.okhttp)
+    implementation(libs.spdx.library)
+    implementation(libs.spdx.store.v3jsonld)
 
     ksp(projects.analyzer)
 
-    funTestImplementation(projects.plugins.packageManagers.conanPackageManager)
     funTestImplementation(testFixtures(projects.analyzer))
-
-    testImplementation(libs.mockk)
-    testImplementation(libs.wiremock)
 }

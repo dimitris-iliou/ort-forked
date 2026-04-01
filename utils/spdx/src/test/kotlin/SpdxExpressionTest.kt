@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -515,6 +515,24 @@ class SpdxExpressionTest : WordSpec({
             "(h OR g) AND (f OR e) OR (c OR d) AND (a OR b)".toSpdx().sorted() should
                 beString("((a OR b) AND (c OR d)) OR ((e OR f) AND (g OR h))")
         }
+
+        "correctly sort sub-expressions with the same prefixes" {
+            "(a OR d) AND (a OR b)".toSpdx().sorted() should beString("(a OR b) AND (a OR d)")
+            "(a AND b AND d) OR (a AND b AND c)".toSpdx().sorted() should beString("(a AND b AND c) OR (a AND b AND d)")
+        }
+
+        "correctly sort nested compound expressions" {
+            SpdxCompoundExpression(
+                SpdxOperator.AND,
+                SpdxCompoundExpression(SpdxOperator.AND, "GPL-3.0-or-later".toSpdx(), "bzip2-1.0.6".toSpdx()),
+                SpdxCompoundExpression(
+                    SpdxOperator.AND,
+                    SpdxCompoundExpression(SpdxOperator.AND, "MS-PL".toSpdx(), "Apache-2.0".toSpdx()),
+                    SpdxCompoundExpression(SpdxOperator.AND, "Zlib".toSpdx(), "BSD-3-Clause".toSpdx())
+                )
+            ).sorted() should
+                beString("Apache-2.0 AND BSD-3-Clause AND bzip2-1.0.6 AND GPL-3.0-or-later AND MS-PL AND Zlib")
+        }
     }
 
     "equals()" should {
@@ -538,6 +556,11 @@ class SpdxExpressionTest : WordSpec({
             "a".toSpdx() shouldNotBe "a OR b".toSpdx()
             "a".toSpdx() shouldNotBe "a AND b".toSpdx()
             "a".toSpdx() shouldNotBe "a+".toSpdx()
+        }
+
+        "compare expressions case-insensitively" {
+            "CDDL-1.1 OR GPL-2.0-only WITH Classpath-Exception-2.0".toSpdx() shouldBe
+                "Cddl-1.1 OR Gpl-2.0-only WITH Classpath-exception-2.0".toSpdx()
         }
     }
 

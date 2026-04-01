@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,9 +26,10 @@ import java.util.SortedSet
 
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.Package
-import org.ossreviewtoolkit.model.PackageCurationData
+import org.ossreviewtoolkit.model.PackageCuration
 import org.ossreviewtoolkit.model.RemoteArtifact
 import org.ossreviewtoolkit.model.VcsInfo
+import org.ossreviewtoolkit.model.config.PackageConfiguration
 import org.ossreviewtoolkit.model.config.PathExclude
 import org.ossreviewtoolkit.model.config.ScopeExclude
 import org.ossreviewtoolkit.utils.spdx.SpdxExpression
@@ -64,7 +65,11 @@ data class EvaluatedPackage(
     val vcs: VcsInfo,
     val vcsProcessed: VcsInfo = vcs.normalize(),
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
-    val curations: List<PackageCurationData>,
+    val labels: Map<String, String> = emptyMap(),
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    val curations: List<PackageCuration>,
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    val packageConfigurations: List<PackageConfiguration>,
     @JsonIdentityReference(alwaysAsId = true)
     val paths: MutableList<EvaluatedPackagePath>,
     @JsonInclude(JsonInclude.Include.NON_EMPTY)

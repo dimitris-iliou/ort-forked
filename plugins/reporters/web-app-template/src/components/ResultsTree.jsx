@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,13 +31,18 @@ import {
     Drawer,
     Input,
     message,
+    Space,
+    Tag,
     Tree
 } from 'antd';
 
+import PackageConfigurations from './PackageConfigurations';
+import PackageCurations from './PackageCurations';
 import PackageDetails from './PackageDetails';
 import PackageFindingsTable from './PackageFindingsTable';
 import PackageLicenses from './PackageLicenses';
 import PackagePaths from './PackagePaths';
+import PackageScanResultsDetails from './PackageScanResultsDetails';
 import PathExcludesTable from './PathExcludesTable';
 import ScopeExcludesTable from './ScopeExcludesTable';
 
@@ -175,7 +180,7 @@ const ResultsTree = ({ webAppOrtResult }) => {
                             <Drawer
                                 placement="right"
                                 closable={true}
-                                width="65%"
+                                size={Math.max(1000, window.innerWidth * 0.70)}
                                 open={drawerOpen}
                                 title={
                                     (() => {
@@ -263,6 +268,64 @@ const ResultsTree = ({ webAppOrtResult }) => {
                                                     <PackageFindingsTable
                                                         webAppPackage={selectedWebAppPackage}
                                                     />
+                                                )
+                                            });
+                                        }
+
+                                        if (selectedWebAppPackage.hasFindings()) {
+                                            collapseItems.push({
+                                                label: 'Scan Results Details',
+                                                key: 'package-scan-results-details',
+                                                children: (
+                                                    <PackageScanResultsDetails
+                                                        webAppPackage={selectedWebAppPackage}
+                                                    />
+                                                )
+                                            });
+                                        }
+
+                                        if (selectedWebAppPackage.hasCurations()) {
+                                            collapseItems.push({
+                                                label: 'Package Curations',
+                                                key: 'package-curations',
+                                                children: (
+                                                    <PackageCurations
+                                                        webAppPackage={selectedWebAppPackage}
+                                                    />
+                                                )
+                                            });
+                                        }
+
+                                        if (selectedWebAppPackage.hasPackageConfigurations()) {
+                                            collapseItems.push({
+                                                label: 'Package Configurations',
+                                                key: 'package-configurations',
+                                                children: (
+                                                    <PackageConfigurations
+                                                        webAppPackage={selectedWebAppPackage}
+                                                    />
+                                                )
+                                            });
+                                        }
+
+                                        if (selectedWebAppPackage.hasLabels()) {
+                                            collapseItems.push({
+                                                label: 'Package Labels',
+                                                key: 'package-labels',
+                                                children: (
+                                                    <Space
+                                                        className="ort-package-labels"
+                                                        size="small"
+                                                    >
+                                                        {[...selectedWebAppPackage.labels].map(([key, value]) => (
+                                                            <Tag
+                                                                key={`package-label-${key}`}
+                                                                variant="outlined"
+                                                            >
+                                                                {`${key}=${value}`}
+                                                            </Tag>
+                                                        ))}
+                                                    </Space>
                                                 )
                                             });
                                         }

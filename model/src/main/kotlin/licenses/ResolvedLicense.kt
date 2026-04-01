@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +19,11 @@
 
 package org.ossreviewtoolkit.model.licenses
 
+import java.util.EnumSet
+
 import org.ossreviewtoolkit.model.LicenseSource
 import org.ossreviewtoolkit.model.config.PathExclude
+import org.ossreviewtoolkit.utils.common.enumSetOf
 import org.ossreviewtoolkit.utils.ort.CopyrightStatementsProcessor
 import org.ossreviewtoolkit.utils.ort.DeclaredLicenseProcessor
 import org.ossreviewtoolkit.utils.spdx.SpdxSingleLicenseExpression
@@ -54,7 +57,7 @@ data class ResolvedLicense(
     /**
      * The sources where this license was found.
      */
-    val sources: Set<LicenseSource> = originalExpressions.mapTo(mutableSetOf()) { it.source }
+    val sources: EnumSet<LicenseSource> = originalExpressions.mapTo(enumSetOf()) { it.source }
 
     /**
      * True, if this license was [detected][LicenseSource.DETECTED] and all [locations] have matching path excludes.

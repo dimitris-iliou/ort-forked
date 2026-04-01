@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,8 @@ package org.ossreviewtoolkit.model
 
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.WordSpec
-import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.beEmpty
+import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 
 import io.mockk.mockk
@@ -60,7 +61,7 @@ class ProjectTest : WordSpec({
                 homepageUrl = "https//www.test-project.org"
             )
 
-            project.scopes.shouldBeEmpty()
+            project.scopes should beEmpty()
         }
     }
 })

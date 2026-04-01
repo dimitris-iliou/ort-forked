@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,8 +45,10 @@ import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.orEmpty
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
+import org.ossreviewtoolkit.plugins.api.OrtPluginOption
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.packagemanagers.go.utils.Graph
 import org.ossreviewtoolkit.utils.common.CommandLineTool
@@ -58,17 +60,10 @@ import org.ossreviewtoolkit.utils.ort.createOrtTempDir
 import org.semver4j.range.RangeList
 import org.semver4j.range.RangeListFactory
 
+private const val PROJECT_TYPE = "GoMod"
+private const val PACKAGE_TYPE = "Go"
+
 internal object GoCommand : CommandLineTool {
-    private val goPath by lazy { createOrtTempDir() }
-
-    private val goEnvironment by lazy {
-        mapOf(
-            "GOPATH" to goPath.absolutePath,
-            "GOPROXY" to "direct",
-            "GOWORK" to "off"
-        )
-    }
-
     override fun command(workingDir: File?) = "go"
 
     override fun getVersionArguments() = "version"
@@ -76,10 +71,19 @@ internal object GoCommand : CommandLineTool {
     override fun transformVersion(output: String) = output.removePrefix("go version go").substringBefore(' ')
 
     override fun getVersionRequirement(): RangeList = RangeListFactory.create(">=1.21.1")
-
-    override fun run(vararg args: CharSequence, workingDir: File?, environment: Map<String, String>) =
-        super.run(args = args, workingDir, environment + goEnvironment)
 }
+
+data class GoModConfig(
+    /**
+     * A flag to indicate whether to disable any proxy when retrieving module information by setting the `GOPROXY`
+     * environment variable to "direct". As many Go proxies do not seem to support the "Origin" property, this helps to
+     * ensure getting correct VCS information by going directly to the repositories. However, some projects do not
+     * analyze correctly if e.g. tags were removed from repositories. In such cases the proxy should not be disabled to
+     * still get cached metadata.
+     */
+    @OrtPluginOption(defaultValue = "true", aliases = ["disableGoProxy"])
+    val forceDirectGoProxy: Boolean
+)
 
 /**
  * The [Go Modules](https://go.dev/ref/mod) package manager for Go. Also see the [usage and troubleshooting guide]
@@ -93,7 +97,23 @@ internal object GoCommand : CommandLineTool {
     description = "The Go Modules package manager for Go.",
     factory = PackageManagerFactory::class
 )
-class GoMod(override val descriptor: PluginDescriptor = GoModFactory.descriptor) : PackageManager("GoMod") {
+class GoMod(
+    override val descriptor: PluginDescriptor = GoModFactory.descriptor,
+    config: GoModConfig
+) : PackageManager(PROJECT_TYPE) {
+    private val goEnvironment = buildMap {
+        put("GOWORK", "off")
+
+        if (config.forceDirectGoProxy) {
+            val cleanGoPath = createOrtTempDir()
+            put("GOPATH", cleanGoPath.absolutePath)
+            put("GOPROXY", "direct")
+        }
+    }
+
+    private fun runGo(projectDir: File, vararg args: CharSequence) =
+        GoCommand.run(*args, workingDir = projectDir, environment = goEnvironment).requireSuccess()
+
     override val globsForDefinitionFiles = listOf("go.mod")
 
     override fun mapDefinitionFiles(
@@ -113,6 +133,7 @@ class GoMod(override val descriptor: PluginDescriptor = GoModFactory.descriptor)
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {
@@ -165,6 +186,7 @@ class GoMod(override val descriptor: PluginDescriptor = GoModFactory.descriptor)
      */
     private fun getModuleGraph(projectDir: File, moduleInfoForModuleName: Map<String, ModuleInfo>): Graph<GoModule> {
         fun GoModule.hasModuleInfo() = name in moduleInfoForModuleName
+
         fun moduleInfo(moduleName: String): ModuleInfo = moduleInfoForModuleName.getValue(moduleName)
 
         fun parseModuleEntry(entry: String): GoModule =
@@ -179,7 +201,7 @@ class GoMod(override val descriptor: PluginDescriptor = GoModFactory.descriptor)
 
         var graph = Graph<GoModule>().apply { addNode(mainModule) }
 
-        val edges = GoCommand.run("mod", "graph", workingDir = projectDir).requireSuccess()
+        val edges = runGo(projectDir, "mod", "graph")
 
         edges.stdout.lines().forEach { line ->
             if (line.isBlank()) return@forEach
@@ -235,8 +257,7 @@ class GoMod(override val descriptor: PluginDescriptor = GoModFactory.descriptor)
             }
         }
 
-        val list = GoCommand.run("list", "-m", "-json", "-buildvcs=false", *packages, workingDir = projectDir)
-            .requireSuccess()
+        val list = runGo(projectDir, "list", "-m", "-json", "-buildvcs=false", *packages)
 
         return list.stdout.byteInputStream().use { JSON.decodeToSequence<ModuleInfo>(it) }
     }
@@ -246,8 +267,7 @@ class GoMod(override val descriptor: PluginDescriptor = GoModFactory.descriptor)
      */
     private fun getTransitiveMainModuleDependencies(projectDir: File): Set<String> {
         // See https://pkg.go.dev/text/template for the format syntax.
-        val list = GoCommand.run("list", "-deps", "-json=Module", "-buildvcs=false", "./...", workingDir = projectDir)
-            .requireSuccess()
+        val list = runGo(projectDir, "list", "-deps", "-json=Module", "-buildvcs=false", "./...")
 
         val depInfos = list.stdout.byteInputStream().use { JSON.decodeToSequence<DepInfo>(it) }
 
@@ -268,8 +288,7 @@ class GoMod(override val descriptor: PluginDescriptor = GoModFactory.descriptor)
             val moduleNames = ids.map { it.name }.toTypedArray()
             // Use the ´-m´ switch to use module names because the graph also uses module names, not package names.
             // This fixes the accidental dropping of some modules.
-            val why = GoCommand.run("mod", "why", "-m", "-vendor", *moduleNames, workingDir = projectDir)
-                .requireSuccess()
+            val why = runGo(projectDir, "mod", "why", "-m", "-vendor", *moduleNames)
 
             vendorModuleNames += parseWhyOutput(why.stdout)
         }
@@ -300,7 +319,7 @@ class GoMod(override val descriptor: PluginDescriptor = GoModFactory.descriptor)
         } else {
             // If the version is not blank, it is a package in ORT speak.
             Identifier(
-                type = "Go",
+                type = PACKAGE_TYPE,
                 namespace = "",
                 name = path,
                 version = normalizeModuleVersion(version)
@@ -418,12 +437,18 @@ private data class GoModule(
 }
 
 /**
- * The format of `.info` files the Go command line tools cache under '$GOPATH/pkg/mod'.
+ * The format of `.info` files the Go command line tools cache under '$GOPATH/pkg/mod/cache/download'.
+ *
+ * See https://github.com/golang/go/blob/go1.25.4/src/cmd/go/internal/modfetch/repo.go#L78-L89.
  */
 @Serializable
 private data class ModuleInfoFile(
+    @SerialName("Version")
+    val version: String,
+    @SerialName("Time")
+    val time: String,
     @SerialName("Origin")
-    val origin: Origin
+    val origin: Origin? = null
 ) {
     @Serializable
     data class Origin(
@@ -450,13 +475,14 @@ private fun ModuleInfo.toVcsInfo(): VcsInfo? {
     val escapedVersion = escapeModuleVersion(version)
     val infoFile = goMod?.let { File(it).resolveSibling("$escapedVersion.info") } ?: return null
     val info = infoFile.inputStream().use { JSON.decodeFromStream<ModuleInfoFile>(it) }
-    val type = info.origin.vcs?.let { VcsType.forName(it) }.takeIf { it == VcsType.GIT } ?: return null
+    val origin = info.origin ?: return null
+    val type = origin.vcs?.let { VcsType.forName(it) }.takeIf { it == VcsType.GIT } ?: return null
 
     return VcsInfo(
         type = type,
-        url = checkNotNull(info.origin.url),
-        revision = checkNotNull(info.origin.hash),
-        path = info.origin.subdir.orEmpty()
+        url = checkNotNull(origin.url),
+        revision = checkNotNull(origin.hash),
+        path = origin.subdir.orEmpty()
     )
 }
 

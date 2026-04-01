@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,13 +24,22 @@ package org.ossreviewtoolkit.utils.spdx.parser
  */
 sealed class Token {
     data class OPEN(val position: Int) : Token()
+
     data class CLOSE(val position: Int) : Token()
+
     data class PLUS(val position: Int) : Token()
+
     data class COLON(val position: Int) : Token()
+
     data class AND(val position: Int) : Token()
+
     data class OR(val position: Int) : Token()
+
     data class WITH(val position: Int) : Token()
+
     data class IDENTIFIER(val start: Int, val end: Int, val value: String) : Token()
+
     data class LICENSEREF(val start: Int, val end: Int, val value: String) : Token()
+
     data class DOCUMENTREF(val start: Int, val end: Int, val value: String) : Token()
 }

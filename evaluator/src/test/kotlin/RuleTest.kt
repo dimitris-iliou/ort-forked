@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 package org.ossreviewtoolkit.evaluator
 
 import io.kotest.core.spec.style.WordSpec
+import io.kotest.matchers.collections.containExactlyInAnyOrder
 import io.kotest.matchers.collections.haveSize
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
@@ -27,19 +28,21 @@ import io.kotest.matchers.shouldBe
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.LicenseSource
 import org.ossreviewtoolkit.model.Severity
+import org.ossreviewtoolkit.utils.common.enumSetOf
 import org.ossreviewtoolkit.utils.spdx.SpdxLicenseIdExpression
 
 class RuleTest : WordSpec() {
     private val ruleSet = ruleSet(ortResult)
     private val id = Identifier("type:namespace:name:version")
     private val license = SpdxLicenseIdExpression("license")
-    private val licenseSource = LicenseSource.DECLARED
+    private val licenseSources = enumSetOf(LicenseSource.DECLARED)
     private val message = "violation message"
     private val howToFix = "how to fix"
 
     private fun createRule() =
         object : Rule(ruleSet, "test") {
             override val description = "test"
+
             override fun issueSource() = name
         }
 
@@ -48,14 +51,14 @@ class RuleTest : WordSpec() {
             "add an issue with the correct severity" {
                 val rule = createRule()
 
-                rule.hint(id, license, licenseSource, message, howToFix)
+                rule.hint(id, license, licenseSources, message, howToFix)
 
                 rule.violations should haveSize(1)
                 rule.violations.first().let { violation ->
                     violation.rule shouldBe rule.name
                     violation.pkg shouldBe id
                     violation.license shouldBe license
-                    violation.licenseSource shouldBe licenseSource
+                    violation.licenseSources should containExactlyInAnyOrder(licenseSources)
                     violation.severity shouldBe Severity.HINT
                     violation.message shouldBe message
                     violation.howToFix shouldBe howToFix
@@ -67,14 +70,14 @@ class RuleTest : WordSpec() {
             "add an issue with the correct severity" {
                 val rule = createRule()
 
-                rule.warning(id, license, licenseSource, message, howToFix)
+                rule.warning(id, license, licenseSources, message, howToFix)
 
                 rule.violations should haveSize(1)
                 rule.violations.first().let { violation ->
                     violation.rule shouldBe rule.name
                     violation.pkg shouldBe id
                     violation.license shouldBe license
-                    violation.licenseSource shouldBe licenseSource
+                    violation.licenseSources should containExactlyInAnyOrder(licenseSources)
                     violation.severity shouldBe Severity.WARNING
                     violation.message shouldBe message
                     violation.howToFix shouldBe howToFix
@@ -86,14 +89,14 @@ class RuleTest : WordSpec() {
             "add an issue with the correct severity" {
                 val rule = createRule()
 
-                rule.error(id, license, licenseSource, message, howToFix)
+                rule.error(id, license, licenseSources, message, howToFix)
 
                 rule.violations should haveSize(1)
                 rule.violations.first().let { violation ->
                     violation.rule shouldBe rule.name
                     violation.pkg shouldBe id
                     violation.license shouldBe license
-                    violation.licenseSource shouldBe licenseSource
+                    violation.licenseSources should containExactlyInAnyOrder(licenseSources)
                     violation.severity shouldBe Severity.ERROR
                     violation.message shouldBe message
                     violation.howToFix shouldBe howToFix
@@ -106,6 +109,7 @@ class RuleTest : WordSpec() {
                 fun matcher() =
                     object : RuleMatcher {
                         override val description = "test"
+
                         override fun matches() = true
                     }
 

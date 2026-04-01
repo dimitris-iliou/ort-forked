@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -145,11 +145,13 @@ class DefaultPackageProvenanceResolver(
             }
         }
 
-        // Try a cheap HEAD request to probe for the artifact first, and only fall back to a GET request on failure.
-        val responseCode = requestSourceArtifact(pkg, "HEAD").takeUnless { it == HttpURLConnection.HTTP_BAD_METHOD }
+        // Try a cheap HEAD request to probe for the artifact first, and fall back to a GET request only if necessary,
+        // like for servers that do not properly implement HEAD requests for redirected URLs.
+        val responseCode = requestSourceArtifact(pkg, "HEAD")
+            .takeUnless { it == HttpURLConnection.HTTP_BAD_METHOD || it == HttpURLConnection.HTTP_NOT_FOUND }
             ?: requestSourceArtifact(pkg, "GET")
 
-        if (responseCode == HttpURLConnection.HTTP_OK) {
+        if (responseCode == HttpURLConnection.HTTP_OK || responseCode == HttpURLConnection.HTTP_MOVED_TEMP) {
             val artifactProvenance = ArtifactProvenance(pkg.sourceArtifact)
             storage.writeProvenance(pkg.id, pkg.sourceArtifact, ResolvedArtifactProvenance(artifactProvenance))
             return artifactProvenance

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,11 +24,13 @@ import io.kotest.core.spec.style.WordSpec
 import io.kotest.matchers.collections.beEmpty
 import io.kotest.matchers.collections.containExactly
 import io.kotest.matchers.collections.containExactlyInAnyOrder
-import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+
+import io.mockk.every
+import io.mockk.spyk
 
 import org.ossreviewtoolkit.model.DependencyGraph
 import org.ossreviewtoolkit.model.DependencyGraphEdge
@@ -195,20 +197,64 @@ class DependencyGraphBuilderTest : WordSpec({
             scopeDependencies(scopes, scope2) shouldBe setOf(depAcmeExclude)
         }
 
-        "deal with cycles in dependencies" {
-            val scope = "CyclicScope"
-            val depCyc1 = createDependency("org.cyclic", "cyclic", "77.7")
-            val depFoo = createDependency("org.foo", "foo", "1.2.0", dependencies = setOf(depCyc1))
-            val depCyc2 = createDependency("org.cyclic", "cyclic", "77.7", dependencies = setOf(depFoo))
+        "break cycles in dependencies" {
+            // A simple map of indexed nodes with their dependencies.
+            @Suppress("NoMultipleSpaces")
+            val dependencies = mapOf(
+                1 to listOf(2, 3),
+                2 to listOf(4, 5),
+                3 to listOf(1), // Cycle: 1 -> 3 -> 1
+                5 to listOf(6),
+                6 to listOf(2)  // Cycle: 1 -> 2 -> 5 -> 6 -> 2
+            )
+
+            val handler = object : DependencyHandler<Int> {
+                override fun identifierFor(dependency: Int) = Identifier.EMPTY.copy(name = dependency.toString())
+
+                override fun dependenciesFor(dependency: Int) = dependencies[dependency].orEmpty()
+
+                override fun linkageFor(dependency: Int) = PackageLinkage.DYNAMIC
+
+                override fun createPackage(dependency: Int, issues: MutableCollection<Issue>) = null
+            }
+
+            val graph = DependencyGraphBuilder(handler)
+                .addDependency("root", 1)
+                .build(checkReferences = false)
+
+            graph.nodes shouldHaveSize 6
+            graph.edges should containExactly(
+                DependencyGraphEdge(from = 2, to = 1),
+                DependencyGraphEdge(from = 3, to = 0),
+                DependencyGraphEdge(from = 3, to = 2),
+                DependencyGraphEdge(from = 5, to = 3),
+                DependencyGraphEdge(from = 5, to = 4)
+            )
+        }
+
+        "deal with cyclic dependency graphs" {
+            val scope = "CyclicGraph"
+            val depLang = createDependency("org.apache.commons", "commons-lang3", "3.20.0")
+            val depCyc = spyk(createDependency("org.cyclic", "cyclic", "77.7"))
+            val depIntermediate = createDependency(
+                "org.intermediate",
+                "intermediate",
+                "1.0.0",
+                dependencies = setOf(depLang, depCyc)
+            )
+            val depRoot = createDependency("org.foo", "foo", "1.2.0", dependencies = setOf(depIntermediate))
+
+            // This causes a cycle in the dependency graph:
+            every { depCyc.dependencies } returns setOf(depRoot)
 
             val graph = createGraphBuilder()
-                .addDependency(scope, depCyc2)
+                .addDependency(scope, depRoot)
                 .build()
             val scopes = graph.createScopes()
 
-            scopeDependencies(scopes, scope) should containExactly(depCyc2)
+            scopeDependencies(scopes, scope) should containExactly(depRoot)
 
-            graph.nodes shouldHaveSize 3
+            graph.nodes shouldHaveSize 4
         }
 
         "check for illegal references when building the graph" {
@@ -302,35 +348,25 @@ class DependencyGraphBuilderTest : WordSpec({
         }
     }
 
-    "breakCycles()" should {
-        "not break undirected cycles" {
-            val edges = listOf(
-                1 to 2,
-                2 to 3,
-                3 to 4,
-                1 to 4
-            ).map { DependencyGraphEdge(it.first, it.second) }
+    "DependencyHandler" should {
+        "handle cyclic dependency graphs when checking for equality" {
+            val depLang = createDependency("org.apache.commons", "commons-lang3", "3.20.0")
+            val depCyc = spyk(createDependency("org.cyclic", "cyclic", "77.7"))
+            val depIntermediate = createDependency(
+                "org.intermediate",
+                "intermediate",
+                "1.0.0",
+                dependencies = setOf(depLang, depCyc)
+            )
+            val depRoot = createDependency("org.foo", "foo", "1.2.0", dependencies = setOf(depIntermediate))
 
-            breakCycles(edges) shouldContainExactlyInAnyOrder edges
-        }
+            // This causes a cycle in the dependency graph:
+            every { depCyc.dependencies } returns setOf(depRoot)
 
-        "break a directed cycle with a single node" {
-            val edges = listOf(DependencyGraphEdge(1, 1))
-
-            breakCycles(edges) should beEmpty()
-        }
-
-        "break directed cycles involving multiple nodes" {
-            val edges = listOf(
-                1 to 2,
-                2 to 3,
-                3 to 4,
-                4 to 1
-            ).map { DependencyGraphEdge(it.first, it.second) }
-
-            val result = breakCycles(edges)
-
-            result.intersect(edges) shouldHaveSize 3
+            PackageRefDependencyHandler.areDependenciesEqual(
+                dependenciesA = listOf(depRoot),
+                dependenciesB = listOf(depRoot)
+            ) shouldBe true
         }
     }
 })
@@ -355,7 +391,7 @@ private object PackageRefDependencyHandler : DependencyHandler<PackageReference>
     override fun createPackage(dependency: PackageReference, issues: MutableCollection<Issue>): Package? =
         Package.EMPTY.copy(id = dependency.id).takeUnless { dependency.id.namespace == NO_PACKAGE_NAMESPACE }
 
-    override fun issuesForDependency(dependency: PackageReference): List<Issue> = dependency.issues
+    override fun issuesFor(dependency: PackageReference): List<Issue> = dependency.issues
 }
 
 /**

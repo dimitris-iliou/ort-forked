@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,9 +26,10 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.assertions.throwables.shouldThrowWithMessage
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.engine.spec.tempfile
-import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.beEmpty
 import io.kotest.matchers.file.shouldHaveFileSize
 import io.kotest.matchers.nulls.beNull
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 
@@ -96,13 +97,13 @@ class FileFormatTest : WordSpec({
         "be able to deserialize empty JSON arrays" {
             val file = tempfile(suffix = ".json").apply { writeText("[]") }
 
-            file.readValueOrNull<List<PackageCuration>>().shouldBeEmpty()
+            file.readValueOrNull<List<PackageCuration>>().shouldNotBeNull() should beEmpty()
         }
 
         "be able to deserialize empty YAML sequences" {
             val file = tempfile(suffix = ".yml").apply { writeText("[]") }
 
-            file.readValueOrNull<List<PackageCuration>>().shouldBeEmpty()
+            file.readValueOrNull<List<PackageCuration>>().shouldNotBeNull() should beEmpty()
         }
 
         "throw for invalid files" {

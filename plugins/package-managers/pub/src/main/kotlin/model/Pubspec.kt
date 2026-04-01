@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,9 +43,9 @@ import org.ossreviewtoolkit.plugins.packagemanagers.pub.model.Pubspec.HostedDepe
 import org.ossreviewtoolkit.plugins.packagemanagers.pub.model.Pubspec.PathDependency
 import org.ossreviewtoolkit.plugins.packagemanagers.pub.model.Pubspec.SdkDependency
 
-internal fun parsePubspec(pubspecFile: File): Pubspec = parsePubspec(pubspecFile.readText())
+internal fun parsePubspec(pubspec: File) = parsePubspec(pubspec.readText())
 
-internal fun parsePubspec(pubspecYaml: String): Pubspec = YAML.decodeFromString(pubspecYaml)
+internal fun parsePubspec(pubspec: String) = YAML.decodeFromString<Pubspec>(pubspec)
 
 /**
  * See https://dart.dev/tools/pub/pubspec.
@@ -107,13 +107,11 @@ internal data class Pubspec(
  */
 private object DependencyMapSerializer : KSerializer<Map<String, Dependency>> by serializer<Map<String, Dependency>>() {
     override fun deserialize(decoder: Decoder): Map<String, Dependency> {
-        val input = decoder.beginStructure(descriptor) as YamlInput
+        require(decoder is YamlInput) {
+            "Only YAML input is supported."
+        }
 
-        val result = input.node.yamlMap.entries.asSequence().associate { it.key.content to it.value.decodeDependency() }
-
-        input.endStructure(descriptor)
-
-        return result
+        return decoder.node.yamlMap.entries.asSequence().associate { it.key.content to it.value.decodeDependency() }
     }
 
     private fun YamlNode.decodeDependency(): Dependency {

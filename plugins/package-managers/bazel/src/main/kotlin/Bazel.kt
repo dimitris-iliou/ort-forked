@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -59,8 +59,10 @@ import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.collectDependencies
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.orEmpty
+import org.ossreviewtoolkit.model.orNone
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.OrtPluginOption
 import org.ossreviewtoolkit.plugins.api.PluginConfig
@@ -76,6 +78,9 @@ import org.ossreviewtoolkit.utils.ort.runBlocking
 
 import org.semver4j.range.RangeList
 import org.semver4j.range.RangeListFactory
+
+private const val PROJECT_TYPE = "Bazel"
+private const val PACKAGE_TYPE = "Bazel"
 
 private const val BAZEL_FALLBACK_VERSION = "7.0.1"
 private const val BAZEL_RC_FILE = ".bazelrc"
@@ -151,7 +156,7 @@ internal object BuildozerCommand : CommandLineTool {
 class Bazel(
     override val descriptor: PluginDescriptor = BazelFactory.descriptor,
     private val config: BazelConfig
-) : PackageManager("Bazel") {
+) : PackageManager(PROJECT_TYPE) {
     override val globsForDefinitionFiles = listOf("MODULE", "MODULE.bazel")
 
     /**
@@ -194,6 +199,7 @@ class Bazel(
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {
@@ -218,6 +224,7 @@ class Bazel(
                 val conanAnalyzerResults = resolveConanDependencies(
                     projectDir,
                     analysisRoot,
+                    includes,
                     excludes,
                     analyzerConfig,
                     labels
@@ -251,7 +258,7 @@ class Bazel(
                         type = projectType,
                         namespace = "",
                         name = moduleMetadata.module?.name ?: VersionControlSystem.getPathInfo(definitionFile).path,
-                        version = moduleMetadata.module?.version.orEmpty()
+                        version = moduleMetadata.module?.version?.ifEmpty { projectVcs.revision }.orEmpty()
                     ),
                     definitionFilePath = VersionControlSystem.getPathInfo(definitionFile).path,
                     declaredLicenses = emptySet(),
@@ -447,7 +454,7 @@ class Bazel(
                 binaryArtifact = RemoteArtifact.EMPTY,
                 sourceArtifact = RemoteArtifact(
                     url = archiveOverride.urls.first().toString(),
-                    hash = hash ?: Hash.NONE
+                    hash = hash.orNone()
                 ),
                 vcs = VcsInfo.EMPTY,
                 isModified = archiveOverride.patches?.isNotEmpty() == true
@@ -511,6 +518,8 @@ class Bazel(
                 .forEach { issues += createAndLogIssue(it) }
         }
 
+        val depDirectivesWithOverrides = depDirectives.toMutableMap()
+
         val mainModule = process.stdout.parseBazelModule()
         val (mainDeps, devDeps) = mainModule.dependencies.map { module ->
             val name = module.name ?: module.key.substringBefore("@", "")
@@ -519,12 +528,19 @@ class Bazel(
             val overriddenKey = "$name@$version"
             if (overriddenKey != module.key) {
                 logger.info { "Using overridden module key '$overriddenKey' instead of '${module.key}'." }
+
+                // If there is an override, the module key will change so it won't be possible to look up the dependency
+                // in `depDirectives` anymore. Therefore, a duplicated entry is added with the overridden key.
+                depDirectivesWithOverrides[module.key]?.also {
+                    depDirectivesWithOverrides += overriddenKey to it
+                }
+
                 module.copy(key = "$name@$version")
             } else {
                 module
             }
         }.partition {
-            val depDirective = depDirectives[it.key]
+            val depDirective = depDirectivesWithOverrides[it.key]
 
             if (depDirective == null) {
                 logger.warn { "No dependency directive found for '${it.key}'. Assuming it is a main dependency." }
@@ -552,7 +568,7 @@ class Bazel(
     private fun BazelModule.toPackageReference(archiveOverrides: Map<String, ArchiveOverride>): PackageReference =
         PackageReference(
             id = Identifier(
-                type = "Bazel",
+                type = PACKAGE_TYPE,
                 namespace = "",
                 name = key.substringBefore("@", ""),
                 version = key.substringAfter("@", "")
@@ -649,6 +665,7 @@ class Bazel(
     private fun resolveConanDependencies(
         projectDir: File,
         analysisRoot: File,
+        includes: Includes,
         excludes: Excludes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
@@ -680,6 +697,7 @@ class Bazel(
             analysisRoot,
             listOf(conanDefinitionFile),
             excludes,
+            includes,
             analyzerConfig,
             labels
         ).run {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2019 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -55,7 +55,7 @@ const IssuesTable = ({ webAppOrtIssues = [], showExcludesColumn = true }) => {
                         isResolved: webAppOrtIssue.isResolved,
                         key: webAppOrtIssue.key,
                         message: webAppOrtIssue.message,
-                        packageId: webAppOrtIssue.package.id,
+                        packageId: webAppOrtIssue.packageName,
                         severity: webAppOrtIssue.severity,
                         severityIndex: webAppOrtIssue.severityIndex,
                         source: webAppOrtIssue.source,
@@ -169,7 +169,7 @@ const IssuesTable = ({ webAppOrtIssues = [], showExcludesColumn = true }) => {
                 value: 2
             },
             {
-                text: (<Tag color="#b0c4de">Resolved</Tag>),
+                text: (<Tag color="#b0c4de" variant="solid">Resolved</Tag>),
                 value: 10
             }
         ],
@@ -418,7 +418,7 @@ const IssuesTable = ({ webAppOrtIssues = [], showExcludesColumn = true }) => {
                     onChange: handlePaginationChange,
                     pageSize: pagination.pageSize,
                     pageSizeOptions: ['50', '100', '250', '500', '1000', '5000'],
-                    position: 'bottom',
+                    placement: 'bottom',
                     showQuickJumper: true,
                     showSizeChanger: true,
                     showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} issues`

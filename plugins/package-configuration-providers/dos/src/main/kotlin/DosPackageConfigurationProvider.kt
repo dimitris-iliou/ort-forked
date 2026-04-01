@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,7 +37,6 @@ import org.ossreviewtoolkit.model.config.PathExclude
 import org.ossreviewtoolkit.model.config.VcsMatcher
 import org.ossreviewtoolkit.model.utils.associateLicensesWithExceptions
 import org.ossreviewtoolkit.model.utils.toPurl
-import org.ossreviewtoolkit.model.utils.toPurlExtras
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.api.Secret
@@ -76,7 +75,7 @@ class DosPackageConfigurationProvider(
     private val client = DosClient(service)
 
     override fun getPackageConfigurations(packageId: Identifier, provenance: Provenance): List<PackageConfiguration> {
-        val purl = packageId.toPurl(provenance.toPurlExtras())
+        val purl = packageId.toPurl(provenance)
 
         val packageResults = runBlocking { client.getPackageConfiguration(purl) }
             ?.takeUnless { it.licenseConclusions.isEmpty() && it.pathExclusions.isEmpty() } ?: return emptyList()

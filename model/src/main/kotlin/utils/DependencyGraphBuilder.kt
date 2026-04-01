@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,8 +20,6 @@
 package org.ossreviewtoolkit.model.utils
 
 import java.util.LinkedList
-
-import org.apache.logging.log4j.kotlin.logger
 
 import org.ossreviewtoolkit.model.DependencyGraph
 import org.ossreviewtoolkit.model.DependencyGraphEdge
@@ -135,10 +133,10 @@ class DependencyGraphBuilder<D>(
     private val resolvedPackages = mutableMapOf<Identifier, Package>()
 
     /**
-     * A list storing all [DependencyReference]s that have been created to represent the dependencies known to this
-     * builder.
+     * A map storing all [DependencyReference]s that have been created to represent the dependencies of type D known to
+     * this builder.
      */
-    private val references = mutableListOf<DependencyReference>()
+    private val references = mutableMapOf<DependencyReference, D>()
 
     /**
      * Add the given [dependency] for the scope with the given [scopeName] to this builder. This function needs to be
@@ -177,27 +175,15 @@ class DependencyGraphBuilder<D>(
         if (checkReferences) checkReferences()
 
         val (sortedDependencyIds, indexMapping) = constructSortedDependencyIds(dependencyIds)
-        val (nodes, edges) = references.toGraph(indexMapping)
+        val (nodes, edges) = references.keys.toGraph(indexMapping)
 
         return DependencyGraph(
             sortedDependencyIds,
             sortedSetOf(),
             constructSortedScopeMappings(scopeMapping, indexMapping),
             nodes,
-            edges.removeCycles()
+            edges
         )
-    }
-
-    private fun Set<DependencyGraphEdge>.removeCycles(): Set<DependencyGraphEdge> {
-        val edges = toMutableSet()
-        val edgesToKeep = breakCycles(edges)
-        val edgesToRemove = edges - edgesToKeep
-
-        edgesToRemove.forEach {
-            logger.warn { "Removing edge '${it.from} -> ${it.to}' to break a cycle." }
-        }
-
-        return filterTo(mutableSetOf()) { it in edgesToKeep }
     }
 
     private fun checkReferences() {
@@ -207,7 +193,7 @@ class DependencyGraphBuilder<D>(
                 danglingIds.joinToString(postfix = ".") { "'${it.toCoordinates()}'" }
         }
 
-        val packageReferencesKeysWithMultipleDistinctPackageReferences = references.groupBy { it.key }.filter {
+        val packageReferencesKeysWithMultipleDistinctPackageReferences = references.keys.groupBy { it.key }.filter {
             it.value.distinct().size > 1
         }.keys
 
@@ -249,7 +235,7 @@ class DependencyGraphBuilder<D>(
         processed: Set<D>
     ): DependencyReference? {
         val id = dependencyHandler.identifierFor(dependency)
-        val issues = dependencyHandler.issuesForDependency(dependency).toMutableList()
+        val issues = dependencyHandler.issuesFor(dependency).toMutableList()
         val index = updateDependencyMappingAndPackages(id, dependency, issues)
 
         val ref = when (val result = findDependencyInGraph(index, dependency)) {
@@ -324,16 +310,14 @@ class DependencyGraphBuilder<D>(
      * these have to be placed in separate fragments of the dependency graph.
      */
     private fun dependencyTreeEquals(ref: DependencyReference, dependency: D): Boolean {
-        val dependencies = dependencyHandler.dependenciesFor(dependency)
-        if (ref.dependencies.size != dependencies.size) return false
-
-        val dependencies1 = ref.dependencies.mapTo(mutableSetOf()) { dependencyIds[it.pkg] }
-        val dependencies2 = dependencies.associateBy { dependencyHandler.identifierFor(it) }
-        if (dependencies1 != dependencies2.keys) return false
-
-        return ref.dependencies.all { refDep ->
-            dependencies2[dependencyIds[refDep.pkg]]?.let { dependencyTreeEquals(refDep, it) } == true
+        val refDep = checkNotNull(references[ref]) {
+            "$ref is not known to this builder."
         }
+
+        return dependencyHandler.areDependenciesEqual(
+            dependencyHandler.dependenciesFor(refDep),
+            dependencyHandler.dependenciesFor(dependency)
+        )
     }
 
     /**
@@ -375,18 +359,20 @@ class DependencyGraphBuilder<D>(
         transitive: Boolean,
         processed: Set<D>
     ): DependencyReference? {
-        val transitiveDependencies = dependencyHandler.dependenciesFor(dependency).mapNotNullTo(mutableSetOf()) {
-            addDependencyToGraph(scopeName, it, transitive = true, processed)
-        }
+        val nextProcessed = processed + dependency
+        val transitiveDependencies = dependencyHandler.dependenciesFor(dependency)
+            .mapNotNullTo(mutableSetOf()) { dep ->
+                dep.takeUnless { it in nextProcessed }?.let {
+                    addDependencyToGraph(scopeName, dep, transitive = true, nextProcessed + dep)
+                }
+            }
 
         val fragmentMapping = referenceMappings[index.fragment]
         if (index.root in fragmentMapping) {
             // If this point is reached, the package has already been inserted when processing its dependencies.
             // This means that there is a cyclic dependency. To handle this case correctly, the insert operation has
-            // to be started anew unless the dependency has already been encountered.
-            if (dependency in processed) return null
-
-            return addDependencyToGraph(scopeName, dependency, transitive, processed + dependency)
+            // to be started anew.
+            return addDependencyToGraph(scopeName, dependency, transitive, nextProcessed)
         }
 
         val ref = DependencyReference(
@@ -397,7 +383,7 @@ class DependencyGraphBuilder<D>(
             issues = issues
         )
         fragmentMapping[index.root] = ref
-        references += ref
+        references[ref] = dependency
 
         if (ref.issues.isEmpty() && ref.linkage !in PackageLinkage.PROJECT_LINKAGE) {
             validPackageDependencies += id
@@ -436,13 +422,13 @@ class DependencyGraphBuilder<D>(
 }
 
 /**
- * Convert the direct dependency references of all projects to a list of nodes and edges that represent the final
- * dependency graph. Apply the given [indexMapping] to the indices pointing to dependencies.
+ * Convert the direct dependency references of all projects to a list of nodes and a set of edges that represent the
+ * final dependency graph. Apply the given [indexMapping] to the indices pointing to dependencies.
  */
 private fun Collection<DependencyReference>.toGraph(
     indexMapping: IntArray
 ): Pair<List<DependencyGraphNode>, Set<DependencyGraphEdge>> {
-    val nodes = mutableSetOf<DependencyGraphNode>()
+    val nodes = mutableListOf<DependencyGraphNode>()
     val edges = mutableSetOf<DependencyGraphEdge>()
     val nodeIndices = mutableMapOf<NodeKey, Int>()
 
@@ -461,7 +447,7 @@ private fun Collection<DependencyReference>.toGraph(
         }
     }
 
-    return nodes.toList() to edges
+    return nodes to edges
 }
 
 private fun Collection<DependencyReference>.visitEach(visit: (ref: DependencyReference) -> Unit) {
@@ -486,49 +472,6 @@ private data class NodeKey(
 
 private val DependencyReference.key: NodeKey
     get() = NodeKey(pkg, fragment)
-
-private enum class NodeColor { WHITE, GRAY, BLACK }
-
-/**
- * A depth-first-search (DFS)-based implementation which breaks all cycles in O(V + E).
- * Finding a minimal solution is NP-complete.
- */
-internal fun breakCycles(edges: Collection<DependencyGraphEdge>): Set<DependencyGraphEdge> {
-    val outgoingEdgesForNodes = edges.groupBy({ it.from }, { it.to }).mapValues { it.value.toMutableSet() }
-    val color = outgoingEdgesForNodes.keys.associateWithTo(mutableMapOf()) { NodeColor.WHITE }
-
-    fun visit(u: Int) {
-        color[u] = NodeColor.GRAY
-
-        val nodesClosingCircle = mutableSetOf<Int>()
-
-        outgoingEdgesForNodes[u].orEmpty().forEach { v ->
-            if (color[v] == NodeColor.WHITE) {
-                visit(v)
-            } else if (color[v] == NodeColor.GRAY) {
-                nodesClosingCircle += v
-            }
-        }
-
-        outgoingEdgesForNodes[u]?.removeAll(nodesClosingCircle)
-
-        color[u] = NodeColor.BLACK
-    }
-
-    val queue = LinkedList(outgoingEdgesForNodes.keys)
-
-    while (queue.isNotEmpty()) {
-        val v = queue.removeFirst()
-
-        if (color.getValue(v) != NodeColor.WHITE) continue
-
-        visit(v)
-    }
-
-    return outgoingEdgesForNodes.flatMapTo(mutableSetOf()) { (fromNode, toNodes) ->
-        toNodes.map { toNode -> DependencyGraphEdge(fromNode, toNode) }
-    }
-}
 
 /**
  * Sort the list of [identifiers][ids] for the known dependencies and generate a mapping, so that all index-based

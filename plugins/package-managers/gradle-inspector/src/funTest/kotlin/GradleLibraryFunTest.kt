@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ class GradleLibraryFunTest : StringSpec({
     }
 
     "Project dependencies are detected correctly".config(
-        // This does not get "struts2-assembly-2.5.14.1-min-lib.zip" binary artifact right.
+        // This does not get the "struts2-assembly-2.5.14.1-min-lib.zip" binary artifact right.
         enabled = false
     ) {
         val definitionFile = getAssetFile("projects/synthetic/gradle-library/app/build.gradle").toGradle()
@@ -52,7 +52,7 @@ class GradleLibraryFunTest : StringSpec({
     }
 
     "External dependencies are detected correctly".config(
-        // This does not get "struts2-assembly-2.5.14.1-min-lib.zip" binary artifact right.
+        // This does not get the "struts2-assembly-2.5.14.1-min-lib.zip" binary artifact right.
         enabled = false
     ) {
         val definitionFile = getAssetFile("projects/synthetic/gradle-library/lib/build.gradle").toGradle()

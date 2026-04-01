@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -61,31 +61,30 @@ internal open class GitWorkingTree(workingDir: File, vcsType: VcsType) : Working
 
     override fun isShallow(): Boolean = useRepo { directory?.resolve("shallow")?.isFile == true }
 
-    private fun listSubmodulePaths(repo: Repository): List<String> {
-        fun listSubmodules(parent: String, repo: Repository, paths: MutableList<String>) {
-            val prefix = if (parent.isEmpty()) parent else "$parent/"
+    private fun listSubmodulePaths(repo: Repository): List<String> =
+        mutableListOf<String>().also { paths ->
+            listSubmodules("", repo, paths)
+        }
 
-            SubmoduleWalk.forIndex(repo).use { walk ->
-                while (walk.next()) {
-                    val path = "$prefix${walk.path}"
+    private fun listSubmodules(parent: String, repo: Repository, paths: MutableList<String>) {
+        val prefix = if (parent.isEmpty()) parent else "$parent/"
 
-                    if (walk.repository == null) {
-                        logger.warn {
-                            "Git submodule at '$path' not initialized. Cannot recursively list its submodules."
-                        }
-                    } else {
-                        paths += path
+        SubmoduleWalk.forIndex(repo).use { walk ->
+            while (walk.next()) {
+                val path = "$prefix${walk.path}"
 
-                        walk.repository.use { submoduleRepo ->
-                            listSubmodules(path, submoduleRepo, paths)
-                        }
+                if (walk.repository == null) {
+                    logger.warn {
+                        "Git submodule at '$path' not initialized. Cannot recursively list its submodules."
+                    }
+                } else {
+                    paths += path
+
+                    walk.repository.use { submoduleRepo ->
+                        listSubmodules(path, submoduleRepo, paths)
                     }
                 }
             }
-        }
-
-        return mutableListOf<String>().also { paths ->
-            listSubmodules("", repo, paths)
         }
     }
 

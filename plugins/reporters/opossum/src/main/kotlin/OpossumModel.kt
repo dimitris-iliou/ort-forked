@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,17 +26,17 @@ import java.io.File
 import java.time.LocalDateTime
 
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.KeepGeneratedSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
-import kotlinx.serialization.descriptors.buildClassSerialDescriptor
-import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToStream
 
 import org.ossreviewtoolkit.model.Identifier
-import org.ossreviewtoolkit.model.utils.getPurlType
+import org.ossreviewtoolkit.model.utils.toPackageUrl
+import org.ossreviewtoolkit.model.utils.toPurl
 import org.ossreviewtoolkit.utils.spdx.SpdxExpression
 
 internal val JSON = Json {
@@ -69,6 +69,7 @@ internal data class OpossumInputMetadata(
     val fileCreationDate: LocalDateTimeAsString = LocalDateTime.now()
 )
 
+@KeepGeneratedSerializer
 @Serializable(OpossumResourcesSerializer::class)
 internal data class OpossumResources(
     val tree: MutableMap<String, OpossumResources> = mutableMapOf()
@@ -119,19 +120,13 @@ internal data class OpossumResources(
         }.plus("/")
 }
 
-private object OpossumResourcesSerializer : KSerializer<OpossumResources> {
-    override val descriptor = buildClassSerialDescriptor("Resource")
-
+internal object OpossumResourcesSerializer : KSerializer<OpossumResources> by OpossumResources.generatedSerializer() {
     override fun serialize(encoder: Encoder, value: OpossumResources) {
         if (value.isFile()) {
             encoder.encodeInt(1)
         } else {
             encoder.encodeSerializableValue(MapSerializer(String.serializer(), this), value.tree)
         }
-    }
-
-    override fun deserialize(decoder: Decoder): OpossumResources {
-        throw NotImplementedError("Deserialization of OpossumResources is not supported.")
     }
 }
 
@@ -188,14 +183,15 @@ internal data class OpossumSignalFlat(
                 preSelected: Boolean = false,
                 followUp: Boolean = false,
                 excludeFromNotice: Boolean = false
-            ): OpossumSignal =
-                OpossumSignal(
+            ): OpossumSignal {
+                val purl = id?.toPurl().toPackageUrl()
+                return OpossumSignal(
                     base = OpossumSignalBase(
                         source = OpossumSignalSource(name = source),
-                        packageType = id?.getPurlType().toString(),
-                        packageNamespace = id?.namespace,
-                        packageName = id?.name,
-                        packageVersion = id?.version,
+                        packageType = purl?.type,
+                        packageNamespace = purl?.namespace,
+                        packageName = purl?.name,
+                        packageVersion = purl?.version,
                         copyright = copyright,
                         licenseName = license?.toString(),
                         url = url,
@@ -205,6 +201,7 @@ internal data class OpossumSignalFlat(
                     followUp = OpossumFollowUp.FOLLOW_UP.takeIf { followUp },
                     excludeFromNotice = excludeFromNotice
                 )
+            }
         }
 
         data class OpossumSignalBase(

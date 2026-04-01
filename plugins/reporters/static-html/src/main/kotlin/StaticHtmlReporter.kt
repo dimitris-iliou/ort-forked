@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -320,7 +320,7 @@ class StaticHtmlReporter(override val descriptor: PluginDescriptor = StaticHtmlR
             td { +(ruleViolation.violation.pkg?.toCoordinates() ?: "-") }
             td {
                 +if (ruleViolation.violation.license != null) {
-                    "${ruleViolation.violation.licenseSource}: ${ruleViolation.violation.license}"
+                    "${ruleViolation.violation.licenseSources.joinToString()}: ${ruleViolation.violation.license}"
                 } else {
                     "-"
                 }
@@ -382,7 +382,7 @@ class StaticHtmlReporter(override val descriptor: PluginDescriptor = StaticHtmlR
                 }
             }
 
-            td { +row.id.toCoordinates() }
+            td { +(row.id?.toCoordinates() ?: "-") }
 
             td {
                 p { issueDescription(row.issue) }
@@ -738,9 +738,11 @@ private fun ResolvedLicenseLocation.permalink(id: Identifier): String? {
     return null
 }
 
-private val PathExclude.description: String get() = joinNonBlank(reason.toString(), comment)
+private val PathExclude.description: String
+    get() = joinNonBlank(reason.toString(), comment)
 
-private val ScopeExclude.description: String get() = joinNonBlank(reason.toString(), comment)
+private val ScopeExclude.description: String
+    get() = joinNonBlank(reason.toString(), comment)
 
 private fun joinNonBlank(vararg strings: String, separator: String = " - ") =
     strings.filter { it.isNotBlank() }.joinToString(separator)

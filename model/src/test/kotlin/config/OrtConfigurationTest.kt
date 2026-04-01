@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2019 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -91,20 +91,7 @@ class OrtConfigurationTest : WordSpec({
                     type = "ClearlyDefined",
                     options = mapOf("serverUrl" to "https://api.clearlydefined.io", "minTotalLicenseScore" to "80")
                 ),
-                ProviderPluginConfiguration(
-                    type = "SW360",
-                    options = mapOf(
-                        "restUrl" to "https://your-sw360-rest-url",
-                        "authUrl" to "https://your-authentication-url"
-                    ),
-                    secrets = mapOf(
-                        "username" to "username",
-                        "password" to "password",
-                        "clientId" to "clientId",
-                        "clientPassword" to "clientPassword",
-                        "token" to "token"
-                    )
-                )
+                ProviderPluginConfiguration(type = "Spring", enabled = false)
             )
 
             ortConfig.severeIssueThreshold shouldBe Severity.ERROR
@@ -260,8 +247,7 @@ class OrtConfigurationTest : WordSpec({
                             "timeout" to "60",
                             "urlMappings" to urlMapping,
                             "sensitivity" to "10",
-                            "treatPendingIdentificationsAsError" to "false",
-                            "deleteUploadedArchiveAfterScan" to "true"
+                            "treatPendingIdentificationsAsError" to "false"
                         )
 
                         secrets should containExactlyEntries(
@@ -278,7 +264,7 @@ class OrtConfigurationTest : WordSpec({
 
                 storages shouldNotBeNull {
                     keys should containExactlyInAnyOrder(
-                        "local", "http", "aws", "clearlyDefined", "postgres", "sw360Configuration"
+                        "local", "http", "aws", "clearlyDefined", "postgres"
                     )
 
                     val localStorage = this["local"]
@@ -324,16 +310,6 @@ class OrtConfigurationTest : WordSpec({
                     }
 
                     postgresStorage.type shouldBe StorageType.PROVENANCE_BASED
-
-                    val sw360Storage = this["sw360Configuration"]
-                    sw360Storage.shouldBeInstanceOf<Sw360StorageConfiguration>()
-                    sw360Storage.restUrl shouldBe "https://your-sw360-rest-url"
-                    sw360Storage.authUrl shouldBe "https://your-authentication-url"
-                    sw360Storage.username shouldBe "username"
-                    sw360Storage.password shouldBe "password"
-                    sw360Storage.clientId shouldBe "clientId"
-                    sw360Storage.clientPassword shouldBe "clientPassword"
-                    sw360Storage.token shouldBe "token"
                 }
 
                 storageReaders should containExactly("local", "postgres", "http", "aws", "clearlyDefined")

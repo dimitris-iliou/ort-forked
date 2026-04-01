@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2025 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -66,22 +66,6 @@ interface EventHandler {
 
                 CloneRepositoryHandler(config, service)
             }
-
-        /**
-         * Return an [EventHandler] based on the given [config], [nestedProvenance] and [service]. The handler is
-         * tailored for the given [existingScan].
-         */
-        fun getHandler(
-            existingScan: Scan,
-            config: FossIdConfig,
-            nestedProvenance: NestedProvenance?,
-            service: FossIdServiceWithVersion
-        ): EventHandler {
-            // Create a specific handler for the existing scan, based on its configuration, not to the current scanner
-            // configuration.
-            val configForExistingScan = config.copy(isArchiveMode = existingScan.gitRepoUrl == null)
-            return getHandler(configForExistingScan, nestedProvenance, service)
-        }
     }
 
     /**
@@ -115,6 +99,7 @@ interface EventHandler {
     /**
      * Event handler that is called after a scan has been created.
      */
+    @Suppress("RedundantSuspendModifier")
     suspend fun afterScanCreation(
         scanCode: String,
         existingScan: Scan?,
@@ -125,10 +110,12 @@ interface EventHandler {
     /**
      * Event handler that is called before a scan has been checked.
      */
+    @Suppress("RedundantSuspendModifier")
     suspend fun beforeCheckScan(scanCode: String) {}
 
     /**
      * Event handler that is called after a scan has been checked.
      */
+    @Suppress("RedundantSuspendModifier")
     suspend fun afterCheckScan(scanCode: String) {}
 }

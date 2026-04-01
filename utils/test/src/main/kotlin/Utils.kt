@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -90,15 +90,16 @@ fun patchExpectedResult(
         if (definitionFile != null) {
             val projectDir = definitionFile.parentFile
             val vcsDir = checkNotNull(VersionControlSystem.forDirectory(projectDir))
-            val url = vcsDir.getRemoteUrl()
-            val path = vcsDir.getPathToRoot(projectDir)
+            val vcsUrl = vcsDir.getRemoteUrl()
+            val vcsRevision = vcsDir.getRevision()
+            val vcsPath = vcsDir.getPathToRoot(projectDir)
 
-            put("<REPLACE_DEFINITION_FILE_PATH>", "$path/${definitionFile.name}")
+            put("<REPLACE_DEFINITION_FILE_PATH>", "$vcsPath/${definitionFile.name}")
             put("<REPLACE_ABSOLUTE_DEFINITION_FILE_PATH>", definitionFile.absoluteFile.invariantSeparatorsPath)
-            put("<REPLACE_URL>", url)
-            put("<REPLACE_REVISION>", vcsDir.getRevision())
-            put("<REPLACE_PATH>", path)
-            put("<REPLACE_URL_PROCESSED>", normalizeVcsUrl(url))
+            put("<REPLACE_VCS_URL>", vcsUrl)
+            put("<REPLACE_VCS_REVISION>", vcsRevision)
+            put("<REPLACE_VCS_PATH>", vcsPath)
+            put("<REPLACE_VCS_PROCESSED_URL>", normalizeVcsUrl(vcsUrl))
         }
 
         putAll(custom)

@@ -64,7 +64,7 @@ For detailed information, see the documentation on the [ORT Website](https://oss
 
 ORT is being continuously used on Linux, Windows and macOS by the [core development team](https://github.com/orgs/oss-review-toolkit/people), so these operating systems are considered to be well-supported.
 
-To run the ORT binaries (also see [Installation from binaries](#from-binaries)) at least Java 11 is required.
+To run the ORT binaries (also see [Installation from binaries](#from-binaries)) at least Java 21 is required.
 Memory and CPU requirements vary depending on the size and type of project(s) to analyze / scan, but the general recommendation is to configure Java with 8 GiB of memory and to use a CPU with at least 4 cores.
 
 ```shell
@@ -77,12 +77,23 @@ If a package manager is not listed there, support for it is integrated directly 
 
 ## From binaries
 
+### CLI distribution
+
 Head over to the [releases](https://github.com/oss-review-toolkit/ort/releases) page.
 From the "Assets" section of your chosen release, download the distribution archive of the desired type.
 Typically that is `.zip` for Windows and `.tgz` otherwise; but the contents of the archives are the same.
 The `ort-*` archives contain the [ORT main](./cli/) distribution, while the `orth-*` archives contain the [ORT helper](./cli-helper/) distribution.
 Unpack the archive to an installation directory.
 The scripts to run ORT are located at `bin/ort` and `bin\ort.bat`, or `bin/orth` and `bin\orth.bat`, respectively.
+
+### Docker distribution
+
+In addition to the CLI, ORT is also distributed as a Docker image that contains all tools required by ORT (see the `ort requirements` command).
+To run ORT from the latest version of that image (which will be downloaded if needed) use:
+
+```shell
+docker run ghcr.io/oss-review-toolkit/ort --help
+```
 
 ## From sources
 
@@ -113,15 +124,15 @@ Alternatively, use the script at `scripts/docker_build.sh` which also sets the O
 
 Install these additional prerequisites:
 
-* Java Development Kit (JDK) version 11 or later; also remember to set the `JAVA_HOME` environment variable accordingly.
+* Java Development Kit (JDK) version 21 or later; also remember to set the `JAVA_HOME` environment variable accordingly.
 
-Change into the directory with ORT's source code and run `./gradlew installDist` (on the first run this will bootstrap Gradle and download all required dependencies).
+Change into the directory with ORT's source code and run `./gradlew :cli:installDist` (on the first run this will bootstrap Gradle and download all required dependencies).
 
 ## Basic usage
 
 Depending on how ORT was installed, it can be run in the following ways:
 
-* If the Docker image was built, use
+* If the Docker image was built locally as described above, use
 
   ```shell
   docker run ort --help
@@ -138,7 +149,7 @@ Depending on how ORT was installed, it can be run in the following ways:
 * If running directly from sources via Gradle, use
 
   ```shell
-  ./gradlew cli:run --args="--help"
+  ./gradlew -q :cli:run --args="--help"
   ```
 
   Note that in this case the working directory used by ORT is that of the `cli` project, not the directory `gradlew` is located in (see https://github.com/gradle/gradle/issues/6074).
@@ -155,7 +166,7 @@ For everything from reporting bugs to asking questions, please go through the [i
 
 # License
 
-Copyright (C) 2017-2025 [The ORT Project Authors](./NOTICE).
+Copyright (C) 2017-2026 [The ORT Project Copyright Holders](./NOTICE).
 
 See the [LICENSE](./LICENSE) file in the root of this project for license details.
 

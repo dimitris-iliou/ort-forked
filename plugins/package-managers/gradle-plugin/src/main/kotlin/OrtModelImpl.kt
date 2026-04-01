@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,7 +52,7 @@ internal class OrtDependencyImpl(
     override val version: String,
     override val classifier: String,
     override val extension: String,
-    override val variants: Set<String>,
+    override val variants: Map<String, Map<String, String>>,
     override val dependencies: List<OrtDependency>,
     override val error: String?,
     override val warning: String?,

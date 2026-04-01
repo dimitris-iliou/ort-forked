@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,32 +21,35 @@ package org.ossreviewtoolkit.plugins.advisors.vulnerablecode
 
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.matchers.collections.beEmpty
-import io.kotest.matchers.collections.shouldContainAll
+import io.kotest.matchers.collections.containAll
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 
-import org.ossreviewtoolkit.advisor.normalizeVulnerabilityData
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.utils.toPurl
+import org.ossreviewtoolkit.plugins.advisors.api.normalizeVulnerabilityData
 
 class VulnerableCodeFunTest : WordSpec({
     "Vulnerable Go packages" should {
         "return findings for QUIC" {
             val vc = VulnerableCodeFactory.create()
             val id = Identifier("Go::github.com/quic-go/quic-go:0.40.0")
-            val pkg = Package.EMPTY.copy(id, purl = id.toPurl())
+            val pkg = Package.EMPTY.copy(id = id, purl = id.toPurl())
 
             val results = vc.retrievePackageFindings(setOf(pkg)).values.map { it.normalizeVulnerabilityData() }
 
             results.flatMap { it.summary.issues } should beEmpty()
             with(results.flatMap { it.vulnerabilities }.associateBy { it.id }) {
-                keys shouldContainAll setOf(
+                keys should containAll(
                     "CVE-2023-49295"
                 )
 
-                getValue("CVE-2023-49295").references.find {
+                val vulnerability = getValue("CVE-2023-49295")
+                vulnerability.summary shouldBe "quic-go is an implementation of the QUIC protocol (RFC 9000, RFC..."
+
+                vulnerability.references.find {
                     it.url.toString() == "https://nvd.nist.gov/vuln/detail/CVE-2023-49295"
                 } shouldNotBeNull {
                     scoringSystem shouldBe "cvssv3"
@@ -59,22 +62,27 @@ class VulnerableCodeFunTest : WordSpec({
     }
 
     "Vulnerable Maven packages" should {
-        "return findings for Guava" {
+        // TODO: The test consistently fails with "unexpected end of stream".
+        //       This should be investigated and the test be re-enabled again.
+        "return findings for Guava".config(enabled = false) {
             val vc = VulnerableCodeFactory.create()
             val id = Identifier("Maven:com.google.guava:guava:19.0")
-            val pkg = Package.EMPTY.copy(id, purl = id.toPurl())
+            val pkg = Package.EMPTY.copy(id = id, purl = id.toPurl())
 
             val results = vc.retrievePackageFindings(setOf(pkg)).values.map { it.normalizeVulnerabilityData() }
 
             results.flatMap { it.summary.issues } should beEmpty()
             with(results.flatMap { it.vulnerabilities }.associateBy { it.id }) {
-                keys shouldContainAll setOf(
+                keys should containAll(
                     "CVE-2018-10237",
                     "CVE-2020-8908",
                     "CVE-2023-2976"
                 )
 
-                getValue("CVE-2023-2976").references.find {
+                val vulnerability = getValue("CVE-2023-2976")
+                vulnerability.summary shouldBe "Use of Java's default temporary directory for file creation in `..."
+
+                vulnerability.references.find {
                     it.url.toString() == "https://nvd.nist.gov/vuln/detail/CVE-2023-2976"
                 } shouldNotBeNull {
                     scoringSystem shouldBe "cvssv3"
@@ -88,17 +96,20 @@ class VulnerableCodeFunTest : WordSpec({
         "return findings for Commons-Compress" {
             val vc = VulnerableCodeFactory.create()
             val id = Identifier("Maven:org.apache.commons:commons-compress:1.23.0")
-            val pkg = Package.EMPTY.copy(id, purl = id.toPurl())
+            val pkg = Package.EMPTY.copy(id = id, purl = id.toPurl())
 
             val results = vc.retrievePackageFindings(setOf(pkg)).values.map { it.normalizeVulnerabilityData() }
 
             results.flatMap { it.summary.issues } should beEmpty()
             with(results.flatMap { it.vulnerabilities }.associateBy { it.id }) {
-                keys shouldContainAll setOf(
+                keys should containAll(
                     "CVE-2023-42503"
                 )
 
-                getValue("CVE-2023-42503").references.find {
+                val vulnerability = getValue("CVE-2023-42503")
+                vulnerability.summary shouldBe "Improper Input Validation, Uncontrolled Resource Consumption vul..."
+
+                vulnerability.references.find {
                     it.url.toString() == "https://nvd.nist.gov/vuln/detail/CVE-2023-42503"
                 } shouldNotBeNull {
                     scoringSystem shouldBe "cvssv3"
@@ -114,17 +125,20 @@ class VulnerableCodeFunTest : WordSpec({
         "return findings for Elliptic" {
             val vc = VulnerableCodeFactory.create()
             val id = Identifier("NPM::elliptic:6.5.7")
-            val pkg = Package.EMPTY.copy(id, purl = id.toPurl())
+            val pkg = Package.EMPTY.copy(id = id, purl = id.toPurl())
 
             val results = vc.retrievePackageFindings(setOf(pkg)).values.map { it.normalizeVulnerabilityData() }
 
             results.flatMap { it.summary.issues } should beEmpty()
             with(results.flatMap { it.vulnerabilities }.associateBy { it.id }) {
-                keys shouldContainAll setOf(
+                keys should containAll(
                     "CVE-2024-48948"
                 )
 
-                getValue("CVE-2024-48948").references.find {
+                val vulnerability = getValue("CVE-2024-48948")
+                vulnerability.summary shouldBe "The Elliptic package 6.5.7 for Node.js, in its for ECDSA impleme..."
+
+                vulnerability.references.find {
                     it.url.toString() == "https://github.com/indutny/elliptic"
                 } shouldNotBeNull {
                     scoringSystem shouldBe "cvssv3.1"

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@
 
 package org.ossreviewtoolkit.evaluator
 
+import java.util.EnumSet
+
 import org.apache.logging.log4j.kotlin.logger
 
 import org.ossreviewtoolkit.model.Identifier
@@ -27,6 +29,7 @@ import org.ossreviewtoolkit.model.LicenseSource
 import org.ossreviewtoolkit.model.OrtResult
 import org.ossreviewtoolkit.model.RuleViolation
 import org.ossreviewtoolkit.model.Severity
+import org.ossreviewtoolkit.utils.common.enumSetOfNotNull
 import org.ossreviewtoolkit.utils.spdx.SpdxSingleLicenseExpression
 
 /**
@@ -123,14 +126,14 @@ abstract class Rule(
 
     /**
      * Add an issue of the given [severity] for [pkgId] to the list of violations. Optionally, the offending [license]
-     * and its [source][licenseSource] can be specified. The [message] further explains the violation itself and
+     * and its [sources][licenseSources] can be specified. The [message] further explains the violation itself and
      * [howToFix] explains how it can be fixed.
      */
     fun issue(
         severity: Severity,
         pkgId: Identifier?,
         license: SpdxSingleLicenseExpression?,
-        licenseSource: LicenseSource?,
+        licenseSources: EnumSet<LicenseSource>,
         message: String,
         howToFix: String
     ) {
@@ -139,7 +142,7 @@ abstract class Rule(
             rule = name,
             pkg = pkgId,
             license = license,
-            licenseSource = licenseSource,
+            licenseSources = licenseSources,
             message = message,
             howToFix = howToFix
         )
@@ -151,10 +154,10 @@ abstract class Rule(
     fun hint(
         pkgId: Identifier?,
         license: SpdxSingleLicenseExpression?,
-        licenseSource: LicenseSource?,
+        licenseSources: EnumSet<LicenseSource>,
         message: String,
         howToFix: String
-    ) = issue(Severity.HINT, pkgId, license, licenseSource, message, howToFix)
+    ) = issue(Severity.HINT, pkgId, license, licenseSources, message, howToFix)
 
     /**
      * Add a [warning][Severity.WARNING] to the list of [violations].
@@ -162,10 +165,10 @@ abstract class Rule(
     fun warning(
         pkgId: Identifier?,
         license: SpdxSingleLicenseExpression?,
-        licenseSource: LicenseSource?,
+        licenseSources: EnumSet<LicenseSource>,
         message: String,
         howToFix: String
-    ) = issue(Severity.WARNING, pkgId, license, licenseSource, message, howToFix)
+    ) = issue(Severity.WARNING, pkgId, license, licenseSources, message, howToFix)
 
     /**
      * Add an [error][Severity.ERROR] to the list of [violations].
@@ -173,10 +176,10 @@ abstract class Rule(
     fun error(
         pkgId: Identifier?,
         license: SpdxSingleLicenseExpression?,
-        licenseSource: LicenseSource?,
+        licenseSources: EnumSet<LicenseSource>,
         message: String,
         howToFix: String
-    ) = issue(Severity.ERROR, pkgId, license, licenseSource, message, howToFix)
+    ) = issue(Severity.ERROR, pkgId, license, licenseSources, message, howToFix)
 
     /**
      * A DSL helper class, providing convenience functions for adding [RuleMatcher]s to this rule.
@@ -197,3 +200,52 @@ abstract class Rule(
         }
     }
 }
+
+/**
+ * Backward compatibility for [Rule.issue()].
+ */
+@Suppress("unused") // This is intended to be used by rule implementations.
+fun Rule.issue(
+    severity: Severity,
+    pkgId: Identifier?,
+    license: SpdxSingleLicenseExpression?,
+    licenseSource: LicenseSource?,
+    message: String,
+    howToFix: String
+) = issue(severity, pkgId, license, enumSetOfNotNull(licenseSource), message, howToFix)
+
+/**
+ * Backward compatibility for [Rule.hint()].
+ */
+@Suppress("unused") // This is intended to be used by rule implementations.
+fun Rule.hint(
+    pkgId: Identifier?,
+    license: SpdxSingleLicenseExpression?,
+    licenseSource: LicenseSource?,
+    message: String,
+    howToFix: String
+) = hint(pkgId, license, enumSetOfNotNull(licenseSource), message, howToFix)
+
+/**
+ * Backward compatibility for [Rule.warning()].
+ */
+@Suppress("unused") // This is intended to be used by rule implementations.
+fun Rule.warning(
+    pkgId: Identifier?,
+    license: SpdxSingleLicenseExpression?,
+    licenseSource: LicenseSource?,
+    message: String,
+    howToFix: String
+) = warning(pkgId, license, enumSetOfNotNull(licenseSource), message, howToFix)
+
+/**
+ * Backward compatibility for [Rule.error()].
+ */
+@Suppress("unused") // This is intended to be used by rule implementations.
+fun Rule.error(
+    pkgId: Identifier?,
+    license: SpdxSingleLicenseExpression?,
+    licenseSource: LicenseSource?,
+    message: String,
+    howToFix: String
+) = error(pkgId, license, enumSetOfNotNull(licenseSource), message, howToFix)

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,9 +35,9 @@ class PoetryFunTest : WordSpec({
         "return the expected python version" {
             getPythonVersion("~3.10") shouldBe "3.10"
             getPythonVersion("^3.10,<3.11") shouldBe "3.10"
-            getPythonVersion("^3.10") shouldBe "3.13"
-            getPythonVersion("^3.11,<4.0") shouldBe "3.13"
-            getPythonVersion("^3.10,<4.0") shouldBe "3.13"
+            getPythonVersion("^3.10") shouldBe "3.14"
+            getPythonVersion("^3.11,<4.0") shouldBe "3.14"
+            getPythonVersion("^3.10,<4.0") shouldBe "3.14"
         }
 
         "return null if constraint cannot be satisfied" {

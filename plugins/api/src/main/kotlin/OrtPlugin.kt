@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ import kotlin.reflect.KClass
  * the plugins, handling the [PluginConfig], and providing the [PluginDescriptor].
  */
 @Target(AnnotationTarget.CLASS)
+@Retention(AnnotationRetention.SOURCE)
 annotation class OrtPlugin(
     /**
      * The id of the plugin. Must be unique among all plugins for the same extension point. If empty, the id is derived

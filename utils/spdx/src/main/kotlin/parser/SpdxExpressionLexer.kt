@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -84,8 +84,11 @@ class SpdxExpressionLexer(input: Sequence<Char>) {
 
                 return when (value.uppercase()) {
                     "AND" -> Token.AND(start)
+
                     "OR" -> Token.OR(start)
+
                     "WITH" -> Token.WITH(start)
+
                     else -> when {
                         value.startsWith("DocumentRef-") -> Token.DOCUMENTREF(start, position, value)
                         value.startsWith("LicenseRef-") -> Token.LICENSEREF(start, position, value)

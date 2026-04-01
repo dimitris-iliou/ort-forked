@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,11 +25,6 @@ import java.nio.file.Files
 
 import org.graalvm.buildtools.gradle.tasks.BuildNativeImageTask
 
-import org.gradle.accessors.dm.LibrariesForLibs
-
-private val Project.libs: LibrariesForLibs
-    get() = extensions.getByType()
-
 val javaLanguageVersion: String by project
 
 plugins {
@@ -54,7 +49,8 @@ application {
 }
 
 mavenPublishing {
-    configure(KotlinJvm(JavadocJar.Dokka("dokkatooGeneratePublicationJavadoc")))
+    // Note that "dokkaGenerateHtml" is simply an alias for the below task name.
+    configure(KotlinJvm(JavadocJar.Dokka("dokkaGeneratePublicationHtml")))
 }
 
 graalvmNative {
@@ -87,7 +83,7 @@ graalvmNative {
                         listOf("^/META-INF/native-image/org.jline/.*"),
                     // The contained "reflect-config.json" does not match the code of the AWS flavor of the Apache HTTP
                     // client.
-                    "software.amazon.awssdk:apache-client:2.35.2" to
+                    "software.amazon.awssdk:apache-client:2.42.21" to
                         listOf("^/META-INF/native-image/software.amazon.awssdk/apache-client/.*")
                 )
             )
@@ -100,9 +96,17 @@ graalvmNative {
 }
 
 dependencies {
+    implementation(enforcedPlatform(libs.kotlin.bom))
     implementation(libs.logbackClassic)
 
     runtimeOnly(libs.log4j.api.slf4j)
+}
+
+tasks.withType<GenerateModuleMetadata>().configureEach {
+    // Suppress the error about publishing dependencies to enforced platforms, which Gradle overzealously considers to
+    // be a mistake, although it is completely fine to publish JARs for CLIs to Maven Central as a convenient
+    // distribution channel for programmatic use.
+    suppressedValidationErrors.add("enforced-platform")
 }
 
 tasks.named<BuildNativeImageTask>("nativeCompile") {

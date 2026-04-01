@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2020 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,8 +52,6 @@ import org.ossreviewtoolkit.utils.spdx.SpdxLicense
 import org.ossreviewtoolkit.utils.spdx.calculatePackageVerificationCode
 import org.ossreviewtoolkit.utils.spdx.nullOrBlankToSpdxNoassertionOrNone
 import org.ossreviewtoolkit.utils.spdx.toSpdxId
-import org.ossreviewtoolkit.utils.spdxdocument.model.SPDX_VERSION_2_2
-import org.ossreviewtoolkit.utils.spdxdocument.model.SPDX_VERSION_2_3
 import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxChecksum
 import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxDocument
 import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxExternalReference
@@ -180,9 +178,12 @@ internal fun Package.toSpdxPackage(
         licenseConcluded = when (type) {
             // Clear the concluded license as it might need to be different for the source artifact.
             SpdxPackageType.SOURCE_PACKAGE -> SpdxConstants.NOASSERTION
+
             // Clear the concluded license as it might need to be different for the VCS location.
             SpdxPackageType.VCS_PACKAGE -> SpdxConstants.NOASSERTION
+
             SpdxPackageType.PROJECT -> concludedLicense.nullOrBlankToSpdxNoassertionOrNone()
+
             else -> concludedLicense.nullOrBlankToSpdxNoassertionOrNone()
         },
         licenseDeclared = resolvedLicenseInfo.mainLicense()
@@ -228,7 +229,7 @@ private fun OrtResult.getPackageVerificationCode(id: Identifier, type: SpdxPacka
     }
 
 /**
- * Use [licenseTextProvider] to add the license texts for all packages to the [SpdxDocument].
+ * Use [licenseFactProvider] to add the license texts for all packages to the [SpdxDocument].
  */
 internal fun SpdxDocument.addExtractedLicenseInfo(licenseFactProvider: LicenseFactProvider): SpdxDocument {
     val allLicenses = buildSet {
@@ -432,7 +433,6 @@ private fun Provenance.matches(sourceCodeOrigin: SourceCodeOrigin): Boolean =
 
 internal val SpdxDocumentReporterConfig.wantSpdx23: Boolean
     get() = when (spdxVersion) {
-        SPDX_VERSION_2_2 -> false
-        SPDX_VERSION_2_3 -> true
-        else -> throw IllegalArgumentException("Unsupported SPDX version '$spdxVersion'.")
+        SpdxVersion.SPDX_2_2 -> false
+        SpdxVersion.SPDX_2_3 -> true
     }

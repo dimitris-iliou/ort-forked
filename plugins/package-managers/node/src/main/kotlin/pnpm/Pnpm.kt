@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2019 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,19 +27,23 @@ import org.ossreviewtoolkit.analyzer.PackageManagerFactory
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.packagemanagers.node.ModuleInfoResolver
+import org.ossreviewtoolkit.plugins.packagemanagers.node.NPM_RUNTIME_CONFIGURATION_FILENAME
+import org.ossreviewtoolkit.plugins.packagemanagers.node.NodeCommand
 import org.ossreviewtoolkit.plugins.packagemanagers.node.NodePackageManager
 import org.ossreviewtoolkit.plugins.packagemanagers.node.NodePackageManagerType
 import org.ossreviewtoolkit.plugins.packagemanagers.node.Scope
 import org.ossreviewtoolkit.plugins.packagemanagers.node.getNames
 import org.ossreviewtoolkit.plugins.packagemanagers.node.parsePackageJson
 import org.ossreviewtoolkit.utils.common.CommandLineTool
-import org.ossreviewtoolkit.utils.common.DirectoryStash
 import org.ossreviewtoolkit.utils.common.Os
+import org.ossreviewtoolkit.utils.common.ProcessCapture
 import org.ossreviewtoolkit.utils.common.nextOrNull
+import org.ossreviewtoolkit.utils.common.stashFiles
 
 import org.semver4j.range.RangeList
 import org.semver4j.range.RangeListFactory
@@ -48,6 +52,20 @@ internal object PnpmCommand : CommandLineTool {
     override fun command(workingDir: File?) = if (Os.isWindows) "pnpm.cmd" else "pnpm"
 
     override fun getVersionRequirement(): RangeList = RangeListFactory.create("5.* - 10.*")
+
+    override fun run(vararg args: CharSequence, workingDir: File?, environment: Map<String, String>): ProcessCapture =
+        super.run(
+            *args,
+            workingDir = workingDir,
+            environment = environment.toMutableMap().apply {
+                if (NodeCommand.hasUseSystemCaOption) {
+                    compute("NODE_OPTIONS") { _, options ->
+                        // Additional whitespaces do not matter when separating options.
+                        "${options.orEmpty()} --use-system-ca"
+                    }
+                }
+            }
+        )
 }
 
 /**
@@ -62,8 +80,6 @@ internal object PnpmCommand : CommandLineTool {
 class Pnpm(override val descriptor: PluginDescriptor = PnpmFactory.descriptor) :
     NodePackageManager(NodePackageManagerType.PNPM) {
     override val globsForDefinitionFiles = listOf(NodePackageManagerType.DEFINITION_FILE)
-
-    private lateinit var stash: DirectoryStash
 
     private val moduleInfoResolver = ModuleInfoResolver.create { workingDir, moduleId ->
         runCatching {
@@ -88,26 +104,41 @@ class Pnpm(override val descriptor: PluginDescriptor = PnpmFactory.descriptor) :
         super.beforeResolution(analysisRoot, definitionFiles, analyzerConfig)
 
         PnpmCommand.checkVersion()
-
-        val directories = definitionFiles.mapTo(mutableSetOf()) { it.resolveSibling("node_modules") }
-        stash = DirectoryStash(directories)
-    }
-
-    override fun afterResolution(analysisRoot: File, definitionFiles: List<File>) {
-        stash.close()
     }
 
     override fun resolveDependencies(
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
+    ): List<ProjectAnalyzerResult> =
+        // Handle file creation or changes caused by executing 'pnpm config set'.
+        stashFiles(
+            definitionFile.resolveSibling(NPM_RUNTIME_CONFIGURATION_FILENAME),
+            definitionFile.resolveSibling("pnpm-workspace.yaml"),
+            copy = true
+        ).use {
+            resolveDependenciesInternal(
+                analysisRoot,
+                definitionFile,
+                excludes,
+                includes
+            )
+        }
+
+    private fun resolveDependenciesInternal(
+        analysisRoot: File,
+        definitionFile: File,
+        excludes: Excludes,
+        includes: Includes
     ): List<ProjectAnalyzerResult> {
         val workingDir = definitionFile.parentFile
         moduleInfoResolver.workingDir = workingDir
-        val scopes = Scope.entries.filterNot { scope -> scope.isExcluded(excludes) }
+        val scopes = Scope.entries.filterNot { scope -> scope.isExcluded(excludes, includes) }
 
+        useIsolatedNodeLinker(workingDir)
         installDependencies(workingDir, scopes)
 
         val workspaceModuleDirs = getWorkspaceModuleDirs(workingDir)
@@ -129,6 +160,14 @@ class Pnpm(override val descriptor: PluginDescriptor = PnpmFactory.descriptor) :
                 packages = emptySet()
             )
         }
+    }
+
+    private fun useIsolatedNodeLinker(workingDir: File) {
+        // Always use the 'isolated' (default) node linker, to not have to deal with multiple ways of
+        // module file organization.
+        PnpmCommand.run(
+            workingDir, "config", "set", "node-linker", "isolated", "--location", "project"
+        ).requireSuccess()
     }
 
     private fun getWorkspaceModuleDirs(workingDir: File): Set<File> {
@@ -160,7 +199,7 @@ class Pnpm(override val descriptor: PluginDescriptor = PnpmFactory.descriptor) :
             "--prod".takeUnless { Scope.DEV_DEPENDENCIES in scopes }
         )
 
-        PnpmCommand.run(args = args.toTypedArray(), workingDir = workingDir).requireSuccess()
+        PnpmCommand.run(workingDir, *args.toTypedArray()).requireSuccess()
     }
 }
 
@@ -181,13 +220,10 @@ private fun ModuleInfo.getScopeDependencies(scope: Scope) =
  * possible, as a fallback the first list of [ModuleInfo] objects is returned.
  */
 private fun Sequence<List<ModuleInfo>>.findModulesFor(workingDir: File): List<ModuleInfo> {
-    val moduleInfoIterator = iterator()
-    val first = moduleInfoIterator.nextOrNull() ?: return emptyList()
+    val moduleInfosIterator = iterator()
+    val first = moduleInfosIterator.nextOrNull() ?: return emptyList()
 
-    fun List<ModuleInfo>.matchesWorkingDir() = any { File(it.path).absoluteFile == workingDir }
-
-    fun findMatchingModules(): List<ModuleInfo>? =
-        moduleInfoIterator.nextOrNull()?.takeIf { it.matchesWorkingDir() } ?: findMatchingModules()
-
-    return first.takeIf { it.matchesWorkingDir() } ?: findMatchingModules() ?: first
+    return moduleInfosIterator.asSequence().find { infos ->
+        infos.any { File(it.path).absoluteFile == workingDir }
+    } ?: first
 }

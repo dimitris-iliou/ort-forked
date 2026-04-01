@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ package org.ossreviewtoolkit.plugins.scanners.fossid
 
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.matchers.collections.beEmpty
+import io.kotest.matchers.collections.containExactly
 import io.kotest.matchers.collections.haveSize
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.should
@@ -148,6 +149,25 @@ class FossIdLicenseMappingTest : WordSpec({
                 snippets.first() shouldNotBeNull {
                     license shouldBe SpdxConstants.NOASSERTION.toSpdx()
                 }
+            }
+        }
+
+        "ignore plain text comments containing 'ort' substring" {
+            val testCases = listOf(
+                "MIT" to "See report for details",
+                "Apache-2.0" to "Please export this report"
+            )
+
+            testCases.forEach { (license, comment) ->
+                val sampleFile = createMarkAsIdentifiedFile(
+                    license, FILE_PATH, comment, includeLicensesWithComment = true
+                )
+                val issues = mutableListOf<Issue>()
+
+                val findings = listOf(sampleFile).mapSummary(emptyMap(), issues, emptyMap())
+
+                issues should beEmpty()
+                findings.licenseFindings.map { it.license.toString() } should containExactly(license)
             }
         }
     }

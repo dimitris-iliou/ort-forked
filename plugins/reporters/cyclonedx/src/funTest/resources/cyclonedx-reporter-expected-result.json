@@ -15,10 +15,11 @@
       ]
     },
     "component": {
-      "type": "file",
+      "type": "application",
       "bom-ref": "https://github.com/oss-review-toolkit/ort.git@main",
       "name": "https://github.com/oss-review-toolkit/ort.git",
-      "version": "main"
+      "group": "@ort",
+      "version": "1.0"
     },
     "licenses": [
       {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 
 package org.ossreviewtoolkit.clients.vulnerablecode
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNames
@@ -81,6 +82,8 @@ interface VulnerableCodeService {
     /**
      * Data class that represents a score assigned to a vulnerability. A source of vulnerability information can
      * provide multiple score values using different scoring systems.
+     *
+     * See https://github.com/aboutcode-org/vulnerablecode/blob/v36.1.3/vulnerabilities/api.py#L42-L44.
      */
     @Serializable
     data class Score(
@@ -100,6 +103,8 @@ interface VulnerableCodeService {
     /**
      * Data class representing a reference to detailed information about a vulnerability. Information about a single
      * vulnerability can come from multiple sources; for each of these sources a reference is added to the data.
+     *
+     * See https://github.com/aboutcode-org/vulnerablecode/blob/v36.1.3/vulnerabilities/api.py#L58-L60.
      */
     @Serializable
     data class VulnerabilityReference(
@@ -117,11 +122,17 @@ interface VulnerableCodeService {
 
     /**
      * Data class representing a single vulnerability with its references to detailed information.
+     *
+     * See https://github.com/aboutcode-org/vulnerablecode/blob/v36.1.3/vulnerabilities/api.py#L176-L188.
      */
     @Serializable
     data class Vulnerability(
         /** The VulnerableCode-specific identifier for this vulnerability. */
         val vulnerabilityId: String,
+
+        /** A description of the vulnerability. Older versions of VulnerableCode do not have this field. */
+        @SerialName("summary")
+        val description: String? = null,
 
         /** A list with [VulnerabilityReference]s pointing to sources of information about this vulnerability. */
         val references: List<VulnerabilityReference>,
@@ -138,6 +149,8 @@ interface VulnerableCodeService {
     /**
      * Data class describing a package in the result of a package query together with the vulnerabilities known for
      * this package.
+     *
+     * See https://github.com/aboutcode-org/vulnerablecode/blob/v36.1.3/vulnerabilities/api.py#L396-L413.
      */
     @Serializable
     data class PackageVulnerabilities(

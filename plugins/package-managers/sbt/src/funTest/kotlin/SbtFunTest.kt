@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import org.ossreviewtoolkit.analyzer.analyze
 import org.ossreviewtoolkit.analyzer.getAnalyzerResult
 import org.ossreviewtoolkit.model.config.PackageManagerConfiguration
 import org.ossreviewtoolkit.model.toYaml
-import org.ossreviewtoolkit.plugins.versioncontrolsystems.git.GitCommand
+import org.ossreviewtoolkit.utils.common.ProcessCapture
 import org.ossreviewtoolkit.utils.test.getAssetFile
 import org.ossreviewtoolkit.utils.test.matchExpectedResult
 import org.ossreviewtoolkit.utils.test.patchActualResult
@@ -40,7 +40,7 @@ class SbtFunTest : StringSpec({
         val expectedResult = matchExpectedResult(expectedResultFile, definitionFile)
 
         // Clean any previously generated POM files / target directories.
-        GitCommand.run(definitionFile.parentFile, "clean", "-fd").requireSuccess()
+        ProcessCapture("git", "clean", "-fd", workingDir = definitionFile.parentFile).requireSuccess()
 
         val result = analyze(
             definitionFile.parentFile,
@@ -59,7 +59,7 @@ class SbtFunTest : StringSpec({
         val expectedResult = matchExpectedResult(expectedResultFile, definitionFile)
 
         // Clean any previously generated POM files / target directories.
-        GitCommand.run(definitionFile.parentFile, "clean", "-fd").requireSuccess()
+        ProcessCapture("git", "clean", "-fd", workingDir = definitionFile.parentFile).requireSuccess()
 
         val result = analyze(
             definitionFile.parentFile,

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ package org.ossreviewtoolkit.evaluator
 
 import org.ossreviewtoolkit.model.OrtResult
 import org.ossreviewtoolkit.model.Severity
+import org.ossreviewtoolkit.utils.common.enumSetOf
 
 /**
  * A [Rule] to check an [OrtResult].
@@ -43,7 +44,7 @@ open class OrtResultRule(
             severity = severity,
             pkgId = null,
             license = null,
-            licenseSource = null,
+            licenseSources = enumSetOf(),
             message = message,
             howToFix = howToFix
         )
@@ -52,7 +53,7 @@ open class OrtResultRule(
         hint(
             pkgId = null,
             license = null,
-            licenseSource = null,
+            licenseSources = enumSetOf(),
             message = message,
             howToFix = howToFix
         )
@@ -61,7 +62,7 @@ open class OrtResultRule(
         warning(
             pkgId = null,
             license = null,
-            licenseSource = null,
+            licenseSources = enumSetOf(),
             message = message,
             howToFix = howToFix
         )
@@ -70,7 +71,7 @@ open class OrtResultRule(
         error(
             pkgId = null,
             license = null,
-            licenseSource = null,
+            licenseSources = enumSetOf(),
             message = message,
             howToFix = howToFix
         )

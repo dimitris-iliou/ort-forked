@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -63,7 +63,7 @@ class SpdxLicenseTest : WordSpec({
         "be correct for 'or later' non-GPL ids" {
             val gfdl11OrLater = SpdxLicense.forId("GFDL-1.1-or-later")
             gfdl11OrLater shouldNotBeNull {
-                text shouldMatchResource("/licenses/GFDL-1.1-or-later")
+                text shouldMatchResource "/licenses/GFDL-1.1-or-later"
             }
         }
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -135,14 +135,7 @@ data class FossIdConfig(
 
     /** Treat pending identifications as errors instead of hints. */
     @OrtPluginOption(defaultValue = "false")
-    val treatPendingIdentificationsAsError: Boolean,
-
-    /**
-     * Whether to delete uploaded content after scan completion. When set to false, archives remain on the
-     * FossID server, which can help diagnose archive upload issues.
-     */
-    @OrtPluginOption(defaultValue = "true")
-    val deleteUploadedArchiveAfterScan: Boolean
+    val treatPendingIdentificationsAsError: Boolean
 ) {
     init {
         require(deltaScanLimit > 0) {

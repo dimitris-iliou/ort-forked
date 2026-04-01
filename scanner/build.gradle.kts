@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,12 +37,6 @@ dependencies {
     implementation(libs.bundles.exposed)
     implementation(libs.kotlinx.coroutines)
     implementation(libs.postgres)
-    implementation(libs.sw360Client) {
-        constraints {
-            implementation("commons-io:commons-io:2.20.0")
-                .because("commons-io 2.11.0 is vulnerable by CVE-2024-47554")
-        }
-    }
 
     funTestImplementation(platform(projects.plugins.scanners))
     funTestImplementation(platform(projects.plugins.versionControlSystems))

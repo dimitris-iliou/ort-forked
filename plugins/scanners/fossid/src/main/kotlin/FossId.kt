@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -304,16 +304,7 @@ class FossId internal constructor(
                 val result = if (config.deltaScans) {
                     checkAndCreateDeltaScan(handler, scans, url, revision, projectCode, repositoryName, context)
                 } else {
-                    checkAndCreateScan(
-                        handler,
-                        scans,
-                        url,
-                        revision,
-                        projectCode,
-                        repositoryName,
-                        nestedProvenance,
-                        context
-                    )
+                    checkAndCreateScan(handler, url, revision, projectCode, repositoryName, context)
                 }
 
                 if (config.waitForResult && provenance is RepositoryProvenance) {
@@ -501,12 +492,10 @@ class FossId internal constructor(
     @Suppress("LongParameterList")
     private suspend fun checkAndCreateScan(
         handler: EventHandler,
-        scans: List<Scan>,
         url: String,
         revision: String,
         projectCode: String,
         projectName: String,
-        nestedProvenance: NestedProvenance?,
         context: ScanContext
     ): FossIdResult {
         val projectRevision = context.labels[PROJECT_REVISION_LABEL]
@@ -517,41 +506,18 @@ class FossId internal constructor(
             logger.info { "Project revision is '$projectRevision'." }
         }
 
-        val existingScan = scans.recentScansForRepository(
-            url,
-            revision = revision,
-            projectRevision = projectRevision
-        ).findLatestPendingOrFinishedScan()
+        logger.info { "Creating scan for $url and revision $revision..." }
 
-        val result = if (existingScan == null) {
-            logger.info { "No scan found for $url and revision $revision. Creating scan..." }
+        val scanCode = namingProvider.createScanCode(repositoryName = projectName, branch = revision)
+        val newUrl = handler.transformURL(url)
+        val scanId = createScan(handler, projectCode, scanCode, newUrl, revision, projectRevision.orEmpty())
 
-            val scanCode = namingProvider.createScanCode(repositoryName = projectName, branch = revision)
-            val newUrl = handler.transformURL(url)
-            val scanId = createScan(handler, projectCode, scanCode, newUrl, revision, projectRevision.orEmpty())
+        val issues = mutableListOf<Issue>()
+        handler.afterScanCreation(scanCode, null, issues, context)
 
-            val issues = mutableListOf<Issue>()
-            handler.afterScanCreation(scanCode, null, issues, context)
+        if (config.waitForResult) checkScan(handler, scanCode)
 
-            if (config.waitForResult) checkScan(handler, scanCode)
-
-            FossIdResult(scanCode, scanId, issues)
-        } else {
-            logger.info { "Scan '${existingScan.code}' found for $url and revision $revision." }
-
-            val existingScanCode = requireNotNull(existingScan.code) {
-                "The code for an existing scan must not be null."
-            }
-
-            // Create a specific handler for the existing scan.
-            val handlerForExistingScan = EventHandler.getHandler(existingScan, config, nestedProvenance, service)
-
-            if (config.waitForResult) checkScan(handlerForExistingScan, existingScan.code.orEmpty())
-
-            FossIdResult(existingScanCode, existingScan.id.toString())
-        }
-
-        return result
+        return FossIdResult(scanCode, scanId, issues)
     }
 
     /**
@@ -756,8 +722,11 @@ class FossId internal constructor(
 
             when (response.data?.status) {
                 ScanStatus.FINISHED -> true
+
                 ScanStatus.FAILED -> error("Scan waited for has failed.")
+
                 null -> false
+
                 else -> {
                     logger.info {
                         "Scan status for scan '$scanCode' is '${response.data?.status}'. Waiting..."
@@ -813,7 +782,16 @@ class FossId internal constructor(
             "${pendingFiles.size} pending files have been returned for scan '$scanCode'."
         }
 
-        pendingFiles += listUnmatchedSnippetChoices(markedAsIdentifiedFiles, snippetChoices).also { newPendingFiles ->
+        // Here the search for the archive prefix cannot be conditioned to config.isArchiveUploadMode because the
+        // current run could be configured in clone repository mode but the scan is a previous scan created in archive
+        // upload mode.
+        val archivePrefix = getArchivePrefix(pendingFiles, identifiedFiles, markedAsIdentifiedFiles, listIgnoredFiles)
+
+        pendingFiles += listUnmatchedSnippetChoices(
+            markedAsIdentifiedFiles,
+            snippetChoices,
+            archivePrefix
+        ).also { newPendingFiles ->
             newPendingFiles.map {
                 logger.info {
                     "Marked as identified file '$it' is not in .ort.yml anymore or its configuration has been " +
@@ -823,11 +801,6 @@ class FossId internal constructor(
                 service.unmarkAsIdentified(config.user.value, config.apiKey.value, scanCode, it, false)
             }
         }
-
-        // Here the search for the archive prefix cannot be conditioned to config.isArchiveUploadMode because the
-        // current run could be configured in clone repository mode but the scan is a previous scan created in archive
-        // upload mode.
-        val archivePrefix = getArchivePrefix(pendingFiles, identifiedFiles, markedAsIdentifiedFiles, listIgnoredFiles)
 
         val matchedLines = mutableMapOf<Int, MatchedLines>()
         val pendingFilesIterator = pendingFiles.iterator()
@@ -954,15 +927,17 @@ class FossId internal constructor(
 
         val fossIdScanUrl = buildFossIdScanUrl(config.serverUrl, result.scanId)
 
-        issues.add(
-            0,
-            Issue(
-                source = descriptor.id,
-                message = "This scan has $pendingFilesCount file(s) pending identification in FossID. " +
-                    "Please review and resolve them at: $fossIdScanUrl",
-                severity = if (config.treatPendingIdentificationsAsError) Severity.ERROR else Severity.HINT
+        if (pendingFilesCount > 0) {
+            issues.add(
+                0,
+                Issue(
+                    source = descriptor.id,
+                    message = "This scan has $pendingFilesCount file(s) pending identification in FossID. " +
+                        "Please review and resolve them at: $fossIdScanUrl",
+                    severity = if (config.treatPendingIdentificationsAsError) Severity.ERROR else Severity.HINT
+                )
             )
-        )
+        }
 
         val ignoredFiles = rawResults.listIgnoredFiles.associateBy { it.path }
 

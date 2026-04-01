@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,9 +37,8 @@ import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.fromYaml
 import org.ossreviewtoolkit.model.utils.toPurl
 import org.ossreviewtoolkit.plugins.packagemanagers.nuget.NuGetFactory
+import org.ossreviewtoolkit.plugins.packagemanagers.nuget.PACKAGE_TYPE
 import org.ossreviewtoolkit.utils.ort.DeclaredLicenseProcessor
-
-private const val TYPE = "NuGet"
 
 private fun List<NuGetInspector.Party>.toAuthors(): Set<String> =
     filter { it.role == "author" }.mapNotNullTo(mutableSetOf()) { party ->
@@ -86,9 +85,9 @@ internal fun NuGetInspector.Result.toOrtProject(
 
 private fun NuGetInspector.PackageData.getIdentifierWithNamespace(): Identifier =
     if (namespace.isNullOrEmpty()) {
-        getIdentifierWithNamespace(TYPE, name, version.orEmpty())
+        getIdentifierWithNamespace(PACKAGE_TYPE, name, version.orEmpty())
     } else {
-        Identifier(TYPE, namespace, name, version.orEmpty())
+        Identifier(PACKAGE_TYPE, namespace, name, version.orEmpty())
     }
 
 private fun List<NuGetInspector.PackageData>.toPackageReferences(): Set<PackageReference> =

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2025 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,5 +32,12 @@ data class GitConfig(
 
     /** Whether nested submodules should be updated, or if only top-level submodules should be considered. */
     @OrtPluginOption(defaultValue = "true")
-    val updateNestedSubmodules: Boolean
+    val updateNestedSubmodules: Boolean,
+
+    /**
+     * Whether to force SSH / SCP URLs (which always require authentication) to use HTTPS instead (which might work
+     * without authentication).
+     */
+    @OrtPluginOption(defaultValue = "false")
+    val replaceSshWithHttps: Boolean
 )

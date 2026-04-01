@@ -1,0 +1,443 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "install": {
+      "askalono": {
+        "pkg-path": "askalono",
+        "version": "0.5.0"
+      },
+      "coreutils": {
+        "pkg-path": "coreutils"
+      },
+      "findutils": {
+        "pkg-path": "findutils"
+      },
+      "gnused": {
+        "pkg-path": "gnused"
+      },
+      "jdk21": {
+        "pkg-path": "jdk21"
+      },
+      "licensee": {
+        "pkg-path": "licensee",
+        "version": "9.18.0"
+      },
+      "scancode": {
+        "pkg-path": "python314Packages.scancode-toolkit",
+        "version": "32.5.0"
+      }
+    },
+    "vars": {
+      "FLOX_DISABLE_METRICS": "true"
+    },
+    "options": {
+      "systems": [
+        "x86_64-linux"
+      ],
+      "cuda-detection": false,
+      "activate": {
+        "mode": "run"
+      }
+    }
+  },
+  "packages": [
+    {
+      "attr_path": "askalono",
+      "broken": false,
+      "derivation": "/nix/store/b4kwp8pq40al2fz2gvph8fc32x4s0jba-askalono-0.5.0.drv",
+      "description": "Tool to detect open source licenses from texts",
+      "install_id": "askalono",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=00c21e4c93d963c50d4c0c89bfa84ed6e0694df2",
+      "name": "askalono-0.5.0",
+      "pname": "askalono",
+      "rev": "00c21e4c93d963c50d4c0c89bfa84ed6e0694df2",
+      "rev_count": 940249,
+      "rev_date": "2026-02-04T09:32:58Z",
+      "scrape_date": "2026-02-06T06:05:45.496996Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "0.5.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/v47wlr4kv7wjhg5bx2cj5fxfgvli08qn-askalono-0.5.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "coreutils",
+      "broken": false,
+      "derivation": "/nix/store/vkg1vry71m6v7mnp6n2v1nnx6s27bjc2-coreutils-9.9.drv",
+      "description": "GNU Core Utilities",
+      "install_id": "coreutils",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=00c21e4c93d963c50d4c0c89bfa84ed6e0694df2",
+      "name": "coreutils-9.9",
+      "pname": "coreutils",
+      "rev": "00c21e4c93d963c50d4c0c89bfa84ed6e0694df2",
+      "rev_count": 940249,
+      "rev_date": "2026-02-04T09:32:58Z",
+      "scrape_date": "2026-02-06T06:05:46.098477Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "9.9",
+      "outputs_to_install": [
+        "out",
+        "out",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/fzcbb02abzvmyrvpa360abfbspnz9l1j-coreutils-9.9-debug",
+        "info": "/nix/store/7c3i7919ys6jk8qkccspz3bkc1lv82d9-coreutils-9.9-info",
+        "out": "/nix/store/i2vmgx46q9hd3z6rigaiman3wl3i2gc4-coreutils-9.9"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "findutils",
+      "broken": false,
+      "derivation": "/nix/store/j03vi5rbki1d6pk6zacqq7vrq2y7s9m1-findutils-4.10.0.drv",
+      "description": "GNU Find Utilities, the basic directory searching utilities of the GNU operating system",
+      "install_id": "findutils",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=00c21e4c93d963c50d4c0c89bfa84ed6e0694df2",
+      "name": "findutils-4.10.0",
+      "pname": "findutils",
+      "rev": "00c21e4c93d963c50d4c0c89bfa84ed6e0694df2",
+      "rev_count": 940249,
+      "rev_date": "2026-02-04T09:32:58Z",
+      "scrape_date": "2026-02-06T06:05:46.893708Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "4.10.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "info": "/nix/store/r7ij2k3ps4jzj68yisgxis2bq5f7lacf-findutils-4.10.0-info",
+        "locate": "/nix/store/p99ac3k0wfj0l79wxrhym8viyk6h1d73-findutils-4.10.0-locate",
+        "out": "/nix/store/16wfacfgap3chf7mcjnd8dwi85dj4qqi-findutils-4.10.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gnused",
+      "broken": false,
+      "derivation": "/nix/store/l9v6k09j2rgf7v93qz1b2j7r49cif497-gnused-4.9.drv",
+      "description": "GNU sed, a batch stream editor",
+      "install_id": "gnused",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=00c21e4c93d963c50d4c0c89bfa84ed6e0694df2",
+      "name": "gnused-4.9",
+      "pname": "gnused",
+      "rev": "00c21e4c93d963c50d4c0c89bfa84ed6e0694df2",
+      "rev_count": 940249,
+      "rev_date": "2026-02-04T09:32:58Z",
+      "scrape_date": "2026-02-06T06:05:47.951430Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "4.9",
+      "outputs_to_install": [
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "info": "/nix/store/rr44gnjkn0j0h67blxaf7c69w6y5xv03-gnused-4.9-info",
+        "out": "/nix/store/ryz8kcrm2bxpccllfqlb7qldsfnqp5c2-gnused-4.9"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "jdk21",
+      "broken": false,
+      "derivation": "/nix/store/ii3a9afh8k1j8nikv12269mvrr1i4j9b-openjdk-21.0.9+10.drv",
+      "description": "Open-source Java Development Kit",
+      "install_id": "jdk21",
+      "license": "GPL-2.0-only",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=00c21e4c93d963c50d4c0c89bfa84ed6e0694df2",
+      "name": "openjdk-21.0.9+10",
+      "pname": "jdk21",
+      "rev": "00c21e4c93d963c50d4c0c89bfa84ed6e0694df2",
+      "rev_count": 940249,
+      "rev_date": "2026-02-04T09:32:58Z",
+      "scrape_date": "2026-02-06T06:06:07.096726Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "21.0.9+10",
+      "outputs_to_install": [
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/n262v22apasz3ng8gfhvccp43diynkn6-openjdk-21.0.9+10-debug",
+        "out": "/nix/store/yb16bzvkdimkgczlw30pkhfxnzal26ks-openjdk-21.0.9+10"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "licensee",
+      "broken": false,
+      "derivation": "/nix/store/3m7rjdd7v9nfkhjgr3qh45pyh3xija0c-licensee-9.18.0.drv",
+      "description": "Ruby Gem to detect under what license a project is distributed",
+      "install_id": "licensee",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=00c21e4c93d963c50d4c0c89bfa84ed6e0694df2",
+      "name": "licensee-9.18.0",
+      "pname": "licensee",
+      "rev": "00c21e4c93d963c50d4c0c89bfa84ed6e0694df2",
+      "rev_count": 940249,
+      "rev_date": "2026-02-04T09:32:58Z",
+      "scrape_date": "2026-02-06T06:06:11.687132Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "9.18.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/m40zxbr0qqb59p9i9i1zkshybq67ra0k-licensee-9.18.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python314Packages.scancode-toolkit",
+      "broken": false,
+      "derivation": "/nix/store/na5bpz8ha2ig367mrg2hqcgvk27nbv7h-python3.14-scancode-toolkit-32.5.0.drv",
+      "description": "Tool to scan code for license, copyright, package and their documented dependencies and other interesting facts",
+      "install_id": "scancode",
+      "license": "[ Apache-2.0, CC-BY-4.0 ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=00c21e4c93d963c50d4c0c89bfa84ed6e0694df2",
+      "name": "python3.14-scancode-toolkit-32.5.0",
+      "pname": "scancode-toolkit",
+      "rev": "00c21e4c93d963c50d4c0c89bfa84ed6e0694df2",
+      "rev_count": 940249,
+      "rev_date": "2026-02-04T09:32:58Z",
+      "scrape_date": "2026-02-06T06:07:34.528433Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "32.5.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/dg16m8i2yl9rv1jq1lnlrhw8m3bk8kx3-python3.14-scancode-toolkit-32.5.0-dist",
+        "out": "/nix/store/850cbv17kbxr1v9sfxrqvyjwwq5gcv8h-python3.14-scancode-toolkit-32.5.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ],
+  "compose": {
+    "composer": {
+      "version": 1,
+      "vars": {
+        "FLOX_DISABLE_METRICS": "true"
+      },
+      "options": {
+        "systems": [
+          "x86_64-linux"
+        ],
+        "cuda-detection": false,
+        "activate": {
+          "mode": "run"
+        }
+      },
+      "include": {
+        "environments": [
+          {
+            "dir": "../minimal"
+          },
+          {
+            "dir": "../../plugins/scanners"
+          }
+        ]
+      }
+    },
+    "include": [
+      {
+        "manifest": {
+          "version": 1,
+          "install": {
+            "coreutils": {
+              "pkg-path": "coreutils"
+            },
+            "findutils": {
+              "pkg-path": "findutils"
+            },
+            "gnused": {
+              "pkg-path": "gnused"
+            },
+            "jdk21": {
+              "pkg-path": "jdk21"
+            }
+          },
+          "vars": {
+            "FLOX_DISABLE_METRICS": "true"
+          },
+          "options": {
+            "systems": [
+              "x86_64-linux"
+            ],
+            "cuda-detection": false,
+            "activate": {
+              "mode": "run"
+            }
+          }
+        },
+        "name": "ort-flox",
+        "descriptor": {
+          "dir": "../minimal"
+        }
+      },
+      {
+        "manifest": {
+          "version": 1,
+          "install": {
+            "askalono": {
+              "pkg-path": "askalono",
+              "version": "0.5.0"
+            },
+            "licensee": {
+              "pkg-path": "licensee",
+              "version": "9.18.0"
+            },
+            "scancode": {
+              "pkg-path": "python314Packages.scancode-toolkit",
+              "version": "32.5.0"
+            }
+          },
+          "vars": {
+            "FLOX_DISABLE_METRICS": "true"
+          },
+          "options": {
+            "systems": [
+              "x86_64-linux"
+            ],
+            "cuda-detection": false,
+            "activate": {
+              "mode": "run"
+            }
+          }
+        },
+        "name": "scanners",
+        "descriptor": {
+          "dir": "../../plugins/scanners"
+        }
+      }
+    ],
+    "warnings": [
+      {
+        "warning": {
+          "Overriding": [
+            "vars",
+            "FLOX_DISABLE_METRICS"
+          ]
+        },
+        "higher_priority_name": "scanners"
+      },
+      {
+        "warning": {
+          "Overriding": [
+            "options",
+            "activate",
+            "mode"
+          ]
+        },
+        "higher_priority_name": "scanners"
+      },
+      {
+        "warning": {
+          "Overriding": [
+            "options",
+            "cuda-detection"
+          ]
+        },
+        "higher_priority_name": "scanners"
+      },
+      {
+        "warning": {
+          "Overriding": [
+            "options",
+            "systems"
+          ]
+        },
+        "higher_priority_name": "scanners"
+      },
+      {
+        "warning": {
+          "Overriding": [
+            "vars",
+            "FLOX_DISABLE_METRICS"
+          ]
+        },
+        "higher_priority_name": "Current manifest"
+      },
+      {
+        "warning": {
+          "Overriding": [
+            "options",
+            "activate",
+            "mode"
+          ]
+        },
+        "higher_priority_name": "Current manifest"
+      },
+      {
+        "warning": {
+          "Overriding": [
+            "options",
+            "cuda-detection"
+          ]
+        },
+        "higher_priority_name": "Current manifest"
+      },
+      {
+        "warning": {
+          "Overriding": [
+            "options",
+            "systems"
+          ]
+        },
+        "higher_priority_name": "Current manifest"
+      }
+    ]
+  }
+}

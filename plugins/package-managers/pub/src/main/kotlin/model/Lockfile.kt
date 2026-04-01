@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +39,9 @@ import kotlinx.serialization.encoding.Decoder
 
 import org.ossreviewtoolkit.plugins.packagemanagers.pub.model.PackageInfo.Description
 
-internal fun parseLockfile(lockfile: File) = YAML.decodeFromString<Lockfile>(lockfile.readText())
+internal fun parseLockfile(lockfile: File) = parseLockfile(lockfile.readText())
+
+internal fun parseLockfile(lockfile: String) = YAML.decodeFromString<Lockfile>(lockfile)
 
 /**
  * See https://github.com/dart-lang/pub/blob/d86e3c979a3889fed61b68dae9f9156d0891704d/lib/src/lock_file.dart#L18.
@@ -72,11 +74,12 @@ internal data class PackageInfo(
     )
 }
 
-private object DescriptionDeserializer : KSerializer<Description> by Description.generatedSerializer() {
-    @OptIn(InternalSerializationApi::class)
+internal object DescriptionDeserializer : KSerializer<Description> by Description.generatedSerializer() {
     override val descriptor: SerialDescriptor by lazy {
         val serialName = checkNotNull(Description::class.qualifiedName)
 
+        // The YAML implementation requires a contextual descriptor, or otherwise `deserialize()` is not even called.
+        @OptIn(InternalSerializationApi::class)
         buildSerialDescriptor(serialName, SerialKind.CONTEXTUAL) {
             element("object", Description.generatedSerializer().descriptor)
             element("string", PrimitiveSerialDescriptor("description", PrimitiveKind.STRING))
@@ -84,14 +87,14 @@ private object DescriptionDeserializer : KSerializer<Description> by Description
     }
 
     override fun deserialize(decoder: Decoder): Description {
-        val input = decoder.beginStructure(descriptor) as YamlInput
+        require(decoder is YamlInput) {
+            "Only YAML input is supported."
+        }
 
-        val result = when (val node = input.node) {
+        val result = when (val node = decoder.node) {
             is YamlScalar -> Description(name = node.content)
             else -> Description.generatedSerializer().deserialize(decoder)
         }
-
-        input.endStructure(descriptor)
 
         return result
     }

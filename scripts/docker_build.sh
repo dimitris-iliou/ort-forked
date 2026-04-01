@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Copyright (C) 2020 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+# Copyright (C) 2020 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -153,6 +153,27 @@ image_build haskell ort/haskell "$HASKELL_STACK_VERSION" \
     --build-context "base=docker-image://${DOCKER_IMAGE_ROOT}/ort/base:latest" \
     "$@"
 
+# Gleam
+image_build gleam ort/gleam "$GLEAM_VERSION" \
+    --build-arg GLEAM_VERSION="$GLEAM_VERSION" \
+    --build-context "base=docker-image://${DOCKER_IMAGE_ROOT}/ort/base:latest" \
+    --build-context "gobuild=docker-image://${DOCKER_IMAGE_ROOT}/ort/golang:latest" \
+    "$@"
+
+# Mix SBoM (Elixir)
+image_build elixir ort/elixir "$MIX_SBOM_VERSION" \
+    --build-arg MIX_SBOM_VERSION="$MIX_SBOM_VERSION" \
+    --build-arg COSIGN_VERSION="$COSIGN_VERSION" \
+    --build-context "base=docker-image://${DOCKER_IMAGE_ROOT}/ort/base:latest" \
+    "$@"
+
+# Bombom (Erlang/Rebar3)
+image_build erlang ort/erlang "$BOMBOM_VERSION" \
+    --build-arg BOMBOM_VERSION="$BOMBOM_VERSION" \
+    --build-arg COSIGN_VERSION="$COSIGN_VERSION" \
+    --build-context "base=docker-image://${DOCKER_IMAGE_ROOT}/ort/base:latest" \
+    "$@"
+
 # Main runtime ORT image
 image_build run ort "$ORT_VERSION" \
     --build-arg ORT_VERSION="$ORT_VERSION" \
@@ -164,4 +185,7 @@ image_build run ort "$ORT_VERSION" \
     --build-context "dart=docker-image://${DOCKER_IMAGE_ROOT}/ort/dart:latest" \
     --build-context "haskell=docker-image://${DOCKER_IMAGE_ROOT}/ort/haskell:latest" \
     --build-context "scala=docker-image://${DOCKER_IMAGE_ROOT}/ort/scala:latest" \
+    --build-context "gleam=docker-image://${DOCKER_IMAGE_ROOT}/ort/gleam:latest" \
+    --build-context "elixir=docker-image://${DOCKER_IMAGE_ROOT}/ort/elixir:latest" \
+    --build-context "erlang=docker-image://${DOCKER_IMAGE_ROOT}/ort/erlang:latest" \
     "$@"

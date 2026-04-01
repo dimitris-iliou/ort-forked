@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -96,7 +96,9 @@ private class ResponseCache {
     val vulnerabilityViewsForOriginViewKey = ConcurrentHashMap<String, List<VulnerabilityView>>()
 }
 
-private val OriginView.key: String get() = "$externalNamespace:$externalId"
+private val OriginView.key: String
+    get() = "$externalNamespace:$externalId"
+
 private val ComponentsView.key: String
     // Only take the UUID of the version and variant, to avoid including the server URL into the key, to avoid
     // complexities related to the replacement of the server URL.

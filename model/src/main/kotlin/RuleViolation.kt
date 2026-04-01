@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@
  */
 
 package org.ossreviewtoolkit.model
+
+import java.util.EnumSet
 
 import org.ossreviewtoolkit.utils.spdx.SpdxSingleLicenseExpression
 
@@ -38,9 +40,9 @@ data class RuleViolation(
     val license: SpdxSingleLicenseExpression?,
 
     /**
-     * The [source][LicenseSource] of the [license]. Can be null if the rule does not work on licenses.
+     * The [sources][licenseSources] of the [license]. Can be empty if the rule does not work on licenses.
      */
-    val licenseSource: LicenseSource?,
+    val licenseSources: EnumSet<LicenseSource>,
 
     /**
      * The severity of the rule violation.

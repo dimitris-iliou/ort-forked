@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -170,8 +170,11 @@ class SpdxExpressionParser(
             next = iterator.nextOrNull()
             val exception = when (next) {
                 is Token.IDENTIFIER -> consume<Token.IDENTIFIER>().value
+
                 is Token.LICENSEREF -> consume<Token.LICENSEREF>().value
+
                 is Token.DOCUMENTREF -> "${consume<Token.DOCUMENTREF>().value}:${consume<Token.LICENSEREF>().value}"
+
                 else -> throw SpdxExpressionParserException(
                     next,
                     Token.IDENTIFIER::class,

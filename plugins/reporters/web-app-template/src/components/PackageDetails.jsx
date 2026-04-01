@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@
  */
 
 import { Descriptions } from 'antd';
+
+import { renderAnchor } from './Shared';
 
 const { Item } = Descriptions;
 
@@ -46,16 +48,6 @@ const PackageDetails = ({ webAppPackage }) => {
         }
     } = webAppPackage;
 
-    const renderAhref = (text, href) => (
-        <a
-            href={href || text}
-            rel="noopener noreferrer"
-            target="_blank"
-        >
-            {text}
-        </a>
-    );
-
     return (
         <Descriptions
             className="ort-package-details"
@@ -77,12 +69,14 @@ const PackageDetails = ({ webAppPackage }) => {
                 )
             }
             {
-                !!isProject && <Item
+                !!isProject && (
+                    <Item
                         label="Defined in"
                         key="ort-package-definition-file-path"
                     >
                         {definitionFilePath}
                     </Item>
+                )
             }
             {
                 webAppPackage.hasAuthors()
@@ -96,20 +90,24 @@ const PackageDetails = ({ webAppPackage }) => {
                 )
             }
             {
-                !!description && <Item
+                !!description && (
+                    <Item
                         label="Description"
                         key="ort-package-description"
                     >
                         {description}
                     </Item>
+                )
             }
             {
-                !!homepageUrl && <Item
+                !!homepageUrl && (
+                    <Item
                         label="Homepage"
                         key="ort-package-homepage"
                     >
-                        {renderAhref(homepageUrl)}
+                        {renderAnchor(homepageUrl)}
                     </Item>
+                )
             }
             {
                 !!vcsUrl
@@ -118,7 +116,7 @@ const PackageDetails = ({ webAppPackage }) => {
                         label="Declared Repository"
                         key="ort-package-vcs-url"
                     >
-                        {renderAhref(vcsUrl)}
+                        {renderAnchor(vcsUrl)}
                     </Item>
                 )
             }
@@ -152,7 +150,7 @@ const PackageDetails = ({ webAppPackage }) => {
                         label="Processed Repository"
                         key="ort-package-vcs-processed-url"
                     >
-                        {renderAhref(vcsProcessedUrl)}
+                        {renderAnchor(vcsProcessedUrl)}
                     </Item>
                 )
             }
@@ -185,7 +183,7 @@ const PackageDetails = ({ webAppPackage }) => {
                         label="Source Artifact"
                         key="ort-package-source-artifact"
                     >
-                        {renderAhref(sourceArtifact.url)}
+                        {renderAnchor(sourceArtifact.url)}
                     </Item>
                 )
             }
@@ -196,7 +194,7 @@ const PackageDetails = ({ webAppPackage }) => {
                         label="Binary Artifact"
                         key="ort-package-binary-artifact"
                     >
-                        {renderAhref(binaryArtifact.url)}
+                        {renderAnchor(binaryArtifact.url)}
                     </Item>
                 )
             }

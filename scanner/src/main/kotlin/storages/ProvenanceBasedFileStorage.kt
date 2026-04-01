@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -126,6 +126,7 @@ class ProvenanceBasedFileStorage(private val backend: FileStorage) : ProvenanceB
 private fun storagePath(provenance: KnownProvenance) =
     when (provenance) {
         is ArtifactProvenance -> "artifact/${provenance.sourceArtifact.url.fileSystemEncode()}/$SCAN_RESULTS_FILE_NAME"
+
         is RepositoryProvenance -> {
             "repository/${provenance.vcsInfo.type.toString().fileSystemEncode()}" +
                 "/${provenance.vcsInfo.url.fileSystemEncode()}" +

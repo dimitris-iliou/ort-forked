@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,6 +38,7 @@ import org.ossreviewtoolkit.utils.common.alsoIfNull
 private const val TYPE = "PackageManagerDependency"
 
 private fun String.encodeColon() = replace(':', '\u0000')
+
 private fun String.decodeColon() = replace('\u0000', ':')
 
 /**
@@ -80,17 +81,25 @@ fun PackageManagerDependency.toPackageReference(issues: List<Issue> = emptyList(
     )
 
 /**
+ * Indicate whether this dependency is a package manager dependency.
+ */
+internal val DependencyNode.isPackageManagerDependency: Boolean
+    get() = id.type == TYPE
+
+/**
  * Decode this dependency node into a [PackageManagerDependency], or return null if this is not a package manager
  * dependency.
  */
 internal fun DependencyNode.toPackageManagerDependency(): PackageManagerDependency? =
-    id.type.takeIf { it == TYPE }?.let {
+    if (isPackageManagerDependency) {
         PackageManagerDependency(
             packageManager = id.namespace,
             definitionFile = id.name.decodeColon(),
             scope = id.version.substringAfter('@'),
             linkage = PackageLinkage.valueOf(id.version.substringBefore('@'))
         )
+    } else {
+        null
     }
 
 /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,7 +45,7 @@ import org.semver4j.Semver
 import org.semver4j.range.RangeList
 import org.semver4j.range.RangeListFactory
 
-object ScanCodeCommand : CommandLineTool {
+internal object ScanCodeCommand : CommandLineTool {
     override fun command(workingDir: File?): String {
         val executable = if (Os.isWindows) {
             // Installing ScanCode as a developer from the distribution archive provides a "scancode.bat", while

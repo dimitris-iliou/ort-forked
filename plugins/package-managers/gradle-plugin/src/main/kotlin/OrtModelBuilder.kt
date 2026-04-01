@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,8 +50,6 @@ import org.gradle.util.GradleVersion
 
 internal class OrtModelBuilder : ToolingModelBuilder {
     private val repositories = mutableMapOf<String, UrlArtifactRepository>()
-
-    private val platformCategories = setOf("platform", "enforced-platform")
 
     private val logger = Logging.getLogger(OrtModelBuilder::class.java)
     private val errors = mutableListOf<String>()
@@ -157,13 +155,6 @@ internal class OrtModelBuilder : ToolingModelBuilder {
         }.mapNotNull { dep ->
             when (dep) {
                 is ResolvedDependencyResult -> {
-                    val attributes = dep.resolvedVariant.attributes
-
-                    // Ignore BOMs as they do not define dependencies but version constraints, see
-                    // https://docs.gradle.org/current/userguide/platforms.html#sub:bom_import.
-                    val isBom = attributes.getValueByName("org.gradle.category") in platformCategories
-                    if (isBom) return@mapNotNull null
-
                     val selectedComponent = dep.selected
                     val id = selectedComponent.id
 
@@ -226,7 +217,11 @@ internal class OrtModelBuilder : ToolingModelBuilder {
                                 version = id.version,
                                 classifier = "",
                                 extension = modelBuildingResult?.effectiveModel?.packaging.orEmpty(),
-                                variants = selectedComponent.variants.mapTo(mutableSetOf()) { it.displayName },
+                                variants = selectedComponent.variants.associate {
+                                    it.displayName to it.attributes.keySet().associate { key ->
+                                        key.name to it.attributes.getAttribute(key)?.toString().orEmpty()
+                                    }
+                                },
                                 dependencies = dependencies,
                                 error = null,
                                 warning = null,
@@ -256,7 +251,11 @@ internal class OrtModelBuilder : ToolingModelBuilder {
                                 version = moduleId.version.takeUnless { it == "unspecified" }.orEmpty(),
                                 classifier = "",
                                 extension = "",
-                                variants = selectedComponent.variants.mapTo(mutableSetOf()) { it.displayName },
+                                variants = selectedComponent.variants.associate {
+                                    it.displayName to it.attributes.keySet().associate { key ->
+                                        key.name to it.attributes.getAttribute(key)?.toString().orEmpty()
+                                    }
+                                },
                                 dependencies = dependencies,
                                 error = null,
                                 warning = null,
@@ -329,9 +328,9 @@ private fun StringBuilder.appendCauses(exception: Throwable) {
         appendLine(" Causes are:")
         val allCauses = mutableSetOf<String>()
 
-        fun getAllCauses(exception: Throwable) {
-            exception.message?.also(allCauses::add)
-            exception.cause?.also { getAllCauses(it) }
+        fun getAllCauses(throwable: Throwable) {
+            throwable.message?.also(allCauses::add)
+            throwable.cause?.also { getAllCauses(it) }
         }
 
         causes.forEach { getAllCauses(it) }

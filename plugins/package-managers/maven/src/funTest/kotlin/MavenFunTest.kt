@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import org.ossreviewtoolkit.analyzer.resolveScopes
 import org.ossreviewtoolkit.analyzer.resolveSingleProject
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.toYaml
 import org.ossreviewtoolkit.utils.common.Os
 import org.ossreviewtoolkit.utils.common.getCommonParentFile
@@ -59,7 +60,14 @@ class MavenFunTest : StringSpec({
             val analysisRoot = getCommonParentFile(definitionFiles)
             val config = AnalyzerConfiguration()
             beforeResolution(analysisRoot, definitionFiles, config)
-            resolveDependencies(analysisRoot, definitionFiles, Excludes.EMPTY, config, emptyMap()).also {
+            resolveDependencies(
+                analysisRoot,
+                definitionFiles,
+                Excludes.EMPTY,
+                Includes.EMPTY,
+                config,
+                emptyMap()
+            ).also {
                 afterResolution(analysisRoot, definitionFiles)
             }
         }

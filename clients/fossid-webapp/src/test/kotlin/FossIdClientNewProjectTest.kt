@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2020 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -77,7 +77,7 @@ class FossIdClientNewProjectTest : StringSpec({
     "Project can be created" {
         service.createProject("", "", PROJECT_CODE, PROJECT_CODE) shouldNotBeNull {
             checkResponse("create project")
-            data.shouldNotBeNull() shouldContain("project_id" to "405")
+            data.shouldNotBeNull() shouldContain ("project_id" to "405")
         }
     }
 

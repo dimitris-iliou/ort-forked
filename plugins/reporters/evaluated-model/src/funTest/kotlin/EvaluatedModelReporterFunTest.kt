@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,31 +39,35 @@ class EvaluatedModelReporterFunTest : WordSpec({
             outputDir = tempdir()
         ).single().getOrThrow().readText().normalizeLineBreaks()
 
+    val ortResult by lazy { readOrtResult("/reporter-test-input.yml") }
+
     "EvaluatedModelReporter" should {
         "create the expected JSON output" {
             val expectedResult = readResource("/evaluated-model-reporter-test-expected-output.json")
-            val ortResult = readOrtResult("/reporter-test-input.yml")
 
-            EvaluatedModelReporterFactory.create().generateReport(ortResult) shouldBe expectedResult
+            val result = EvaluatedModelReporterFactory.create().generateReport(ortResult)
+
+            result shouldBe expectedResult
         }
 
         "create the expected YAML output" {
             val expectedResult = readResource("/evaluated-model-reporter-test-expected-output.yml")
-            val ortResult = readOrtResult("/reporter-test-input.yml")
 
-            EvaluatedModelReporterFactory.create(
-                outputFileFormats = listOf("yml")
-            ).generateReport(ortResult) shouldBe expectedResult
+            val result = EvaluatedModelReporterFactory
+                .create(outputFileFormats = listOf(ConfigFileFormat.YAML))
+                .generateReport(ortResult)
+
+            result shouldBe expectedResult
         }
 
         "create the expected YAML output with dependency tree de-duplication enabled" {
             val expectedResult = readResource("/evaluated-model-reporter-test-deduplicate-expected-output.yml")
-            val ortResult = readOrtResult("/reporter-test-input.yml")
 
-            EvaluatedModelReporterFactory.create(
-                outputFileFormats = listOf("yml"),
-                deduplicateDependencyTree = true
-            ).generateReport(ortResult) shouldBe expectedResult
+            val result = EvaluatedModelReporterFactory
+                .create(outputFileFormats = listOf(ConfigFileFormat.YAML), deduplicateDependencyTree = true)
+                .generateReport(ortResult)
+
+            result shouldBe expectedResult
         }
     }
 })

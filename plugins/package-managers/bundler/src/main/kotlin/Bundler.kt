@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,9 +33,7 @@ import org.jruby.embed.ScriptingContainer
 
 import org.ossreviewtoolkit.analyzer.PackageManager
 import org.ossreviewtoolkit.analyzer.PackageManagerFactory
-import org.ossreviewtoolkit.downloader.VcsHost
 import org.ossreviewtoolkit.downloader.VersionControlSystem
-import org.ossreviewtoolkit.model.Hash
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.Issue
 import org.ossreviewtoolkit.model.Package
@@ -47,8 +45,8 @@ import org.ossreviewtoolkit.model.Scope
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.createAndLogIssue
-import org.ossreviewtoolkit.model.orEmpty
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.utils.common.AlphaNumericComparator
@@ -60,24 +58,19 @@ import org.ossreviewtoolkit.utils.ort.downloadText
 import org.ossreviewtoolkit.utils.ort.okHttpClient
 import org.ossreviewtoolkit.utils.ort.showStackTrace
 
-/**
- * The name of the helper script resource that resolves a `Gemfile`'s top-level dependencies with group information.
- */
+private const val PROJECT_TYPE = "Bundler"
+private const val PACKAGE_TYPE = "Gem"
+
+/** The name of the helper script resource that resolves a `Gemfile`'s top-level dependencies with group information. */
 private const val ROOT_DEPENDENCIES_SCRIPT_RESOURCE_NAME = "root_dependencies.rb"
 
-/**
- * The name of the helper script resource that resolves a `Gemfile`'s dependencies.
- */
+/** The name of the helper script resource that resolves a `Gemfile`'s dependencies. */
 private const val RESOLVE_DEPENDENCIES_SCRIPT_RESOURCE_NAME = "resolve_dependencies.rb"
 
-/**
- * The name of the Bundler Gem.
- */
+/** The name of the Bundler Gem. */
 private const val BUNDLER_GEM_NAME = "bundler"
 
-/**
- * The name of the file where Bundler stores locked down dependency information.
- */
+/** The name of the file where Bundler stores locked down dependency information. */
 internal const val BUNDLER_LOCKFILE_NAME = "Gemfile.lock"
 
 private fun runScriptCode(sourceCode: String, workingDir: File? = null): Any? {
@@ -129,7 +122,7 @@ data class BundlerConfig(
 class Bundler(
     override val descriptor: PluginDescriptor = BundlerFactory.descriptor,
     private val config: BundlerConfig
-) : PackageManager("Bundler") {
+) : PackageManager(PROJECT_TYPE) {
     override val globsForDefinitionFiles = listOf("Gemfile")
 
     override fun beforeResolution(
@@ -171,9 +164,8 @@ class Bundler(
         }
 
         runCatching {
-            val code = "Gem::Specification.find_by_name('$BUNDLER_GEM_NAME').version"
-            val result = runScriptCode(code) as String
-            result.trim()
+            val code = "Gem::Specification.find_by_name('$BUNDLER_GEM_NAME').version.to_s"
+            runScriptCode(code) as String
         }.onSuccess { installedBundlerVersion ->
             logger.info { "Using the '$BUNDLER_GEM_NAME' Gem in version $installedBundlerVersion." }
         }.onFailure {
@@ -185,6 +177,7 @@ class Bundler(
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {
@@ -264,7 +257,7 @@ class Bundler(
 
         runCatching {
             val gemInfo = gemsInfo.getValue(gemName)
-            val gemId = Identifier("Gem", "", gemInfo.name, gemInfo.version)
+            val gemId = Identifier(PACKAGE_TYPE, "", gemInfo.name, gemInfo.version)
 
             // The project itself can be listed as a dependency if the project is a gem (i.e. there is a .gemspec file
             // for it, and the Gemfile refers to it). In that case, skip querying RubyGems and adding Package and
@@ -332,7 +325,7 @@ class Bundler(
         )
 
     private fun getPackageFromGemInfo(gemInfo: GemInfo): Package {
-        val gemId = Identifier("Gem", "", gemInfo.name, gemInfo.version)
+        val gemId = Identifier(PACKAGE_TYPE, "", gemInfo.name, gemInfo.version)
 
         return Package(
             id = gemId,
@@ -348,7 +341,7 @@ class Bundler(
     }
 
     private fun getGemspecFile(workingDir: File) =
-        workingDir.walk().maxDepth(1).filter { it.isFile && it.extension == "gemspec" }.firstOrNull()
+        workingDir.walk().maxDepth(1).firstOrNull { it.isFile && it.extension == "gemspec" }
 
     private fun queryRubyGems(name: String, version: String, retryCount: Int = 3): GemInfo? {
         // NOTE: Explicitly use platform=ruby here to enforce the same behavior here that is also used in the Bundler
@@ -395,91 +388,5 @@ class Bundler(
                 }
             }
         }.getOrNull()
-    }
-}
-
-internal data class GemInfo(
-    val name: String,
-    val version: String,
-    val homepageUrl: String,
-    val authors: Set<String>,
-    val declaredLicenses: Set<String>,
-    val description: String,
-    val runtimeDependencies: Set<String>,
-    val vcs: VcsInfo,
-    val artifact: RemoteArtifact
-) {
-    companion object {
-        fun createFromMetadata(spec: GemSpec): GemInfo {
-            val runtimeDependencies = spec.dependencies.mapNotNullTo(mutableSetOf()) { (name, type) ->
-                name.takeIf { type == VersionDetails.Scope.RUNTIME.toString() }
-            }
-
-            val homepage = spec.homepage.orEmpty()
-            val info = spec.description ?: spec.summary
-
-            return GemInfo(
-                spec.name,
-                spec.version.version,
-                homepage,
-                spec.authors.mapToSetOfNotEmptyStrings(),
-                spec.licenses.mapToSetOfNotEmptyStrings(),
-                info.orEmpty(),
-                runtimeDependencies,
-                VcsHost.parseUrl(homepage),
-                RemoteArtifact.EMPTY
-            )
-        }
-
-        fun createFromGem(details: VersionDetails): GemInfo {
-            val runtimeDependencies = details.dependencies[VersionDetails.Scope.RUNTIME]
-                ?.mapTo(mutableSetOf()) { it.name }
-                .orEmpty()
-
-            val vcs = listOfNotNull(details.sourceCodeUri, details.homepageUri)
-                .mapToSetOfNotEmptyStrings()
-                .firstOrNull()
-                ?.let { VcsHost.parseUrl(it) }
-                .orEmpty()
-
-            val artifact = if (details.gemUri != null && details.sha != null) {
-                RemoteArtifact(details.gemUri, Hash.create(details.sha))
-            } else {
-                RemoteArtifact.EMPTY
-            }
-
-            return GemInfo(
-                details.name,
-                details.version,
-                details.homepageUri.orEmpty(),
-                details.authors?.split(',').mapToSetOfNotEmptyStrings(),
-                details.licenses.mapToSetOfNotEmptyStrings(),
-                details.info.orEmpty(),
-                runtimeDependencies,
-                vcs,
-                artifact
-            )
-        }
-
-        private fun Collection<String>?.mapToSetOfNotEmptyStrings(): Set<String> =
-            this?.mapNotNullTo(mutableSetOf()) { string -> string.trim().ifEmpty { null } }.orEmpty()
-    }
-
-    fun merge(other: GemInfo): GemInfo {
-        require(name == other.name && version == other.version) {
-            "Cannot merge specs for different gems."
-        }
-
-        return GemInfo(
-            name,
-            version,
-            homepageUrl.ifEmpty { other.homepageUrl },
-            authors.ifEmpty { other.authors },
-            declaredLicenses.ifEmpty { other.declaredLicenses },
-            description.ifEmpty { other.description },
-            runtimeDependencies.ifEmpty { other.runtimeDependencies },
-            vcs.takeUnless { it == VcsInfo.EMPTY } ?: other.vcs,
-            artifact.takeUnless { it == RemoteArtifact.EMPTY } ?: other.artifact
-        )
     }
 }

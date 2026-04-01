@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,18 +31,21 @@ import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.OrtPluginOption
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.packagemanagers.node.ModuleInfoResolver
+import org.ossreviewtoolkit.plugins.packagemanagers.node.NPM_RUNTIME_CONFIGURATION_FILENAME
+import org.ossreviewtoolkit.plugins.packagemanagers.node.NodeCommand
 import org.ossreviewtoolkit.plugins.packagemanagers.node.NodePackageManager
 import org.ossreviewtoolkit.plugins.packagemanagers.node.NodePackageManagerType
 import org.ossreviewtoolkit.plugins.packagemanagers.node.Scope
 import org.ossreviewtoolkit.plugins.packagemanagers.node.getNames
 import org.ossreviewtoolkit.plugins.packagemanagers.node.parsePackageJson
 import org.ossreviewtoolkit.utils.common.CommandLineTool
-import org.ossreviewtoolkit.utils.common.DirectoryStash
+import org.ossreviewtoolkit.utils.common.FileStash
 import org.ossreviewtoolkit.utils.common.Os
 import org.ossreviewtoolkit.utils.common.ProcessCapture
 import org.ossreviewtoolkit.utils.common.collectMessages
@@ -54,10 +57,30 @@ import org.semver4j.range.RangeListFactory
 internal object NpmCommand : CommandLineTool {
     override fun command(workingDir: File?) = if (Os.isWindows) "npm.cmd" else "npm"
 
-    override fun getVersionRequirement(): RangeList = RangeListFactory.create("6.* - 10.*")
+    override fun getVersionRequirement(): RangeList = RangeListFactory.create("6.* - 11.*")
+
+    override fun run(vararg args: CharSequence, workingDir: File?, environment: Map<String, String>): ProcessCapture =
+        super.run(
+            *args,
+            workingDir = workingDir,
+            environment = environment.toMutableMap().apply {
+                if (NodeCommand.hasUseSystemCaOption) {
+                    compute("NODE_OPTIONS") { _, options ->
+                        // Additional whitespaces do not matter when separating options.
+                        "${options.orEmpty()} --use-system-ca"
+                    }
+                }
+            }
+        )
 }
 
 data class NpmConfig(
+    /**
+     * If true, ignore any project-specific `.npmrc` files.
+     */
+    @OrtPluginOption(defaultValue = "false")
+    val ignoreProjectNpmrcFiles: Boolean,
+
     /**
      * If true, the "--legacy-peer-deps" flag is passed to NPM to ignore conflicts in peer dependencies which are
      * reported since NPM 7. This allows to analyze NPM 6 projects with peer dependency conflicts. For more information
@@ -79,10 +102,9 @@ data class NpmConfig(
 )
 class Npm(override val descriptor: PluginDescriptor = NpmFactory.descriptor, private val config: NpmConfig) :
     NodePackageManager(NodePackageManagerType.NPM) {
-
     override val globsForDefinitionFiles = listOf(NodePackageManagerType.DEFINITION_FILE)
 
-    private lateinit var stash: DirectoryStash
+    private lateinit var fileStash: FileStash
 
     private val moduleInfoResolver = ModuleInfoResolver.create { workingDir, moduleId ->
         runCatching {
@@ -106,18 +128,28 @@ class Npm(override val descriptor: PluginDescriptor = NpmFactory.descriptor, pri
 
         NpmCommand.checkVersion()
 
-        val directories = definitionFiles.mapTo(mutableSetOf()) { it.resolveSibling("node_modules") }
-        stash = DirectoryStash(directories)
+        val npmrcFiles = definitionFiles.mapNotNullTo(mutableSetOf()) { definitionFile ->
+            definitionFile.resolveSibling(NPM_RUNTIME_CONFIGURATION_FILENAME).takeIf { it.isFile }?.also {
+                logger.info { "Project-specific '$NPM_RUNTIME_CONFIGURATION_FILENAME' file present at '$it'." }
+            }
+        }
+
+        if (config.ignoreProjectNpmrcFiles) {
+            fileStash = FileStash(npmrcFiles)
+        }
     }
 
     override fun afterResolution(analysisRoot: File, definitionFiles: List<File>) {
-        stash.close()
+        if (config.ignoreProjectNpmrcFiles) fileStash.close()
+
+        super.afterResolution(analysisRoot, definitionFiles)
     }
 
     override fun resolveDependencies(
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {
@@ -139,7 +171,7 @@ class Npm(override val descriptor: PluginDescriptor = NpmFactory.descriptor, pri
 
         val project = parseProject(definitionFile, analysisRoot)
         val projectModuleInfo = listModules(workingDir, issues).undoDeduplication().filterInstalled()
-        val scopes = Scope.entries.filterNotTo(mutableSetOf()) { scope -> scope.isExcluded(excludes) }
+        val scopes = Scope.entries.filterNotTo(mutableSetOf()) { scope -> scope.isExcluded(excludes, includes) }
 
         // Warm-up the cache to speed-up processing.
         requestAllPackageDetails(projectModuleInfo, scopes)
@@ -250,8 +282,13 @@ internal fun List<String>.groupLines(vararg markers: String): List<String> {
         "path ",
         "syscall "
     )
-    val singleLinePrefixes =
-        setOf("deprecated ", "invalid: ", "missing: ", "skipping integrity check for git dependency ")
+    val singleLinePrefixes = setOf(
+        "deprecated ",
+        "gitignore-fallback ",
+        "invalid: ",
+        "missing: ",
+        "skipping integrity check for git dependency "
+    )
     val minCommonPrefixLength = 5
 
     val issueLines = mapNotNull { line ->
@@ -304,11 +341,15 @@ internal fun List<String>.groupLines(vararg markers: String): List<String> {
     }
 
     // If no lines but the last end with a dot, assume the message to be a single sentence.
-    return if (
-        nonFooterLines.size > 1 &&
-        nonFooterLines.last().endsWith('.') &&
-        nonFooterLines.subList(0, nonFooterLines.size - 1).none { it.endsWith('.') }
-    ) {
+    val isMultiLineSentence = nonFooterLines.size > 1
+        && nonFooterLines.none { line -> singleLinePrefixes.any { line.startsWith(it) } }
+        && nonFooterLines.last().endsWith('.')
+        && nonFooterLines.subList(0, nonFooterLines.size - 1).none { it.endsWith('.') }
+
+    val isLoginError = nonFooterLines.firstOrNull() == "Incorrect or missing password."
+        && nonFooterLines.lastOrNull() == "npm login"
+
+    return if (isMultiLineSentence || isLoginError) {
         listOf(nonFooterLines.joinToString(" "))
     } else {
         nonFooterLines.map { it.trim() }

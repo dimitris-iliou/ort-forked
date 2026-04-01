@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ import LicenseStatsTable from './LicenseStatsTable';
 import RuleViolationsTable from './RuleViolationsTable';
 import VulnerabilitiesTable from './VulnerabilitiesTable';
 
-const ResultsSummary = ({ webAppOrtResult }) => {
+const ResultsSummary = ({ webAppOrtResult, showInResultsTable }) => {
     const {
         declaredLicensesProcessed,
         detectedLicensesProcessed,
@@ -158,6 +158,10 @@ const ResultsSummary = ({ webAppOrtResult }) => {
         []
     );
 
+    const handleLicenseStatsTableClick = (license, type) => {
+        showInResultsTable({ licenseName: license, licenseType: type });
+    };
+
     return (
         <div className="ort-summary">
             <Row>
@@ -168,7 +172,7 @@ const ResultsSummary = ({ webAppOrtResult }) => {
                             () => {
                                 const timelineItems = [
                                     {
-                                        children: (
+                                        content: (
                                             <span>
                                                 Scanned revision
                                                 {' '}
@@ -189,7 +193,7 @@ const ResultsSummary = ({ webAppOrtResult }) => {
                                         )
                                     },
                                     {
-                                        children: (
+                                        content: (
                                             <span>
                                                 Found
                                                 {' '}
@@ -211,16 +215,19 @@ const ResultsSummary = ({ webAppOrtResult }) => {
                                                 {' '}
                                                 scopes
                                                 {
-                                                    !!scopes && scopes.length > 0 && <span>
-                                                        {' '}
-                                                        and
-                                                        {' '}
-                                                        <b>
-                                                            {levels.length}
-                                                        </b>
-                                                        {' '}
-                                                        dependency levels
-                                                    </span>
+                                                    !!scopes && scopes.length > 0
+                                                    && (
+                                                        <span>
+                                                            {' '}
+                                                            and
+                                                            {' '}
+                                                            <b>
+                                                                {levels.length}
+                                                            </b>
+                                                            {' '}
+                                                            dependency levels
+                                                        </span>
+                                                    )
                                                 }
                                             </span>
                                         )
@@ -230,7 +237,7 @@ const ResultsSummary = ({ webAppOrtResult }) => {
                                 if (declaredLicensesProcessed.length !== 0
                                     && detectedLicensesProcessed.length === 0) {
                                     timelineItems.push({
-                                        children: (
+                                        content: (
                                             <span>
                                                 {' '}
                                                 Detected
@@ -246,7 +253,7 @@ const ResultsSummary = ({ webAppOrtResult }) => {
                                 } else if (declaredLicensesProcessed.length === 0
                                     && detectedLicensesProcessed.length !== 0) {
                                     timelineItems.push({
-                                        children: (
+                                        content: (
                                             <span>
                                                 {' '}
                                                 Detected
@@ -262,7 +269,7 @@ const ResultsSummary = ({ webAppOrtResult }) => {
                                 } else if (declaredLicensesProcessed.length !== 0
                                     && detectedLicensesProcessed.length !== 0) {
                                     timelineItems.push({
-                                        children: (
+                                        content: (
                                             <span>
                                                 Detected
                                                 {' '}
@@ -283,86 +290,92 @@ const ResultsSummary = ({ webAppOrtResult }) => {
                                 }
 
                                 timelineItems.push({
-                                    dot: (hasUnresolvedIssues || hasUnresolvedRuleViolations)
+                                    icon: (hasUnresolvedIssues || hasUnresolvedRuleViolations)
                                         ? (<ExclamationCircleOutlined style={{ fontSize: 16 }} />)
                                         : (<CheckCircleOutlined style={{ fontSize: 16 }} />),
-                                    children: (
+                                    content: (
                                         <span>
                                             {
                                                 !!hasUnresolvedIssues
                                                 && !hasUnresolvedRuleViolations
-                                                && <span className="ort-error">
-                                                    <b>
-                                                        Completed scan with
-                                                        {' '}
-                                                        {unresolvedIssues}
-                                                        {' '}
-                                                        unresolved issue
-                                                        {unresolvedIssues > 1 && 's'}
-                                                        {
-                                                            webAppOrtResult.hasExcludes()
-                                                            && (
-                                                                <span>
-                                                                    {' '}
-                                                                    in non-excluded source code or dependencies
-                                                                </span>
-                                                            )
-                                                        }
-                                                    </b>
-                                                </span>
+                                                && (
+                                                    <span className="ort-error">
+                                                        <b>
+                                                            Completed scan with
+                                                            {' '}
+                                                            {unresolvedIssues}
+                                                            {' '}
+                                                            unresolved issue
+                                                            {unresolvedIssues > 1 && 's'}
+                                                            {
+                                                                webAppOrtResult.hasExcludes()
+                                                                && (
+                                                                    <span>
+                                                                        {' '}
+                                                                        in non-excluded source code or dependencies
+                                                                    </span>
+                                                                )
+                                                            }
+                                                        </b>
+                                                    </span>
+                                                )
                                             }
                                             {
                                                 !hasUnresolvedIssues
                                                 && !!hasUnresolvedRuleViolations
-                                                && <span className="ort-error">
-                                                    <b>
-                                                        Completed scan with
-                                                        {' '}
-                                                        {unresolvedRuleViolations}
-                                                        {' '}
-                                                        unresolved policy violation
-                                                        {unresolvedRuleViolations > 1 && 's'}
-                                                        {
-                                                            webAppOrtResult.hasExcludes()
-                                                            && (
-                                                                <span>
-                                                                    {' '}
-                                                                    in non-excluded source code or dependencies
-                                                                </span>
-                                                            )
-                                                        }
-                                                    </b>
-                                                </span>
+                                                && (
+                                                    <span className="ort-error">
+                                                        <b>
+                                                            Completed scan with
+                                                            {' '}
+                                                            {unresolvedRuleViolations}
+                                                            {' '}
+                                                            unresolved policy violation
+                                                            {unresolvedRuleViolations > 1 && 's'}
+                                                            {
+                                                                webAppOrtResult.hasExcludes()
+                                                                && (
+                                                                    <span>
+                                                                        {' '}
+                                                                        in non-excluded source code or dependencies
+                                                                    </span>
+                                                                )
+                                                            }
+                                                        </b>
+                                                    </span>
+                                                )
                                             }
                                             {
                                                 !!hasUnresolvedIssues
                                                 && !!hasUnresolvedRuleViolations
-                                                && <span className="ort-error">
-                                                    <b>
-                                                        Completed scan with
-                                                        {' '}
-                                                        {unresolvedIssues}
-                                                        {' '}
-                                                        unresolved issue
-                                                        {unresolvedIssues > 1 && 's'}
-                                                        {' '}
-                                                        and
-                                                        {' '}
-                                                        {unresolvedRuleViolations}
-                                                        {' '}
-                                                        unresolved policy violation
-                                                        {unresolvedRuleViolations > 1 && 's'}
-                                                        {
-                                                            webAppOrtResult.hasExcludes()
-                                                            && (
-                                                                <span>
-                                                                    {' '}
-                                                                    in non-excluded source code or dependencies
-                                                                </span>
-                                                            )
-                                                        }
-                                                    </b>
-                                                </span>
+                                                && (
+                                                    <span className="ort-error">
+                                                        <b>
+                                                            Completed scan with
+                                                            {' '}
+                                                            {unresolvedIssues}
+                                                            {' '}
+                                                            unresolved issue
+                                                            {unresolvedIssues > 1 && 's'}
+                                                            {' '}
+                                                            and
+                                                            {' '}
+                                                            {unresolvedRuleViolations}
+                                                            {' '}
+                                                            unresolved policy violation
+                                                            {unresolvedRuleViolations > 1 && 's'}
+                                                            {
+                                                                webAppOrtResult.hasExcludes()
+                                                                && (
+                                                                    <span>
+                                                                        {' '}
+                                                                        in non-excluded source code or dependencies
+                                                                    </span>
+                                                                )
+                                                            }
+                                                        </b>
+                                                    </span>
+                                                )
                                             }
                                             {
                                                 !hasUnresolvedIssues && !hasUnresolvedRuleViolations
@@ -397,7 +410,6 @@ const ResultsSummary = ({ webAppOrtResult }) => {
                         <Col span={22} offset={1}>
                             <Tabs
                                 className="ort-tabs-summary-overview"
-                                tabPosition="top"
                                 items={(() => {
                                     const tabItems = [
                                         {
@@ -477,6 +489,12 @@ const ResultsSummary = ({ webAppOrtResult }) => {
                                                             emptyText="No effective licenses"
                                                             licenses={effectiveLicenses}
                                                             licenseStats={effectiveLicensesProcessedAsNameValueColor}
+                                                            handleClick={
+                                                                (license) => handleLicenseStatsTableClick(
+                                                                    license,
+                                                                    'effective'
+                                                                )
+                                                            }
                                                         />
                                                     </Col>
                                                     <Col xs={24} sm={24} md={24} lg={24} xl={15}>
@@ -505,6 +523,12 @@ const ResultsSummary = ({ webAppOrtResult }) => {
                                                             emptyText="No declared licenses"
                                                             licenses={declaredLicensesProcessed}
                                                             licenseStats={declaredLicensesProcessedAsNameValueColor}
+                                                            handleClick={
+                                                                (license) => handleLicenseStatsTableClick(
+                                                                    license,
+                                                                    'declared'
+                                                                )
+                                                            }
                                                         />
                                                     </Col>
                                                     <Col xs={24} sm={24} md={24} lg={24} xl={15}>
@@ -533,6 +557,12 @@ const ResultsSummary = ({ webAppOrtResult }) => {
                                                             emptyText="No detected licenses"
                                                             licenses={detectedLicensesProcessed}
                                                             licenseStats={detectedLicensesProcessedAsNameValueColor}
+                                                            handleClick={
+                                                                (license) => handleLicenseStatsTableClick(
+                                                                    license,
+                                                                    'detected'
+                                                                )
+                                                            }
                                                         />
                                                     </Col>
                                                     <Col xs={24} sm={24} md={24} lg={24} xl={15}>

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,12 +46,11 @@ class DefaultNestedProvenanceResolver(
     private val storage: NestedProvenanceStorage,
     private val workingTreeCache: WorkingTreeCache
 ) : NestedProvenanceResolver {
-    override suspend fun resolveNestedProvenance(provenance: KnownProvenance): NestedProvenance {
-        return when (provenance) {
+    override suspend fun resolveNestedProvenance(provenance: KnownProvenance): NestedProvenance =
+        when (provenance) {
             is ArtifactProvenance -> NestedProvenance(root = provenance, subRepositories = emptyMap())
             is RepositoryProvenance -> resolveNestedRepository(provenance)
         }
-    }
 
     private suspend fun resolveNestedRepository(provenance: RepositoryProvenance): NestedProvenance {
         val storedResult = storage.readNestedProvenance(provenance)

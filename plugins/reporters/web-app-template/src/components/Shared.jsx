@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,26 @@ import {
     Input,
     Space
 } from 'antd';
+
+const convertIso8601Date2Sentence = (iso8601Date) => {
+    if (!iso8601Date) return '—';
+    const date = new Date(iso8601Date.replace(/(\.\d{3})\d*Z$/, '$1Z'));
+
+    const timeFormatter = new Intl.DateTimeFormat(undefined, {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZoneName: 'short'
+    });
+
+    const dateFormatter = new Intl.DateTimeFormat(undefined, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+
+    return `${timeFormatter.format(date)} on ${dateFormatter.format(date)}`;
+};
 
 const getColumnSearchProps = (dataIndex, filteredValue, setFilteredValue) => ({
     filteredValue,
@@ -75,8 +95,17 @@ const getColumnSearchProps = (dataIndex, filteredValue, setFilteredValue) => ({
         }
 
         return !searchStrValues.every(value => !recordValue.includes(value));
-    },
-    render: (text) => text
+    }
 });
 
-export { getColumnSearchProps };
+const renderAnchor = (text, href) => (
+    <a
+        href={href || text}
+        rel="noopener noreferrer"
+        target="_blank"
+    >
+        {text}
+    </a>
+);
+
+export { convertIso8601Date2Sentence, getColumnSearchProps, renderAnchor };

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,19 +29,20 @@ import org.ossreviewtoolkit.model.utils.DependencyHandler
 import org.ossreviewtoolkit.plugins.packagemanagers.node.ModuleInfoResolver
 import org.ossreviewtoolkit.plugins.packagemanagers.node.NodePackageManagerType
 import org.ossreviewtoolkit.plugins.packagemanagers.node.PackageJson
-import org.ossreviewtoolkit.plugins.packagemanagers.node.moduleId
 import org.ossreviewtoolkit.plugins.packagemanagers.node.parsePackage
-import org.ossreviewtoolkit.plugins.packagemanagers.node.parsePackageJson
 
 internal class Yarn2DependencyHandler(
     private val moduleInfoResolver: ModuleInfoResolver
 ) : DependencyHandler<PackageInfo> {
-    private val packageJsonForModuleId = mutableMapOf<String, PackageJson>()
-    private val moduleDirForModuleId = mutableMapOf<String, File>()
-    private val packageInfoForLocator = mutableMapOf<String, PackageInfo>()
     private lateinit var workingDir: File
+    private val packageJsonForModuleId = mutableMapOf<String, PackageJson>()
+    private val packageInfoForLocator = mutableMapOf<String, PackageInfo>()
 
-    fun setContext(workingDir: File, moduleDirs: Set<File>, packageInfoForLocator: Map<String, PackageInfo>) {
+    fun setContext(
+        workingDir: File,
+        packageJsonForModuleId: Map<String, PackageJson>,
+        packageInfoForLocator: Map<String, PackageInfo>
+    ) {
         this.workingDir = workingDir
 
         this.packageInfoForLocator.apply {
@@ -49,19 +50,15 @@ internal class Yarn2DependencyHandler(
             putAll(packageInfoForLocator)
         }
 
-        packageJsonForModuleId.clear()
-        moduleDirForModuleId.clear()
-
-        moduleDirs.forEach { moduleDir ->
-            val packageJson = parsePackageJson(moduleDir.resolve(NodePackageManagerType.DEFINITION_FILE))
-            packageJsonForModuleId[packageJson.moduleId] = packageJson
-            moduleDirForModuleId[packageJson.moduleId] = moduleDir
+        this.packageJsonForModuleId.apply {
+            clear()
+            putAll(packageJsonForModuleId)
         }
     }
 
     override fun identifierFor(dependency: PackageInfo): Identifier =
         Identifier(
-            type = if (dependency.isProject) NodePackageManagerType.YARN2.projectType else "NPM",
+            type = with(NodePackageManagerType.YARN2) { if (dependency.isProject) projectType else packageType },
             namespace = dependency.moduleName.substringBefore("/", ""),
             name = dependency.moduleName.substringAfter("/"),
             version = dependency.children.version
@@ -81,15 +78,39 @@ internal class Yarn2DependencyHandler(
     }
 }
 
-internal val PackageInfo.isProject: Boolean get() = value.substringAfterLast("@").startsWith("workspace:")
+internal val PackageInfo.isProject: Boolean
+    get() = Locator.parse(value).isProject
 
-internal val PackageInfo.moduleName: String get() = value.substringBeforeLast("@")
+internal val PackageInfo.moduleName: String
+    // TODO: Handle patched packages different than non-patched ones.
+    // Patch packages have locators as e.g. the following, where the first component ends with "@patch".
+    // resolve@patch:resolve@npm%3A1.22.8#optional!builtin<compat/resolve>::version=1.22.8&hash=c3c19d
+    get() = Locator.parse(value).moduleName
 
-internal val PackageInfo.moduleId: String get() = buildString {
-    append(moduleName)
+internal val PackageInfo.moduleId: String
+    get() = buildString {
+        append(moduleName)
 
-    if (children.version.isNotBlank()) {
-        append("@")
-        append(children.version)
+        if (children.version.isNotBlank()) {
+            append("@")
+            append(children.version)
+        }
     }
+
+internal data class Locator(
+    val moduleName: String,
+    val remainder: String
+) {
+    companion object {
+        fun parse(value: String): Locator {
+            val moduleNameEndIndex = value.indexOf("@", startIndex = 1)
+            return Locator(
+                moduleName = value.take(moduleNameEndIndex),
+                remainder = value.substring(moduleNameEndIndex + 1)
+            )
+        }
+    }
+
+    val isProject: Boolean = remainder.startsWith("workspace:") ||
+        (remainder.startsWith("virtual:") && "#workspace:" in remainder)
 }

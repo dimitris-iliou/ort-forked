@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,6 +39,7 @@ import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.orEmpty
+import org.ossreviewtoolkit.model.orNone
 import org.ossreviewtoolkit.model.utils.DependencyHandler
 import org.ossreviewtoolkit.model.utils.parseRepoManifestPath
 import org.ossreviewtoolkit.plugins.packagemanagers.gradlemodel.getIdentifierType
@@ -80,17 +81,25 @@ internal class GradleDependencyHandler(
             return null
         }
 
-        val isSpringMetadataProject = with(id) {
-            listOf("boot", "cloud").any {
-                namespace == "org.springframework.$it"
-                    && (name.startsWith("spring-$it-starter") || name.startsWith("spring-$it-contract-spec"))
-            }
+        val hasNoArtifacts = dependency.pomFile == null
+        val isPomArtifact = dependency.extension == "pom"
+
+        val isPlatformDependency = dependency.variants.keys.any {
+            it.startsWith("platform-") || it.startsWith("enforced-platform-")
         }
 
-        val hasNoArtifacts = dependency.pomFile == null || isSpringMetadataProject
+        val isKotlinMultiPlatform = dependency.variants.values.any {
+            "org.jetbrains.kotlin.platform.type" in it.keys
+        }
 
         val binaryArtifact = when {
             hasNoArtifacts -> RemoteArtifact.EMPTY
+
+            isKotlinMultiPlatform -> with(dependency) {
+                // TODO: Support more than just "jvm" targets for KMP projects.
+                createRemoteArtifact(pomFile, classifier, "jar")
+            }
+
             else -> with(dependency) {
                 createRemoteArtifact(pomFile, classifier, extension.takeUnless { it == "bundle" })
             }
@@ -98,6 +107,7 @@ internal class GradleDependencyHandler(
 
         val sourceArtifact = when {
             hasNoArtifacts -> RemoteArtifact.EMPTY
+            isPomArtifact && !isKotlinMultiPlatform -> binaryArtifact
             else -> createRemoteArtifact(dependency.pomFile, "sources", "jar")
         }
 
@@ -122,8 +132,32 @@ internal class GradleDependencyHandler(
             sourceArtifact = sourceArtifact,
             vcs = vcs,
             vcsProcessed = vcsProcessed,
-            isMetadataOnly = hasNoArtifacts
+            isMetadataOnly = hasNoArtifacts || (isPomArtifact && !isKotlinMultiPlatform) || isPlatformDependency
         )
+    }
+
+    override fun areDependenciesEqual(dependenciesA: List<OrtDependency>, dependenciesB: List<OrtDependency>): Boolean {
+        if (dependenciesA === dependenciesB) return true
+        if (dependenciesA.isEmpty() && dependenciesB.isEmpty()) return true
+
+        val depsA = dependenciesA.distinct()
+        val depsB = dependenciesB.distinct()
+        if (depsA.size != depsB.size) return false
+
+        val idToDepA = depsA.associateBy { identifierFor(it) }
+        val idToDepB = depsB.associateBy { identifierFor(it) }
+        if (idToDepA.keys != idToDepB.keys) return false
+
+        // Gradle guarantees dependencies to be same for Identifiers of the same variant, so exit early to skip deep
+        // comparison of transitive dependencies in that case.
+        val idVariantPairsA = idToDepA.map { (id, dep) -> id to dep.variants }
+        val idVariantPairsB = idToDepB.map { (id, dep) -> id to dep.variants }
+        if (idVariantPairsA == idVariantPairsB) return true
+
+        return idToDepA.all { (id, depA) ->
+            val depB = idToDepB[id] ?: return false
+            areDependenciesEqual(dependenciesFor(depA), dependenciesFor(depB))
+        }
     }
 }
 
@@ -276,4 +310,4 @@ private fun createRemoteArtifact(
 private fun parseChecksum(checksum: String, algorithm: String) =
     checksum.splitOnWhitespace().firstNotNullOfOrNull {
         runCatching { Hash(it, algorithm) }.getOrNull()
-    } ?: Hash.NONE
+    }.orNone()

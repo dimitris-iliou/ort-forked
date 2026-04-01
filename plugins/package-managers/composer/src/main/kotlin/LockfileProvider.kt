@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ class LockfileProvider(private val definitionFile: File) {
         val definitionFileBackup = enableLockfileCreation()
 
         return try {
-            require(createLockFile())
+            createLockFile()
             block(lockfile)
         } finally {
             lockfile.delete()
@@ -69,7 +69,7 @@ class LockfileProvider(private val definitionFile: File) {
         return definitionFileBackup
     }
 
-    private fun createLockFile(): Boolean {
+    private fun createLockFile() {
         val args = buildList {
             add("--no-interaction")
             add("update")
@@ -82,7 +82,6 @@ class LockfileProvider(private val definitionFile: File) {
             }
         }
 
-        val update = ComposerCommand.run(workingDir, *args.toTypedArray())
-        return update.isSuccess
+        ComposerCommand.run(workingDir, *args.toTypedArray()).requireSuccess()
     }
 }

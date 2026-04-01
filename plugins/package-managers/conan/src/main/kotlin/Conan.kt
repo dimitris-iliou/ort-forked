@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2019 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,6 +52,7 @@ import org.ossreviewtoolkit.model.RemoteArtifact
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.OrtPluginOption
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
@@ -68,6 +69,9 @@ import org.ossreviewtoolkit.utils.ort.requestPasswordAuthentication
 
 import org.semver4j.range.RangeList
 import org.semver4j.range.RangeListFactory
+
+private const val PROJECT_TYPE = "Conan"
+internal const val PACKAGE_TYPE = "Conan"
 
 internal class ConanCommand(private val useConan2: Boolean = false) : CommandLineTool {
     override fun command(workingDir: File?) = if (useConan2) "conan2" else "conan"
@@ -96,7 +100,13 @@ data class ConanConfig(
      * development environment.
      */
     @OrtPluginOption(defaultValue = "false")
-    val useConan2: Boolean
+    val useConan2: Boolean,
+
+    /**
+     * The path, relative to the root of the analysis, of a Conan profile to use during dependency resolution.
+     * If not specified, the default profile is used instead.
+     */
+    val conanProfilePath: String?
 )
 
 /**
@@ -113,7 +123,7 @@ data class ConanConfig(
 class Conan(
     override val descriptor: PluginDescriptor = ConanFactory.descriptor,
     private val config: ConanConfig
-) : PackageManager("Conan") {
+) : PackageManager(PROJECT_TYPE) {
     companion object {
         internal val DUMMY_COMPILER_SETTINGS = arrayOf(
             "-s", "compiler=gcc",
@@ -182,6 +192,7 @@ class Conan(
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> =
@@ -215,7 +226,12 @@ class Conan(
                 config.lockfileName?.let { hasLockfile(workingDir.resolve(it).path) } == true
             }
 
-            val handlerResults = handler.process(definitionFile, config.lockfileName)
+            val resolvedProfilePath = config.conanProfilePath?.let { profilePath ->
+                val analysisRootDir = if (analysisRoot.isFile) analysisRoot.parentFile else analysisRoot
+                analysisRootDir / profilePath
+            }
+
+            val handlerResults = handler.process(definitionFile, config.lockfileName, resolvedProfilePath)
 
             val result = with(handlerResults) {
                 val scopes = setOfNotNull(dependenciesScope, devDependenciesScope, testDependenciesScope)

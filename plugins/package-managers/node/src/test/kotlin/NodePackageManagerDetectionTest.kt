@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -207,6 +207,7 @@ class NodePackageManagerDetectionTest : WordSpec({
 
             filteredFiles.map { it.relativeTo(projectDir).invariantSeparatorsPath } should containExactlyInAnyOrder(
                 "pnpm/babel/package.json",
+                "pnpm/node-linker-hoisted/package.json",
                 "pnpm/project-with-lockfile/package.json",
                 "pnpm/workspaces/package.json",
                 "pnpm/workspaces/src/non-workspace/package-c/package.json",
@@ -276,6 +277,7 @@ class NodePackageManagerDetectionTest : WordSpec({
             val filteredFiles = NodePackageManagerDetection(definitionFiles).filterApplicable(YARN2)
 
             filteredFiles.map { it.relativeTo(projectDir).invariantSeparatorsPath } should containExactlyInAnyOrder(
+                "yarn2/dependency-with-patch/package.json",
                 "yarn2/project-with-lockfile/package.json",
                 "yarn2/workspaces/package.json"
             )

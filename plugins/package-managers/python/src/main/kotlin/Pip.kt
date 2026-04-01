@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import org.ossreviewtoolkit.analyzer.PackageManagerFactory
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.OrtPluginOption
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
@@ -40,7 +41,14 @@ import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.safeDeleteRecursively
 import org.ossreviewtoolkit.utils.ort.showStackTrace
 
-private val OPERATING_SYSTEMS = listOf("linux", "macos", "windows")
+private const val PROJECT_TYPE = "PIP"
+
+@Suppress("EnumEntryNameCase", "EnumNaming")
+enum class OperatingSystem {
+    linux,
+    macos,
+    windows
+}
 
 data class PipConfig(
     /**
@@ -54,7 +62,7 @@ data class PipConfig(
      * The name of the operating system to resolve dependencies for. One of "linux", "macos", or "windows".
      */
     @OrtPluginOption(defaultValue = "linux")
-    val operatingSystem: String,
+    val operatingSystem: OperatingSystem,
 
     /**
      * The Python version to resolve dependencies for. If not set, the version is detected from the environment and if
@@ -80,21 +88,15 @@ class Pip internal constructor(
     projectType: String
 ) : PackageManager(projectType) {
     constructor(descriptor: PluginDescriptor = PipFactory.descriptor, config: PipConfig) :
-        this(descriptor, config, "PIP")
+        this(descriptor, config, PROJECT_TYPE)
 
     override val globsForDefinitionFiles = listOf("*requirements*.txt", "setup.py")
-
-    init {
-        require(config.operatingSystem in OPERATING_SYSTEMS) {
-            val acceptedValues = OPERATING_SYSTEMS.joinToString { "'$it'" }
-            "The 'operatingSystem' option must be one of $acceptedValues, but was '${config.operatingSystem}'."
-        }
-    }
 
     override fun resolveDependencies(
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {
@@ -124,7 +126,7 @@ class Pip internal constructor(
                     workingDir = workingDir,
                     definitionFile = definitionFile,
                     pythonVersion = pythonVersion.split('.', limit = 3).take(2).joinToString(""),
-                    operatingSystem = config.operatingSystem,
+                    operatingSystem = config.operatingSystem.name,
                     analyzeSetupPyInsecurely = config.analyzeSetupPyInsecurely
                 )
             } finally {

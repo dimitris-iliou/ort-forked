@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,9 +47,9 @@ fun getVcsPathsForProvenances(provenances: Set<ProvenanceResolutionResult>) =
         provenances.forEach { provenance ->
             val packageVcsPath = provenance.packageProvenance.vcsPath
 
-            provenance.getKnownProvenancesWithoutVcsPath().forEach { (repositoryPath, provenance) ->
+            provenance.getKnownProvenancesWithoutVcsPath().forEach { (repositoryPath, knownProvenance) ->
                 getVcsPathForRepositoryOrNull(packageVcsPath, repositoryPath)?.let { vcsPath ->
-                    getOrPut(provenance) { mutableSetOf() } += vcsPath
+                    getOrPut(knownProvenance) { mutableSetOf() } += vcsPath
                 }
             }
         }

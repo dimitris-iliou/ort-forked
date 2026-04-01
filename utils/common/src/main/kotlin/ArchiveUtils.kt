@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -82,11 +82,15 @@ fun File.unpack(
     filter: (ArchiveEntry) -> Boolean = { true }
 ) = when (forceArchiveType.takeUnless { it == ArchiveType.NONE } ?: ArchiveType.getType(name)) {
     ArchiveType.SEVENZIP -> unpack7Zip(targetDirectory, filter)
+
     ArchiveType.ZIP -> unpackZip(targetDirectory, filter)
 
     ArchiveType.TAR -> inputStream().use { it.unpackTar(targetDirectory, filter) }
+
     ArchiveType.TAR_BZIP2 -> inputStream().use { BZip2CompressorInputStream(it).unpackTar(targetDirectory, filter) }
+
     ArchiveType.TAR_GZIP -> inputStream().use { GzipCompressorInputStream(it).unpackTar(targetDirectory, filter) }
+
     ArchiveType.TAR_XZ -> inputStream().use { XZCompressorInputStream(it).unpackTar(targetDirectory, filter) }
 
     ArchiveType.DEB -> unpackDeb(targetDirectory, filter)

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ internal class NpmDependencyHandler(
     private val packageJsonCache = mutableMapOf<File, PackageJson>()
 
     override fun identifierFor(dependency: ModuleInfo): Identifier {
-        val type = if (dependency.isProject) NodePackageManagerType.NPM.projectType else "NPM"
+        val type = with(NodePackageManagerType.NPM) { if (dependency.isProject) projectType else packageType }
         val (namespace, name) = splitNamespaceAndName(dependency.name.orEmpty())
         val version = if (dependency.isProject) {
             val packageJson = packageJsonCache.getOrPut(dependency.packageJsonFile.realFile) {
@@ -67,11 +67,12 @@ internal class NpmDependencyHandler(
         }
 }
 
-internal val ModuleInfo.isInstalled: Boolean get() =
+internal val ModuleInfo.isInstalled: Boolean
     // For non-installed modules NPM 10 returns a null path, while NPM 11 returns a non-existent non-null path.
-    path != null && File(path).isDirectory
+    get() = path != null && File(path).isDirectory
 
-internal val ModuleInfo.isProject: Boolean get() = resolved == null
+internal val ModuleInfo.isProject: Boolean
+    get() = resolved == null
 
 private val ModuleInfo.packageJsonFile: File get() {
     check(isInstalled) { "The module directory '$path' is null or does not exist." }

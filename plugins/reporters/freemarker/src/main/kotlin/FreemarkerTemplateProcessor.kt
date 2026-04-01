@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2020 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -279,7 +279,7 @@ class FreemarkerTemplateProcessor(
         @Suppress("MemberVisibilityCanBePrivate") // This function is used in the templates.
         fun mergeResolvedLicenses(licenses: List<ResolvedLicense>): List<ResolvedLicense> =
             licenses.groupBy { it.license }
-                .map { (_, licenses) -> licenses.merge() }
+                .map { (_, resolvedLicenses) -> resolvedLicenses.merge() }
                 .sortedBy { it.license.toString() }
 
         /**
@@ -354,8 +354,8 @@ class FreemarkerTemplateProcessor(
          */
         @Suppress("unused") // This function is used in the templates.
         fun collectLicenses(snippetsFindings: Collection<SnippetFinding>): Set<String> =
-            snippetsFindings.flatMap { findings -> findings.snippets }.map { snippet -> snippet.license.toString() }
-                .toSet()
+            snippetsFindings.flatMap { findings -> findings.snippets }
+                .mapTo(mutableSetOf()) { snippet -> snippet.license.toString() }
 
         /**
          * Return a flag indicating that issues have been encountered during the run of an advisor with the given

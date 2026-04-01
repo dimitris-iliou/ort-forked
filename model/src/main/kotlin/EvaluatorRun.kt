@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,8 @@ package org.ossreviewtoolkit.model
 
 import java.time.Instant
 
+import org.ossreviewtoolkit.utils.ort.Environment
+
 /**
  * The summary of a single run of the evaluator.
  */
@@ -36,6 +38,11 @@ data class EvaluatorRun(
     val endTime: Instant,
 
     /**
+     * The [Environment] in which the evaluator was executed.
+     */
+    val environment: Environment,
+
+    /**
      * The list of [RuleViolation]s found by the evaluator.
      */
     val violations: List<RuleViolation>
@@ -48,6 +55,7 @@ data class EvaluatorRun(
         val EMPTY = EvaluatorRun(
             startTime = Instant.EPOCH,
             endTime = Instant.EPOCH,
+            environment = Environment(),
             violations = emptyList()
         )
     }

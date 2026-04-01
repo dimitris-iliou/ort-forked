@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,8 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.core.test.TestCase
 import io.kotest.engine.spec.tempdir
+import io.kotest.matchers.file.aDirectory
+import io.kotest.matchers.file.aFile
 import io.kotest.matchers.file.containNFiles
 import io.kotest.matchers.file.exist
 import io.kotest.matchers.should
@@ -34,37 +36,52 @@ import java.io.IOException
 
 class DirectoryStashFunTest : StringSpec() {
     private lateinit var sandboxDir: File
+
     private lateinit var a: File
-    private lateinit var a1: File
+    private lateinit var aSubdir: File
+    private lateinit var aNestedFile: File
+
     private lateinit var b: File
-    private lateinit var b1: File
+    private lateinit var bSubdir: File
+    private lateinit var bNestedFile: File
 
     override suspend fun beforeTest(testCase: TestCase) {
         sandboxDir = tempdir()
-        a = sandboxDir / "a"
-        a1 = a / "a1"
-        b = sandboxDir / "b"
-        b1 = b / "b1"
 
-        check(a1.mkdirs())
-        check(b1.mkdirs())
+        a = sandboxDir / "a-dir"
+        aSubdir = a / "a-subdir"
+        aNestedFile = aSubdir / "a-file"
+
+        b = sandboxDir / "b-dir"
+        bSubdir = b / "b-subdir"
+        bNestedFile = bSubdir / "b-file"
+
+        check(aSubdir.mkdirs())
+        check(aNestedFile.createNewFile())
+
+        check(bSubdir.mkdirs())
+        check(bNestedFile.createNewFile())
     }
 
     private fun sandboxDirShouldBeInOriginalState() {
         sandboxDir should containNFiles(2)
+
+        a shouldBe aDirectory()
         a should containNFiles(1)
+        aSubdir shouldBe aDirectory()
+        aNestedFile shouldBe aFile()
+
+        b shouldBe aDirectory()
         b should containNFiles(1)
-        a should exist()
-        a1 should exist()
-        b should exist()
-        b1 should exist()
+        bSubdir shouldBe aDirectory()
+        bNestedFile shouldBe aFile()
     }
 
     init {
         "given single directory, when stashed, subtree is not existent" {
             stashDirectories(a).use {
                 a shouldNot exist()
-                a1 shouldNot exist()
+                aSubdir shouldNot exist()
             }
         }
 
@@ -102,27 +119,27 @@ class DirectoryStashFunTest : StringSpec() {
         }
 
         "given parent and child, stashing works" {
-            stashDirectories(a, a1).use {
+            stashDirectories(a, aSubdir).use {
                 a shouldNot exist()
-                a1 shouldNot exist()
+                aSubdir shouldNot exist()
             }
         }
 
         "given parent and child, un-stashing works" {
-            stashDirectories(a, a1).use {}
+            stashDirectories(a, aSubdir).use {}
 
             sandboxDirShouldBeInOriginalState()
         }
 
         "given child and parent, stashing works" {
-            stashDirectories(a1, a).use {
+            stashDirectories(aSubdir, a).use {
                 a shouldNot exist()
-                a1 shouldNot exist()
+                aSubdir shouldNot exist()
             }
         }
 
         "given child and parent, un-stashing works" {
-            stashDirectories(a1, a).use {}
+            stashDirectories(aSubdir, a).use {}
 
             sandboxDirShouldBeInOriginalState()
         }
@@ -142,6 +159,36 @@ class DirectoryStashFunTest : StringSpec() {
                 stashDirectories(a, b).use {
                     throw IOException()
                 }
+            }
+
+            sandboxDirShouldBeInOriginalState()
+        }
+
+        "individual files can be stashed" {
+            stashDirectories(aNestedFile, bNestedFile).use {}
+
+            sandboxDirShouldBeInOriginalState()
+        }
+
+        "files and their parent directories can be stashed" {
+            stashDirectories(aNestedFile, aSubdir, bNestedFile, bSubdir).use {}
+
+            sandboxDirShouldBeInOriginalState()
+        }
+
+        "root directories and files can be stashed" {
+            stashDirectories(a, aNestedFile, b, bNestedFile).use {}
+
+            sandboxDirShouldBeInOriginalState()
+        }
+
+        "copying works and modified files get restored" {
+            stashDirectories(aNestedFile, bNestedFile, sandboxDir / "non-existing-file", copy = true).use {
+                aNestedFile shouldBe aFile()
+                bNestedFile shouldBe aFile()
+
+                aNestedFile.writeText("Hello")
+                bNestedFile.writeText("World")
             }
 
             sandboxDirShouldBeInOriginalState()

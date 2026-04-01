@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -101,8 +101,8 @@ class CocoaPodsFunTest : WordSpec({
             // The NPM-related results are not relevant, because this test checks if the Pod packages can be filled with
             // information coming from the podspec files present in the 'node_modules' directory.
             val analyzerResult = result.copy(
-                projects = result.projects.filterTo(mutableSetOf()) { it.id.type == "CocoaPods" },
-                packages = result.packages.filterTo(mutableSetOf()) { it.id.type == "Pod" },
+                projects = result.projects.filterTo(mutableSetOf()) { it.id.type == PROJECT_TYPE },
+                packages = result.packages.filterTo(mutableSetOf()) { it.id.type == PACKAGE_TYPE },
                 issues = emptyMap()
             )
 

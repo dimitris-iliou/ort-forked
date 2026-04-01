@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2025 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,6 +37,7 @@ import org.ossreviewtoolkit.model.Hash
 import org.ossreviewtoolkit.model.Issue
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.createAndLogIssue
+import org.ossreviewtoolkit.model.orNone
 import org.ossreviewtoolkit.utils.common.safeDeleteRecursively
 import org.ossreviewtoolkit.utils.common.unpack
 import org.ossreviewtoolkit.utils.common.withoutPrefix
@@ -179,7 +180,7 @@ internal class P2RepositoryContentLoader : AutoCloseable {
                 key.withoutPrefix(CHECKSUM_PROPERTY_PREFIX)?.let { algorithm ->
                     Hash(value, algorithm)
                 }
-            }.maxByOrNull { it.value.length } ?: Hash.NONE
+            }.maxByOrNull { it.value.length }.orNone()
 
         /**
          * Generate an identifier for an OSGi bundle artifact based on the given [artifactId] and [version].

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,10 +42,8 @@ class OrtResultBuilder {
     inner class ProjectBuilder(private val id: String) {
         private val rootIds = mutableSetOf<String>()
 
-        @OrtResultDsl
         var license = "Apache-2.0"
 
-        @OrtResultDsl
         fun pkg(id: String, setup: PkgBuilder.() -> Unit): Package {
             rootIds += id
             val pkg = this@OrtResultBuilder.PkgBuilder(id).apply(setup).build()
@@ -80,10 +78,8 @@ class OrtResultBuilder {
 
     @OrtResultDsl
     inner class PkgBuilder(private val id: String) {
-        @OrtResultDsl
         var license = "Apache-2.0"
 
-        @OrtResultDsl
         fun pkg(id: String, setup: PkgBuilder.() -> Unit): Package {
             this@OrtResultBuilder.parentChildIds.getOrPut(this@PkgBuilder.id) { mutableSetOf() } += id
             val pkg = this@OrtResultBuilder.PkgBuilder(id).apply(setup).build()
@@ -102,15 +98,14 @@ class OrtResultBuilder {
         }
     }
 
-    @OrtResultDsl
     fun project(id: String, setup: ProjectBuilder.() -> Unit): Project {
         val project = ProjectBuilder(id).apply(setup).build()
         projects += project
         return project
     }
 
-    fun build(): OrtResult {
-        return OrtResult.EMPTY.copy(
+    fun build(): OrtResult =
+        OrtResult.EMPTY.copy(
             analyzer = AnalyzerRun.EMPTY.copy(
                 result = AnalyzerResult(
                     projects = projects,
@@ -118,8 +113,6 @@ class OrtResultBuilder {
                 )
             )
         )
-    }
 }
 
-@OrtResultDsl
 fun ortResult(setup: OrtResultBuilder.() -> Unit) = OrtResultBuilder().apply(setup).build()

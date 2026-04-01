@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2020 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,12 +38,17 @@ import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.orEmpty
+import org.ossreviewtoolkit.model.utils.toPurl
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.utils.common.splitOnWhitespace
 import org.ossreviewtoolkit.utils.common.unquote
 import org.ossreviewtoolkit.utils.ort.normalizeVcsUrl
+
+private const val PROJECT_TYPE = "Carthage"
+internal const val PACKAGE_TYPE = "Carthage"
 
 /**
  * The [Carthage](https://github.com/Carthage/Carthage) package manager for Objective-C / Swift.
@@ -53,7 +58,7 @@ import org.ossreviewtoolkit.utils.ort.normalizeVcsUrl
     description = "The Carthage package manager for Objective-C / Swift.",
     factory = PackageManagerFactory::class
 )
-class Carthage(override val descriptor: PluginDescriptor = CarthageFactory.descriptor) : PackageManager("Carthage") {
+class Carthage(override val descriptor: PluginDescriptor = CarthageFactory.descriptor) : PackageManager(PROJECT_TYPE) {
     // TODO: Add support for the Cartfile.
     //       This would require to resolve the actual dependency versions as a Cartfile supports dynamic versions.
     override val globsForDefinitionFiles = listOf("Cartfile.resolved")
@@ -62,6 +67,7 @@ class Carthage(override val descriptor: PluginDescriptor = CarthageFactory.descr
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {
@@ -181,13 +187,19 @@ class Carthage(override val descriptor: PluginDescriptor = CarthageFactory.descr
         val vcsInfo = vcsInfoFromUrl.copy(revision = revision)
         val vcsHost = VcsHost.fromUrl(vcsInfo.url)
 
+        val id = Identifier(
+            type = PACKAGE_TYPE,
+            namespace = vcsHost?.getUserOrOrganization(projectUrl).orEmpty(),
+            name = vcsHost?.getProject(projectUrl).orEmpty(),
+            version = revision
+        )
+
         return Package(
-            id = Identifier(
-                type = "Carthage",
-                namespace = vcsHost?.getUserOrOrganization(projectUrl).orEmpty(),
-                name = vcsHost?.getProject(projectUrl).orEmpty(),
-                version = revision
-            ),
+            id = id,
+            purl = when {
+                vcsHost == null -> "pkg:git/${projectUrl.substringAfter("//")}@$revision"
+                else -> id.toPurl()
+            },
             authors = emptySet(),
             declaredLicenses = emptySet(),
             description = "",
@@ -207,7 +219,7 @@ class Carthage(override val descriptor: PluginDescriptor = CarthageFactory.descr
 
         return Package(
             id = Identifier(
-                type = "Carthage",
+                type = PACKAGE_TYPE,
                 namespace = "",
                 name = fileUrl.substringAfterLast("/"),
                 version = revision
@@ -225,7 +237,7 @@ class Carthage(override val descriptor: PluginDescriptor = CarthageFactory.descr
     private fun createPackageFromBinarySpec(binarySpec: Map<String, String>, id: String, revision: String) =
         Package(
             id = Identifier(
-                type = "Carthage",
+                type = PACKAGE_TYPE,
                 namespace = "",
                 name = id.substringAfterLast("/").removeSuffix(".json"),
                 version = revision

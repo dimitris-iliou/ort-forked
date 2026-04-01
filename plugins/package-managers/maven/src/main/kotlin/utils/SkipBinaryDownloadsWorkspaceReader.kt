@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,11 +50,10 @@ internal class SkipBinaryDownloadsWorkspaceReader(
      * dependencies the artifact files are never accessed. Therefore, the concrete file returned here does not
      * actually matter; it just has to be non-null to indicate that the artifact is present locally.
      */
-    override fun findArtifact(artifact: Artifact): File? {
-        return if (artifact.extension == "pom") {
+    override fun findArtifact(artifact: Artifact): File? =
+        if (artifact.extension == "pom") {
             delegate.findArtifact(artifact)
         } else {
             File(artifact.artifactId)
         }
-    }
 }

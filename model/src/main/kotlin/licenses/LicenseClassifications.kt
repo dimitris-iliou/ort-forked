@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -91,9 +91,9 @@ data class LicenseClassifications(
             .let { invalidCategorizations ->
                 require(invalidCategorizations.isEmpty()) {
                     val licenseIds = invalidCategorizations.keys.joinToString { it.id.toString() }
-                    val categories = invalidCategorizations.values.flatten().toSet()
+                    val unknownCategories = invalidCategorizations.values.flatten().toSet()
                     "Found licenses that reference non-existing categories: $licenseIds; " +
-                        "unknown categories are $categories."
+                        "unknown categories are $unknownCategories."
                 }
             }
     }

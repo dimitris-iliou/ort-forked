@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,11 @@
  * License-Filename: LICENSE
  */
 
-import io.gitlab.arturbosch.detekt.Detekt
-import io.gitlab.arturbosch.detekt.report.ReportMergeTask
+import dev.detekt.gradle.Detekt
+import dev.detekt.gradle.report.ReportMergeTask
 
-import org.gradle.accessors.dm.LibrariesForLibs
+import kotlin.enums.enumEntries
+
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 import org.gradle.kotlin.dsl.dependencies
@@ -31,9 +32,6 @@ import org.gradle.kotlin.dsl.withType
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-
-private val Project.libs: LibrariesForLibs
-    get() = extensions.getByType()
 
 val javaLanguageVersion: String by project
 
@@ -46,8 +44,8 @@ plugins {
 
     // Apply third-party plugins.
     id("com.autonomousapps.dependency-analysis")
-    id("dev.adamko.dokkatoo")
-    id("io.gitlab.arturbosch.detekt")
+    id("dev.detekt")
+    id("org.jetbrains.dokka")
 
     kotlin("jvm")
 }
@@ -84,10 +82,6 @@ dependencies {
     implementation(libs.log4j.api.kotlin)
 
     constraints {
-        implementation("org.jetbrains.kotlin:kotlin-reflect:${libs.versions.kotlinPlugin.get()}") {
-            because("All transitive versions of Kotlin reflect need to match ORT's version of Kotlin.")
-        }
-
         implementation(libs.jruby) {
             because("JRuby used by Bundler directly and by AsciidoctorJ transitively must match.")
         }
@@ -101,7 +95,7 @@ detekt {
 
     source.from(fileTree(".") { include("*.gradle.kts") }, "src/funTest/kotlin", "src/testFixtures/kotlin")
 
-    basePath = rootDir.path
+    basePath = rootDir
 }
 
 java {
@@ -162,7 +156,7 @@ tasks.withType<Jar>().configureEach {
 }
 
 val maxKotlinJvmTarget = runCatching { JvmTarget.fromTarget(javaLanguageVersion) }
-    .getOrDefault(enumValues<JvmTarget>().max())
+    .getOrDefault(enumEntries<JvmTarget>().max())
 
 val mergeDetektReportsTaskName = "mergeDetektReports"
 val mergeDetektReports = if (rootProject.tasks.findByName(mergeDetektReportsTaskName) != null) {
@@ -173,13 +167,10 @@ val mergeDetektReports = if (rootProject.tasks.findByName(mergeDetektReportsTask
     }
 }
 
-val detekt = tasks.named<Detekt>("detekt")
-
 tasks.withType<Detekt>().configureEach detekt@{
     jvmTarget = maxKotlinJvmTarget.target
 
     dependsOn(":detekt-rules:assemble")
-    if (this != detekt.get()) mustRunAfter(detekt)
 
     exclude {
         "/build/generated/" in it.file.absoluteFile.invariantSeparatorsPath
@@ -191,25 +182,16 @@ tasks.withType<Detekt>().configureEach detekt@{
         // TODO: Enable this once https://github.com/detekt/detekt/issues/5034 is resolved and use the merged
         //       Markdown file as a GitHub Action job summary, see
         //       https://github.blog/2022-05-09-supercharging-github-actions-with-job-summaries/.
-        md.required = false
+        markdown.required = false
 
         sarif.required = true
-        txt.required = false
-        xml.required = false
     }
 
     mergeDetektReports.configure {
-        input.from(this@detekt.sarifReportFile)
+        input.from(this@detekt.reports.sarif.outputLocation)
     }
 
     finalizedBy(mergeDetektReports)
-}
-
-tasks.register("detektAll") {
-    group = "Verification"
-    description = "Run all detekt tasks with type resolution."
-
-    dependsOn(tasks.withType<Detekt>().filterNot { it.name == "detekt" })
 }
 
 tasks.withType<KotlinCompile>().configureEach {
@@ -226,27 +208,10 @@ tasks.withType<KotlinCompile>().configureEach {
 
     compilerOptions {
         allWarningsAsErrors = true
-        freeCompilerArgs = listOf(
-            "-Xannotation-default-target=param-property",
-            "-Xconsistent-data-class-copy-visibility"
-        )
+        freeCompilerArgs.addAll("-Xannotation-default-target=param-property", "-Xconsistent-data-class-copy-visibility")
         jvmTarget = maxKotlinJvmTarget
         optIn = optInRequirements
     }
-}
-
-tasks.register<Jar>("sourcesJar") {
-    archiveClassifier = "sources"
-    from(sourceSets.main.get().allSource)
-}
-
-tasks.register<Jar>("javadocJar") {
-    description = "Assembles a JAR containing the Javadoc documentation."
-    group = "Documentation"
-
-    dependsOn(tasks.dokkatooGeneratePublicationJavadoc)
-    from(tasks.dokkatooGeneratePublicationJavadoc.flatMap { it.outputDirectory })
-    archiveClassifier = "javadoc"
 }
 
 tasks.withType<Test>().configureEach {

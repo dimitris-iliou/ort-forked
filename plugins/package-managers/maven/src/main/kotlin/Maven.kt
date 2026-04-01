@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,7 +32,9 @@ import org.ossreviewtoolkit.model.DependencyGraph
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
+import org.ossreviewtoolkit.model.utils.isScopeIncluded
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.LocalProjectWorkspaceReader
@@ -44,6 +46,9 @@ import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.isTychoProject
 import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.toOrtProject
 import org.ossreviewtoolkit.utils.common.searchUpwardFor
 
+internal const val PROJECT_TYPE = "Maven"
+internal const val PACKAGE_TYPE = "Maven"
+
 /**
  * The [Maven](https://maven.apache.org/) package manager for Java.
  */
@@ -53,7 +58,7 @@ import org.ossreviewtoolkit.utils.common.searchUpwardFor
     factory = PackageManagerFactory::class
 )
 class Maven(override val descriptor: PluginDescriptor = MavenFactory.descriptor, private val sbtMode: Boolean) :
-    PackageManager(if (sbtMode) "SBT" else "Maven") {
+    PackageManager(if (sbtMode) "SBT" else PROJECT_TYPE) {
     constructor(descriptor: PluginDescriptor = MavenFactory.descriptor) : this(descriptor, false)
 
     override val globsForDefinitionFiles = listOf("pom.xml")
@@ -106,6 +111,7 @@ class Maven(override val descriptor: PluginDescriptor = MavenFactory.descriptor,
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {
@@ -123,8 +129,8 @@ class Maven(override val descriptor: PluginDescriptor = MavenFactory.descriptor,
             workingDir
         }
 
-        projectBuildingResult.dependencies.filterNot {
-            excludes.isScopeExcluded(it.dependency.scope)
+        projectBuildingResult.dependencies.filter {
+            isScopeIncluded(it.dependency.scope, excludes, includes)
         }.forEach { node ->
             graphBuilder.addDependency(DependencyGraph.qualifyScope(projectId, node.dependency.scope), node)
         }

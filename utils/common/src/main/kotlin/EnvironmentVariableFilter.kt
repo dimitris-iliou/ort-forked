@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -103,9 +103,8 @@ object EnvironmentVariableFilter {
      * Test whether the variable with the given [name] can be passed to a child process according to the criteria
      * described in the header comment.
      */
-    fun isAllowed(name: String): Boolean {
-        return name in allowNames || denySubstrings.none { name.contains(it, ignoreCase = true) }
-    }
+    fun isAllowed(name: String): Boolean =
+        name in allowNames || denySubstrings.none { name.contains(it, ignoreCase = true) }
 
     /**
      * Remove all keys from [environment] that do not pass this filter.

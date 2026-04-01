@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,8 @@ package org.ossreviewtoolkit.plugins.reporters.evaluatedmodel
 
 import com.fasterxml.jackson.annotation.JsonInclude
 
+import java.util.EnumSet
+
 import org.ossreviewtoolkit.model.LicenseSource
 import org.ossreviewtoolkit.model.RuleViolation
 import org.ossreviewtoolkit.model.Severity
@@ -36,7 +38,7 @@ data class EvaluatedRuleViolation(
     @JsonInclude(JsonInclude.Include.NON_NULL)
     val license: LicenseId?,
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    val licenseSource: LicenseSource?,
+    val licenseSources: EnumSet<LicenseSource>,
     val severity: Severity,
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     val message: String,

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,6 +47,7 @@ import org.ossreviewtoolkit.model.config.RepositoryConfiguration
 import org.ossreviewtoolkit.model.config.Resolutions
 import org.ossreviewtoolkit.model.config.RuleViolationResolution
 import org.ossreviewtoolkit.model.config.RuleViolationResolutionReason
+import org.ossreviewtoolkit.utils.common.enumSetOf
 import org.ossreviewtoolkit.utils.ort.ProcessedDeclaredLicense
 import org.ossreviewtoolkit.utils.spdx.toSpdx
 import org.ossreviewtoolkit.utils.test.readOrtResult
@@ -156,12 +157,12 @@ class OrtResultTest : WordSpec({
             val ids = ortResult.getProjectsAndPackages(includeSubProjects = false)
 
             ids should haveSize(8)
-            ids shouldNotContain(subProjectId)
+            ids shouldNotContain subProjectId
         }
     }
 
     "getDefinitionFilePathRelativeToAnalyzerRoot()" should {
-        "use the correct vcs" {
+        "use the correct repository" {
             val vcs = VcsInfo(type = VcsType.GIT, url = "https://example.com/git", revision = "")
             val nestedVcs1 = VcsInfo(type = VcsType.GIT, url = "https://example.com/git1", revision = "")
             val nestedVcs2 = VcsInfo(type = VcsType.GIT, url = "https://example.com/git2", revision = "")
@@ -201,7 +202,24 @@ class OrtResultTest : WordSpec({
             ortResult.getDefinitionFilePathRelativeToAnalyzerRoot(project3) shouldBe "path/2/project3/build.gradle"
         }
 
-        "fail if no vcs matches" {
+        "return the path to the definition file if an SPDX project has no VCS information" {
+            val project = Project.EMPTY.copy(
+                id = Identifier("SPDX::core-image-minimal-qemux86-64.rootfs-20260321090222"),
+                definitionFilePath = "project/spdx.json"
+            )
+            val ortResult = OrtResult(
+                Repository(
+                    vcs = VcsInfo(type = VcsType.GIT, url = "https://example.com/git", revision = "")
+                ),
+                AnalyzerRun.EMPTY.copy(
+                    result = AnalyzerResult.EMPTY.copy(projects = setOf(project))
+                )
+            )
+
+            ortResult.getDefinitionFilePathRelativeToAnalyzerRoot(project) shouldBe "project/spdx.json"
+        }
+
+        "fail if no repository matches" {
             val vcs = VcsInfo(type = VcsType.GIT, url = "https://example.com/git", revision = "")
             val nestedVcs1 = VcsInfo(type = VcsType.GIT, url = "https://example.com/git1", revision = "")
             val nestedVcs2 = VcsInfo(type = VcsType.GIT, url = "https://example.com/git2", revision = "")
@@ -474,6 +492,77 @@ class OrtResultTest : WordSpec({
 
             issues should beEmpty()
         }
+
+        "include advisor provider issues" {
+            val ortResult = OrtResult.EMPTY.copy(
+                analyzer = AnalyzerRun.EMPTY.copy(
+                    result = AnalyzerResult.EMPTY.copy(
+                        issues = mapOf(
+                            Identifier("Maven:org.oss-review-toolkit:example:1.0") to
+                                listOf(Issue(message = "Package issue", source = "", severity = Severity.WARNING))
+                        )
+                    )
+                ),
+                advisor = AdvisorRun.EMPTY.copy(
+                    providerIssues = setOf(
+                        Issue(message = "Provider issue", source = "", severity = Severity.WARNING),
+                        Issue(message = "Resolved provider issue", source = "", severity = Severity.WARNING)
+                    )
+                ),
+                resolvedConfiguration = ResolvedConfiguration(
+                    resolutions = Resolutions(
+                        issues = listOf(
+                            IssueResolution(
+                                message = "Resolved provider issue",
+                                reason = IssueResolutionReason.CANT_FIX_ISSUE,
+                                comment = "comment"
+                            )
+                        )
+                    )
+                )
+            )
+
+            val openIssues = ortResult.getOpenIssues()
+
+            openIssues.map { it.message } should containExactlyInAnyOrder(
+                "Package issue",
+                "Provider issue"
+            )
+        }
+    }
+
+    "getAdvisorProviderIssues()" should {
+        "return advisor provider issues and apply filters" {
+            val ortResult = OrtResult.EMPTY.copy(
+                advisor = AdvisorRun.EMPTY.copy(
+                    providerIssues = setOf(
+                        Issue(message = "Resolved provider issue", source = "", severity = Severity.ERROR),
+                        Issue(message = "Error provider issue", source = "", severity = Severity.ERROR),
+                        Issue(message = "Hint provider issue", source = "", severity = Severity.HINT)
+                    )
+                ),
+                resolvedConfiguration = ResolvedConfiguration(
+                    resolutions = Resolutions(
+                        issues = listOf(
+                            IssueResolution(
+                                message = "Resolved provider issue",
+                                reason = IssueResolutionReason.CANT_FIX_ISSUE,
+                                comment = "comment"
+                            )
+                        )
+                    )
+                )
+            )
+
+            ortResult.getAdvisorProviderIssues().map { it.message } should containExactlyInAnyOrder(
+                "Resolved provider issue",
+                "Error provider issue",
+                "Hint provider issue"
+            )
+
+            val filteredIssues = ortResult.getAdvisorProviderIssues(omitResolved = true, minSeverity = Severity.ERROR)
+            filteredIssues.map { it.message } shouldHaveSingleElement "Error provider issue"
+        }
     }
 
     "dependencyNavigator" should {
@@ -512,7 +601,7 @@ class OrtResultTest : WordSpec({
                             rule = "rule id",
                             pkg = Identifier("Maven", "org.ossreviewtoolkit", "resolved-violation", "0.8.15"),
                             license = null,
-                            licenseSource = null,
+                            licenseSources = enumSetOf(),
                             severity = Severity.HINT,
                             message = "Rule violation message to resolve",
                             howToFix = ""
@@ -534,7 +623,7 @@ class OrtResultTest : WordSpec({
                             rule = "Resolved rule violation",
                             pkg = Identifier("Maven", "org.ossreviewtoolkit", "resolved-violation", "0.8.15"),
                             license = null,
-                            licenseSource = null,
+                            licenseSources = enumSetOf(),
                             severity = Severity.ERROR,
                             message = "Rule violation message to resolve",
                             howToFix = ""
@@ -543,7 +632,7 @@ class OrtResultTest : WordSpec({
                             rule = "Rule violation without resolution",
                             pkg = Identifier("Maven", "com.example", "package-without-resolution", "1.0.0"),
                             license = null,
-                            licenseSource = null,
+                            licenseSources = enumSetOf(),
                             severity = Severity.WARNING,
                             message = "Message without any resolution",
                             howToFix = ""
@@ -552,7 +641,7 @@ class OrtResultTest : WordSpec({
                             rule = "Rule violation below minSeverity",
                             pkg = Identifier("Maven", "com.example", "violation-below-threshold", "3.14"),
                             license = null,
-                            licenseSource = null,
+                            licenseSources = enumSetOf(),
                             severity = Severity.HINT,
                             message = "Message without any resolution",
                             howToFix = ""

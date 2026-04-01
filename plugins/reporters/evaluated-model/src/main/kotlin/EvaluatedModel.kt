@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,11 +33,13 @@ import java.io.Writer
 
 import org.ossreviewtoolkit.model.Issue
 import org.ossreviewtoolkit.model.OrtResult
+import org.ossreviewtoolkit.model.PackageCuration
 import org.ossreviewtoolkit.model.Repository
 import org.ossreviewtoolkit.model.RuleViolation
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.config.IssueResolution
 import org.ossreviewtoolkit.model.config.LicenseFindingCuration
+import org.ossreviewtoolkit.model.config.PackageConfiguration
 import org.ossreviewtoolkit.model.config.PathExclude
 import org.ossreviewtoolkit.model.config.RepositoryConfiguration
 import org.ossreviewtoolkit.model.config.RuleViolationResolution
@@ -92,6 +94,9 @@ import org.ossreviewtoolkit.reporter.Statistics
 data class EvaluatedModel(
     val pathExcludes: List<PathExclude>,
     val scopeExcludes: List<ScopeExclude>,
+    val licenseFindingCurations: List<LicenseFindingCuration>,
+    val packageConfigurations: List<PackageConfiguration>,
+    val packageCurations: List<PackageCuration>,
     val copyrights: List<CopyrightStatement>,
     val licenses: List<LicenseId>,
     val scopes: List<EvaluatedScope>,
@@ -118,7 +123,7 @@ data class EvaluatedModel(
 
     val labels: Map<String, String>,
 
-    val metadata: Metadata
+    val toolsMetadata: ToolsMetadata
 ) {
     companion object {
         private val INT_ID_TYPES = listOf(
@@ -131,7 +136,10 @@ data class EvaluatedModel(
             EvaluatedScope::class.java,
             EvaluatedVulnerability::class.java,
             IssueResolution::class.java,
+            LicenseFindingCuration::class.java,
             LicenseId::class.java,
+            PackageConfiguration::class.java,
+            PackageCuration::class.java,
             PathExclude::class.java,
             RuleViolationResolution::class.java,
             ScopeExclude::class.java,

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,8 +28,8 @@ import org.ossreviewtoolkit.model.PackageLinkage
 import org.ossreviewtoolkit.model.Project
 
 /**
- * A class to model a [linkage]-type of dependency on the results of another [packageManager] when resolving [scope]
- * from [definitionFile].
+ * A class to model a dependency with the given [linkage] from one package manager on the results of another
+ * [packageManager] when resolving the [scope] from a [definitionFile].
  */
 data class PackageManagerDependency(
     val packageManager: String,

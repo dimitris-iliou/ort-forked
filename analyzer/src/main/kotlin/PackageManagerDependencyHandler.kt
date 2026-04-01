@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,9 @@ import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.PackageLinkage
 import org.ossreviewtoolkit.model.utils.DependencyHandler
 
+/**
+ * A special dependency handler to create and resolve dependencies between different package managers.
+ */
 class PackageManagerDependencyHandler(
     private val analyzerResult: AnalyzerResult
 ) : DependencyHandler<ResolvableDependencyNode> {
@@ -47,7 +50,7 @@ class PackageManagerDependencyHandler(
 
     override fun identifierFor(dependency: ResolvableDependencyNode): Identifier = dependency.id
 
-    override fun issuesForDependency(dependency: ResolvableDependencyNode): List<Issue> = dependency.issues
+    override fun issuesFor(dependency: ResolvableDependencyNode): List<Issue> = dependency.issues
 
     override fun linkageFor(dependency: ResolvableDependencyNode): PackageLinkage = dependency.linkage
 
@@ -59,7 +62,6 @@ class PackageManagerDependencyHandler(
                 ProjectScopeDependencyNode(
                     id = project.id,
                     linkage = packageManagerDependency.linkage,
-                    issues = emptyList(),
                     dependencies = dependencies.map { it.getStableReference() }
                 )
             }

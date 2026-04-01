@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,29 +28,25 @@ plugins {
 dependencies {
     api(projects.analyzer)
     api(projects.model)
-    api(projects.utils.commonUtils) {
-        because("This is a CommandLineTool.")
-    }
-
-    api(libs.semver4j) {
-        because("This is a CommandLineTool.")
-    }
 
     implementation(projects.downloader)
     implementation(projects.clients.bazelModuleRegistryClient)
+    implementation(projects.utils.commonUtils)
     implementation(projects.utils.ortUtils)
     implementation(projects.utils.spdxUtils)
 
     implementation(libs.kotlinx.coroutines)
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.semver4j)
 
     ksp(projects.analyzer)
 
     testImplementation(libs.mockk)
 
     funTestImplementation(testFixtures(projects.analyzer))
-    funTestImplementation(projects.plugins.packageManagers.conanPackageManager)
+
+    funTestRuntimeOnly(projects.plugins.packageManagers.conanPackageManager)
 }
 
 tasks.named<Test>("funTest") {

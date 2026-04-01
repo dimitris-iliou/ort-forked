@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2025 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,6 @@ import java.util.jar.Manifest
 import kotlin.io.resolve
 
 import org.apache.logging.log4j.kotlin.logger
-import org.apache.maven.repository.RepositorySystem
 
 import org.eclipse.aether.artifact.Artifact
 
@@ -37,7 +36,7 @@ import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.identifier
  */
 internal class LocalRepositoryHelper(
     /** The root directory of the local Maven repository. */
-    private val localRepositoryRoot: File = RepositorySystem.defaultUserLocalRepository
+    private val localRepositoryRoot: File
 ) {
     companion object {
         /** The name of the root folder that stores artifacts downloaded from P2 repositories. */

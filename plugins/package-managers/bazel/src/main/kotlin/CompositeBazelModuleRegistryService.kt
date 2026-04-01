@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import org.ossreviewtoolkit.clients.bazelmoduleregistry.LocalBazelModuleRegistry
 import org.ossreviewtoolkit.clients.bazelmoduleregistry.ModuleMetadata
 import org.ossreviewtoolkit.clients.bazelmoduleregistry.ModuleSourceInfo
 import org.ossreviewtoolkit.clients.bazelmoduleregistry.RemoteBazelModuleRegistryService
+import org.ossreviewtoolkit.utils.ort.okHttpClient
 
 /**
  * A composite Bazel module registry service that aggregates multiple [BazelModuleRegistryService] instances and
@@ -68,7 +69,7 @@ internal class CompositeBazelModuleRegistryService(
 
             val packageNamesForRegistry = packageNamesForServer.mapKeys { (url, _) ->
                 LocalBazelModuleRegistryService.create(url, projectDir)
-                    ?: RemoteBazelModuleRegistryService.create(url)
+                    ?: RemoteBazelModuleRegistryService.create(url, okHttpClient)
             }
 
             return CompositeBazelModuleRegistryService(packageNamesForRegistry)

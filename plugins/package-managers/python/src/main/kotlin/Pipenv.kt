@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import org.ossreviewtoolkit.analyzer.PackageManagerFactory
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.utils.common.CommandLineTool
@@ -36,6 +37,8 @@ import org.ossreviewtoolkit.utils.common.div
 import org.semver4j.Semver
 import org.semver4j.range.RangeList
 import org.semver4j.range.RangeListFactory
+
+private const val PROJECT_TYPE = "Pipenv"
 
 /**
  * The version that introduced the requirements command.
@@ -60,7 +63,7 @@ internal object PipenvCommand : CommandLineTool {
 )
 class Pipenv(
     override val descriptor: PluginDescriptor = PipenvFactory.descriptor, private val config: PipConfig
-) : PackageManager("Pipenv") {
+) : PackageManager(PROJECT_TYPE) {
     // Usually, definition files should not contain (only) lockfiles, to also support the case when no lockfile is
     // present. However, there currently is no way to distinguish a Pipenv project from a vanilla Pip project without
     // looking at the lockfile.
@@ -76,6 +79,7 @@ class Pipenv(
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {
@@ -97,7 +101,7 @@ class Pipenv(
         requirementsFile.writeText(requirements)
 
         return Pip(config = config, projectType = projectType)
-            .resolveDependencies(analysisRoot, requirementsFile, excludes, analyzerConfig, labels)
+            .resolveDependencies(analysisRoot, requirementsFile, excludes, includes, analyzerConfig, labels)
             .also { requirementsFile.delete() }
     }
 }

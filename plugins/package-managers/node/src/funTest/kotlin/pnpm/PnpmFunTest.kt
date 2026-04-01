@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2022 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -78,6 +78,16 @@ class PnpmFunTest : StringSpec({
         val expectedResultFile = getAssetFile("projects/synthetic/pnpm/nested-project-expected-output.yml")
 
         val result = analyze(definitionFile.parentFile, packageManagers = setOf(PnpmFactory())).getAnalyzerResult()
+
+        result.toYaml() should matchExpectedResult(expectedResultFile, definitionFile)
+    }
+
+    "Resolve dependencies correctly for a project with node linked set to hoisted" {
+        val definitionFile = getAssetFile("projects/synthetic/pnpm/node-linker-hoisted/package.json")
+        val expectedResultFile = getAssetFile("projects/synthetic/pnpm/node-linker-hoisted-expected-output.yml")
+
+        val result = analyze(definitionFile.parentFile, packageManagers = setOf(PnpmFactory())).getAnalyzerResult()
+        expectedResultFile.writeText(result.toYaml())
 
         result.toYaml() should matchExpectedResult(expectedResultFile, definitionFile)
     }

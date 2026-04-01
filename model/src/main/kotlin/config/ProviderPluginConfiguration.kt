@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,9 +34,10 @@ import org.ossreviewtoolkit.utils.common.Options
 data class ProviderPluginConfiguration(
     /**
      * The [id][PluginDescriptor.id] of the provider plugin.
+     *
+     * TODO: Solve name conflict as this property refers to the plugin id, but this class already has an id property
+     *       which could be confusing.
      */
-    // TODO: Solve name conflict as this property refers to the plugin id, but this class already has an id property
-    //       which could be confusing.
     val type: String,
 
     /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2019 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -179,7 +179,7 @@ const VulnerabilitiesTable = ({ webAppVulnerabilities = [], showExcludesColumn =
                 value: 4
             },
             {
-                text: (<Tag color="#b0c4de">Resolved</Tag>),
+                text: (<Tag color="#b0c4de" variant="solid">Resolved</Tag>),
                 value: 10
             }
         ],
@@ -481,7 +481,7 @@ const VulnerabilitiesTable = ({ webAppVulnerabilities = [], showExcludesColumn =
                     onChange: handlePaginationChange,
                     pageSize: pagination.pageSize,
                     pageSizeOptions: ['50', '100', '250', '500', '1000', '5000'],
-                    position: 'bottom',
+                    placement: 'bottom',
                     showQuickJumper: true,
                     showSizeChanger: true,
                     showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} issues`

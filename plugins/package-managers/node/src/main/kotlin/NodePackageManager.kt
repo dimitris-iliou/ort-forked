@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2025 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,9 +33,16 @@ import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
+import org.ossreviewtoolkit.utils.common.DirectoryStash
 import org.ossreviewtoolkit.utils.common.realFile
 
+const val NODE_MODULES_DIRNAME = "node_modules"
+const val NPM_RUNTIME_CONFIGURATION_FILENAME = ".npmrc"
+
 abstract class NodePackageManager(val managerType: NodePackageManagerType) : PackageManager(managerType.projectType) {
+    private lateinit var dirStash: DirectoryStash
+
+    // This needs to be "internal" instead of "protected" as overrides expose internal types.
     internal abstract val graphBuilder: DependencyGraphBuilder<*>
 
     internal fun parseProject(packageJsonFile: File, analysisRoot: File): Project {
@@ -46,9 +53,7 @@ abstract class NodePackageManager(val managerType: NodePackageManagerType) : Pac
         val (namespace, name) = splitNamespaceAndName(packageJson.name.orEmpty())
 
         val projectName = name.ifBlank {
-            getFallbackProjectName(analysisRoot, packageJsonFile).also {
-                logger.warn { "'$packageJsonFile' does not define a name, falling back to '$it'." }
-            }
+            getFallbackProjectName(analysisRoot, packageJsonFile)
         }
 
         val vcs = parseVcsInfo(packageJson)
@@ -74,6 +79,28 @@ abstract class NodePackageManager(val managerType: NodePackageManagerType) : Pac
         )
     }
 
+    override fun beforeResolution(
+        analysisRoot: File,
+        definitionFiles: List<File>,
+        analyzerConfig: AnalyzerConfiguration
+    ) {
+        super.beforeResolution(analysisRoot, definitionFiles, analyzerConfig)
+
+        val nodeModulesDirs = definitionFiles.mapNotNullTo(mutableSetOf()) { definitionFile ->
+            definitionFile.resolveSibling(NODE_MODULES_DIRNAME).takeIf { it.isDirectory }?.also {
+                logger.info { "Project-specific '$NODE_MODULES_DIRNAME' directory present at '$it'." }
+            }
+        }
+
+        dirStash = DirectoryStash(nodeModulesDirs)
+    }
+
+    override fun afterResolution(analysisRoot: File, definitionFiles: List<File>) {
+        dirStash.close()
+
+        super.afterResolution(analysisRoot, definitionFiles)
+    }
+
     override fun mapDefinitionFiles(
         analysisRoot: File,
         definitionFiles: List<File>,
@@ -81,11 +108,9 @@ abstract class NodePackageManager(val managerType: NodePackageManagerType) : Pac
     ): List<File> {
         val enabledIds = analyzerConfig.determineEnabledPackageManagers().map { it.descriptor.id.uppercase() }
 
-        // Only keep those types for which a package manager is enabled.
-        val enabledTypes = NodePackageManagerType.entries.filter { it.name in enabledIds }
-
-        // Assume the first type to be the best candidate for the fallback.
-        val fallbackType = enabledTypes.first()
+        // Only keep those types for which a package manager is enabled and assume the first type to be the best
+        // candidate for the fallback.
+        val fallbackType = NodePackageManagerType.entries.first { it.name in enabledIds }
 
         return NodePackageManagerDetection(definitionFiles).filterApplicable(managerType, fallbackType)
     }

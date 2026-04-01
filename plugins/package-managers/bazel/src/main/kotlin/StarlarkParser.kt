@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,7 +40,17 @@ internal data class BazelDepDirective(
 )
 
 internal enum class TokenType {
-    IDENTIFIER, STRING, NUMBER, BOOLEAN, EQUALS, COMMA, LPAREN, RPAREN, LBRACKET, RBRACKET, EOF
+    IDENTIFIER,
+    STRING,
+    NUMBER,
+    BOOLEAN,
+    EQUALS,
+    COMMA,
+    LPAREN,
+    RPAREN,
+    LBRACKET,
+    RBRACKET,
+    EOF
 }
 
 internal data class Token(val type: TokenType, val value: String)
@@ -216,7 +226,9 @@ internal class Parser(input: String) {
 
         return BazelDepDirective(
             name = params["name"] ?: throw IllegalArgumentException("Missing name in 'bazel_dep' directive"),
-            version = params["version"] ?: throw IllegalArgumentException("Missing version in 'bazel_dep' directive"),
+            // If a module or a dependency without version is defined, "bazel mod graph" returns "<module_name>@_" for
+            // dependency key. Therefore, the same version string is used here for alignment.
+            version = params["version"] ?: "_",
             devDependency = params["dev_dependency"]?.toBooleanStrict() ?: false
         )
     }
@@ -235,7 +247,7 @@ internal class Parser(input: String) {
 
         return ModuleDirective(
             name = params["name"] ?: throw IllegalArgumentException("Missing name in 'module' directive"),
-            version = params["version"] ?: throw IllegalArgumentException("Missing version in 'module' directive"),
+            version = params["version"].orEmpty(),
             compatibilityLevel = params["compatibility_level"]?.toInt() ?: 0
         )
     }

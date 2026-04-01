@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,24 +47,32 @@ data class PluginDescriptor(
 /**
  * The supported types of plugin options.
  */
-enum class PluginOptionType {
+enum class PluginOptionType(val typeName: String) {
     /** A [Boolean] option. */
-    BOOLEAN,
+    BOOLEAN("Boolean"),
+
+    /** An enum option. */
+    ENUM("Enum"),
+
+    /** An enum [List] option. */
+    ENUM_LIST("EnumList"),
 
     /** An [Int] option. */
-    INTEGER,
+    INTEGER("Integer"),
 
     /** A [Long] option. */
-    LONG,
+    LONG("Long"),
 
     /** A [Secret] option. */
-    SECRET,
+    SECRET("Secret"),
 
     /** A [String] option. */
-    STRING,
+    STRING("String"),
 
     /** A [List]<[String]> option. */
-    STRING_LIST
+    STRING_LIST("StringList");
+
+    override fun toString() = typeName
 }
 
 /**
@@ -87,6 +95,16 @@ data class PluginOption(
     val type: PluginOptionType,
 
     /**
+     * The enum type name if [type] is [PluginOptionType.ENUM] or [PluginOptionType.ENUM_LIST], `null` otherwise.
+     */
+    val enumType: String?,
+
+    /**
+     * The enum entries if [type] is [PluginOptionType.ENUM] or [PluginOptionType.ENUM_LIST], `null` otherwise.
+     */
+    val enumEntries: List<EnumEntry>?,
+
+    /**
      * The default value of the option, or `null` if the option is required.
      */
     val defaultValue: String?,
@@ -105,6 +123,18 @@ data class PluginOption(
      * Whether the option is required.
      */
     val isRequired: Boolean
+)
+
+/** A description of an enum entry. */
+data class EnumEntry(
+    /** The name of the enum entry. */
+    val name: String,
+
+    /** An alternative name for the enum entry, used instead of [name] when reading config maps. */
+    val alternativeName: String?,
+
+    /** A list of alternative names for the enum entry. */
+    val aliases: List<String>
 )
 
 /**

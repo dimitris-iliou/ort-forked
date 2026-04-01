@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,7 +40,8 @@ internal class PnpmDependencyHandler(
     private val workspaceModuleDirs = mutableSetOf<File>()
     private val packageJsonCache = mutableMapOf<File, PackageJson>()
 
-    private fun Dependency.isProject(): Boolean = isInstalled && workingDir.realFile in workspaceModuleDirs
+    private val Dependency.isProject: Boolean
+        get() = isInstalled && workingDir.realFile in workspaceModuleDirs
 
     fun setWorkspaceModuleDirs(dirs: Collection<File>) {
         workspaceModuleDirs.apply {
@@ -50,10 +51,10 @@ internal class PnpmDependencyHandler(
     }
 
     override fun identifierFor(dependency: Dependency): Identifier {
-        val type = if (dependency.isProject()) NodePackageManagerType.PNPM.projectType else "NPM"
+        val type = with(NodePackageManagerType.PNPM) { if (dependency.isProject) projectType else packageType }
         val namespace = dependency.from.substringBeforeLast("/", "")
         val name = dependency.from.substringAfterLast("/")
-        val version = if (dependency.isProject()) {
+        val version = if (dependency.isProject) {
             readPackageJson(dependency.packageJsonFile).version.orEmpty()
         } else {
             dependency.version.takeUnless { it.startsWith("link:") || it.startsWith("file:") }.orEmpty()
@@ -66,10 +67,10 @@ internal class PnpmDependencyHandler(
         (dependency.dependencies + dependency.optionalDependencies).values.filter { it.isInstalled }
 
     override fun linkageFor(dependency: Dependency): PackageLinkage =
-        PackageLinkage.DYNAMIC.takeUnless { dependency.isProject() } ?: PackageLinkage.PROJECT_DYNAMIC
+        PackageLinkage.DYNAMIC.takeUnless { dependency.isProject } ?: PackageLinkage.PROJECT_DYNAMIC
 
     override fun createPackage(dependency: Dependency, issues: MutableCollection<Issue>): Package? =
-        dependency.takeUnless { it.isProject() || !it.isInstalled }?.let {
+        dependency.takeUnless { it.isProject || !it.isInstalled }?.let {
             parsePackage(it.packageJsonFile, moduleInfoResolver)
         }
 
@@ -77,9 +78,11 @@ internal class PnpmDependencyHandler(
         packageJsonCache.getOrPut(packageJsonFile.realFile) { parsePackageJson(packageJsonFile) }
 }
 
-private val Dependency.workingDir: File get() = File(path)
+private val Dependency.workingDir: File
+    get() = File(path)
 
-private val Dependency.packageJsonFile: File get() = workingDir.resolve(NodePackageManagerType.DEFINITION_FILE)
+private val Dependency.packageJsonFile: File
+    get() = workingDir.resolve(NodePackageManagerType.DEFINITION_FILE)
 
 /**
  * pnpm install skips optional dependencies which are not compatible with the environment. In this case the path
@@ -88,4 +91,5 @@ private val Dependency.packageJsonFile: File get() = workingDir.resolve(NodePack
  * lockfile. Maybe, this can be mitigated by also using --frozen-lockfile. However, the documentation does not explain
  * how the combination of these two options works.
  */
-private val Dependency.isInstalled: Boolean get() = workingDir.isDirectory
+private val Dependency.isInstalled: Boolean
+    get() = workingDir.isDirectory

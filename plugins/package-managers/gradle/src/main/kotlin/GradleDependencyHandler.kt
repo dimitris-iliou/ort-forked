@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -63,7 +63,7 @@ internal class GradleDependencyHandler(
 
     override fun dependenciesFor(dependency: OrtDependency): List<OrtDependency> = dependency.dependencies
 
-    override fun issuesForDependency(dependency: OrtDependency): List<Issue> =
+    override fun issuesFor(dependency: OrtDependency): List<Issue> =
         listOfNotNull(
             dependency.error?.let {
                 createAndLogIssue(

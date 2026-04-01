@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2020 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
  * SPDX-License-Identifier: Apache-2.0
  * License-Filename: LICENSE
  */
+
+import { randomStringGenerator } from '../utils';
 
 import Provenance from './Provenance';
 import ScannerDetails from './ScannerDetails';
@@ -65,6 +67,8 @@ class WebAppScanResult {
             if (obj.start_time || obj.startTime) {
                 this.#startTime = obj.start_time || obj.startTime;
             }
+
+            this.key = randomStringGenerator(20);
         }
     }
 

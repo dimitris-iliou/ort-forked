@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2020 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -121,8 +121,8 @@ private fun getLicenseFindings(details: ScanFileDetails, path: String): List<Lic
 /**
  * Get the copyright findings from the given [details].
  */
-private fun getCopyrightFindings(details: ScanFileDetails, path: String): List<CopyrightFinding> {
-    return details.copyrightDetails.orEmpty().map { copyright ->
+private fun getCopyrightFindings(details: ScanFileDetails, path: String): List<CopyrightFinding> =
+    details.copyrightDetails.orEmpty().map { copyright ->
         CopyrightFinding(
             statement = copyright.name,
             location = TextLocation(
@@ -132,7 +132,6 @@ private fun getCopyrightFindings(details: ScanFileDetails, path: String): List<C
             )
         )
     }
-}
 
 /**
  * Create snippet findings from given [details] and [localFilePath]. If a snippet returned by ScanOSS contains several

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,7 +41,6 @@ import org.ossreviewtoolkit.model.CopyrightFinding
 import org.ossreviewtoolkit.model.Hash
 import org.ossreviewtoolkit.model.Issue
 import org.ossreviewtoolkit.model.LicenseFinding
-import org.ossreviewtoolkit.model.PackageProvider
 import org.ossreviewtoolkit.model.RemoteArtifact
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.Snippet as OrtSnippet
@@ -52,7 +51,6 @@ import org.ossreviewtoolkit.model.config.snippet.SnippetChoiceReason
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.jsonMapper
 import org.ossreviewtoolkit.model.mapLicense
-import org.ossreviewtoolkit.model.utils.PurlType
 import org.ossreviewtoolkit.utils.common.collapseToRanges
 import org.ossreviewtoolkit.utils.common.collectMessages
 import org.ossreviewtoolkit.utils.common.prettyPrintRanges
@@ -61,6 +59,12 @@ import org.ossreviewtoolkit.utils.spdx.SpdxConstants
 import org.ossreviewtoolkit.utils.spdx.toSpdx
 
 private val logger = loggerOf(MethodHandles.lookup().lookupClass())
+
+/**
+ * The JSON key for ORT comments. This is more specific than [ORT_NAME] to avoid matching plain text comments that
+ * happen to contain the word "ort".
+ */
+private const val ORT_COMMENT_KEY = "\"$ORT_NAME\":"
 
 /**
  * A data class to hold FossID raw results.
@@ -147,13 +151,13 @@ internal fun <T : Summarizable> List<T>.mapSummary(
         var fileComment: OrtComment? = null
 
         if (summarizable is MarkedAsIdentifiedFile) {
-            summarizable.comments.values.firstOrNull {
-                ORT_NAME in it.comment
+            summarizable.comments.value?.values?.firstOrNull {
+                ORT_COMMENT_KEY in it.comment
             }?.also {
                 runCatching {
                     fileComment = jsonMapper.readValue(it.comment, OrtComment::class.java)
-                }.onFailure {
-                    logger.error { "Cannot deserialize comment for ${summary.path}: ${it.message}." }
+                }.onFailure { e ->
+                    logger.error { "Cannot deserialize comment for ${summary.path}: ${e.message}." }
                 }
             }
         }
@@ -196,8 +200,8 @@ private fun mapLicense(
     location: TextLocation,
     issues: MutableList<Issue>,
     detectedLicenseMapping: Map<String, String>
-): LicenseFinding? {
-    return runCatching {
+): LicenseFinding? =
+    runCatching {
         // TODO: The detected license mapping must be applied here, because FossID can return license strings
         //       which cannot be parsed to an SpdxExpression. A better solution could be to automatically
         //       convert the strings into a form that can be parsed, then the mapping could be applied globally.
@@ -211,7 +215,6 @@ private fun mapLicense(
             affectedPath = location.path
         )
     }.getOrNull()
-}
 
 /**
  * Map the raw snippets to ORT [SnippetFinding]s. If a snippet license cannot be parsed, an issues is added to [issues].
@@ -307,8 +310,7 @@ private fun Set<Snippet>.mapSnippetFindingsForFile(
         }
 
         val snippetProvenance = ArtifactProvenance(RemoteArtifact(url, Hash.NONE))
-        val purl = snippet.purl
-            ?: "pkg:${urlToPackageType(url)}/${snippet.author}/${snippet.artifact}@${snippet.version}"
+        val purl = snippet.toPurl(url)
 
         val additionalSnippetData = mutableMapOf(
             FossId.SNIPPET_DATA_ID to snippet.id.toString(),
@@ -325,9 +327,9 @@ private fun Set<Snippet>.mapSnippetFindingsForFile(
             val rawMatchedLinesSnippetFile = rawMatchedLines?.mirrorFile.orEmpty().collapseToRanges()
 
             if (rawMatchedLinesSourceFile.isNotEmpty()) {
-                sourceLocations = rawMatchedLinesSourceFile.map { (first, second) ->
+                sourceLocations = rawMatchedLinesSourceFile.mapTo(mutableSetOf()) { (first, second) ->
                     TextLocation(file, first, second)
-                }.toSet()
+                }
             }
 
             snippetLocation = rawMatchedLinesSnippetFile.firstOrNull()
@@ -438,19 +440,23 @@ private fun getLicenseFindingFromSnippetChoice(
  * Check all [markedAsIdentifiedFiles] if their snippet choices locations count or non-relevant snippets locations count
  * matches the ones stored in the [OrtComment]: When not, it means some of this configuration has been removed and the
  * files should be considered as pending again. Such files are returned.
+ * If present, the optional [archivePrefix] is removed from the marked files names when looking for their corresponding
+ * snippet choices.
  */
 internal fun listUnmatchedSnippetChoices(
     markedAsIdentifiedFiles: List<MarkedAsIdentifiedFile>,
-    snippetChoices: List<SnippetChoice>
+    snippetChoices: List<SnippetChoice>,
+    archivePrefix: String?
 ): List<String> =
     markedAsIdentifiedFiles.filterNot { markedAsIdentifiedFile ->
         val markedFileName = markedAsIdentifiedFile.getFileName()
+        val markedFileNameWithoutPrefix = archivePrefix?.let { markedFileName.removePrefix(it) } ?: markedFileName
         val snippetChoicesByName = snippetChoices.filter {
-            it.given.sourceLocation.path == markedFileName
+            it.given.sourceLocation.path == markedFileNameWithoutPrefix
         }
 
-        val comment = markedAsIdentifiedFile.comments.values.firstOrNull {
-            ORT_NAME in it.comment
+        val comment = markedAsIdentifiedFile.comments.value?.values?.firstOrNull {
+            ORT_COMMENT_KEY in it.comment
         }?.runCatching {
             jsonMapper.readValue(this.comment, OrtComment::class.java)
         }?.onFailure {
@@ -477,33 +483,6 @@ internal fun listUnmatchedSnippetChoices(
             else -> true
         }
     }.map { it.getFileName() }
-
-/**
- * Return the [PurlType] as determined from the given [url], or [PurlType.GENERIC] if there is no match.
- */
-private fun urlToPackageType(url: String): PurlType =
-    when (val provider = PackageProvider.get(url)) {
-        PackageProvider.COCOAPODS -> PurlType.COCOAPODS
-        PackageProvider.CRATES_IO -> PurlType.CARGO
-        PackageProvider.DEBIAN -> PurlType.DEBIAN
-        PackageProvider.GITHUB -> PurlType.GITHUB
-        PackageProvider.GITLAB -> PurlType.GITLAB
-        PackageProvider.GOLANG -> PurlType.GOLANG
-        PackageProvider.MAVEN_CENTRAL, PackageProvider.MAVEN_GOOGLE -> PurlType.MAVEN
-        PackageProvider.NPM_JS -> PurlType.NPM
-        PackageProvider.NUGET -> PurlType.NUGET
-        PackageProvider.PACKAGIST -> PurlType.COMPOSER
-        PackageProvider.PYPI -> PurlType.PYPI
-        PackageProvider.RUBYGEMS -> PurlType.GEM
-
-        else -> {
-            PurlType.GENERIC.also {
-                logger.warn {
-                    "Cannot determine purl type for URL $url and provider '$provider'. Falling back to '$it'."
-                }
-            }
-        }
-    }
 
 internal fun TextLocation.prettyPrint(): String =
     if (hasLineRange) {

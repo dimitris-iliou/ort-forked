@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,7 +38,7 @@ fun normalizeVcsUrl(vcsUrl: String): String {
     // URLs to Git repos may omit the scheme and use an SCP-like URL that uses ":" to separate the host from the path,
     // see https://git-scm.com/docs/git-clone#_git_urls_a_id_urls_a. Make this an explicit ssh URL, so it can be parsed
     // by Java's URI class.
-    url = url.replace(Regex("^(.*)([a-zA-Z]+):([a-zA-Z]+)(.*)$")) {
+    url = url.replace(Regex("^(.*)([a-zA-Z]+):([~a-zA-Z]+)(.*)$")) {
         val tail = "${it.groupValues[1]}${it.groupValues[2]}/${it.groupValues[3]}${it.groupValues[4]}"
         if ("://" in url) tail else "ssh://$tail"
     }

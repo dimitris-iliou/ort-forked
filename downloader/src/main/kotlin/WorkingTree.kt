@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,7 +37,13 @@ abstract class WorkingTree(val workingDir: File, val vcsType: VcsType) {
      * [workingDir] to [getRootPath]. It is not related to the path argument that was used for downloading, and at the
      * example of Git, it does not reflect the (single) path that was cloned in a sparse checkout.
      */
-    open fun getInfo() = VcsInfo(vcsType, getRemoteUrl(), getRevision(), path = getPathToRoot(workingDir))
+    open fun getInfo() =
+        VcsInfo(
+            type = vcsType,
+            url = runCatching { getRemoteUrl() }.getOrDefault(""),
+            revision = getRevision(),
+            path = getPathToRoot(workingDir)
+        )
 
     /**
      * Return the map of nested repositories, for example Git submodules or Git-Repo modules. The key is the path to the
@@ -97,10 +103,12 @@ abstract class WorkingTree(val workingDir: File, val vcsType: VcsType) {
                     "No matching tag for version '$version' found in $remoteTags. Please create a tag whose name " +
                         "contains the version."
                 )
+
             versionNames.size > 1 ->
                 throw IOException(
                     "Multiple matching tags found for version '$version': $versionNames. Please add a curation."
                 )
+
             else -> versionNames.first()
         }
     }

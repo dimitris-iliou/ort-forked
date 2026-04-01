@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -289,7 +289,7 @@ class SpdxCompoundExpression(
 
             expression.children.forEach { addChildren(it) }
 
-            return children.sortedBy { it.toString() }
+            return children.sortedBy { it.toString().lowercase() }
         }
 
         return checkNotNull(getSortedChildrenWithSameOperator(this).toExpression(operator))
@@ -343,20 +343,44 @@ class SpdxCompoundExpression(
     }
 
     private fun replaceSubexpressionWithChoice(subExpression: SpdxExpression, choice: SpdxExpression): SpdxExpression {
-        val expressionString = toString()
-        val subExpressionString = subExpression.toString()
-        val choiceString = choice.toString()
-
-        return if (subExpressionString in expressionString) {
-            expressionString.replace(subExpressionString, choiceString).toSpdx()
-        } else {
-            val dismissedLicense = subExpression.validChoices().first { it != choice }
-            val unchosenLicenses = validChoices().filter { it != dismissedLicense }
-
-            requireNotNull(unchosenLicenses.toExpression(SpdxOperator.OR)) {
-                "No licenses left after applying choice $choice to $subExpression."
-            }
+        // If the operator is AND, then there is no choice at this level, but try with the children if they contain the
+        // sub-expression. Also, if the sub-expression is the whole expression, no recursive application of the choice
+        // is needed, as it will be handled by the logic below.
+        if (
+            operator == SpdxOperator.AND && subExpression != this && children.any { it.isSubExpression(subExpression) }
+        ) {
+            // Reconstruct this AND-expression with all children having the subexpression replaced with the choice.
+            return SpdxCompoundExpression(
+                SpdxOperator.AND,
+                children.map {
+                    when {
+                        it is SpdxCompoundExpression -> it.replaceSubexpressionWithChoice(subExpression, choice)
+                        else -> it
+                    }
+                }
+            )
         }
+
+        // The basic idea of the following algorithm is that any expression can be represented as a disjunction of the
+        // choices it offers, and that any expressions that offer exactly the same choices are equal. So an expression
+        // is first "decomposed" into its choices, then dismissed choices (unchosen expressions) are removed, and the
+        // remaining expressions are recomped with the OR-operand.
+
+        val choices = validChoices().toMutableSet()
+        val subExpressionChoices = subExpression.validChoices()
+        val dismissedChoices = subExpressionChoices - choice.validChoices()
+
+        // While the sub-expression is still contained in this expression...
+        while (choices.containsAll(subExpressionChoices)) {
+            // ... remove all unchosen expressions.
+            choices.removeAll(dismissedChoices)
+        }
+
+        require(choices.isNotEmpty()) {
+            "No licenses left after applying choice $choice to $subExpression."
+        }
+
+        return choices.reduce(SpdxExpression::or)
     }
 
     override fun isSubExpression(subExpression: SpdxExpression?): Boolean =
@@ -500,13 +524,8 @@ class SpdxLicenseWithExceptionExpression(
 
     override fun equals(other: Any?) =
         when (other) {
-            is SpdxLicenseWithExceptionExpression -> license == other.license && exception == other.exception
-
-            is SpdxExpression -> {
-                val decomposed = other.decompose()
-                decomposed.singleOrNull()?.let {
-                    it is SpdxLicenseWithExceptionExpression && it.license == license && it.exception == exception
-                } == true
+            is SpdxLicenseWithExceptionExpression -> {
+                license == other.license && exception.equals(other.exception, ignoreCase = true)
             }
 
             else -> false
@@ -565,13 +584,8 @@ class SpdxLicenseIdExpression(
 
     override fun equals(other: Any?) =
         when (other) {
-            is SpdxLicenseIdExpression -> id == other.id && orLaterVersion == other.orLaterVersion
-
-            is SpdxExpression -> {
-                val decomposed = other.decompose()
-                decomposed.singleOrNull()?.let {
-                    it is SpdxLicenseIdExpression && it.id == id && it.orLaterVersion == orLaterVersion
-                } == true
+            is SpdxLicenseIdExpression -> {
+                id.equals(other.id, ignoreCase = true) && orLaterVersion == other.orLaterVersion
             }
 
             else -> false
@@ -614,13 +628,7 @@ data class SpdxLicenseReferenceExpression(
 
     override fun equals(other: Any?) =
         when (other) {
-            is SpdxLicenseReferenceExpression -> id == other.id
-
-            is SpdxExpression -> {
-                val decomposed = other.decompose()
-                decomposed.singleOrNull()?.let { it is SpdxLicenseReferenceExpression && it.id == id } == true
-            }
-
+            is SpdxLicenseReferenceExpression -> id.equals(other.id, ignoreCase = true)
             else -> false
         }
 

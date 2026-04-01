@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,6 +50,27 @@ class JsonSpecGenerator(private val codeGenerator: CodeGenerator) {
                         addJsonObject {
                             put("name", it.name)
                             put("type", it.type.name)
+                            put("enumType", it.enumType)
+
+                            it.enumEntries.let { enumEntries ->
+                                if (enumEntries == null) {
+                                    put("enumEntries", null)
+                                } else {
+                                    putJsonArray("enumEntries") {
+                                        enumEntries.forEach { enumEntry ->
+                                            addJsonObject {
+                                                put("name", enumEntry.name)
+                                                put("alternativeName", enumEntry.alternativeName)
+
+                                                putJsonArray("aliases") {
+                                                    addAll(enumEntry.aliases)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             put("description", it.description)
                             put("default", it.defaultValue)
 

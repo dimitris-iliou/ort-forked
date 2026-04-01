@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2023 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ repositories {
 
     exclusiveContent {
         forRepository {
-            maven("https://repo.eclipse.org/content/groups/releases")
+            maven("https://repo.eclipse.org/content/repositories/releases")
         }
 
         filter {
@@ -38,14 +38,14 @@ repositories {
 }
 
 dependencies {
-    implementation(files(libs.javaClass.superclass.protectionDomain.codeSource.location))
-
     implementation(libs.jgit)
     implementation(libs.plugin.dependencyAnalysis)
     implementation(libs.plugin.detekt)
-    implementation(libs.plugin.dokkatoo)
+    implementation(libs.plugin.dokka)
     implementation(libs.plugin.graalVmNativeImage)
     implementation(libs.plugin.kotlin)
     implementation(libs.plugin.ksp)
     implementation(libs.plugin.mavenPublish)
 }
+
+version = rootProject.version

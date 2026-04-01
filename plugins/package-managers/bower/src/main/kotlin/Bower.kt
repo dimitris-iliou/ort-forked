@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import org.ossreviewtoolkit.analyzer.PackageManagerResult
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
@@ -38,6 +39,9 @@ import org.ossreviewtoolkit.utils.common.stashDirectories
 
 import org.semver4j.range.RangeList
 import org.semver4j.range.RangeListFactory
+
+private const val PROJECT_TYPE = "Bower"
+internal const val PACKAGE_TYPE = "Bower"
 
 internal object BowerCommand : CommandLineTool {
     override fun command(workingDir: File?) = if (Os.isWindows) "bower.cmd" else "bower"
@@ -53,7 +57,7 @@ internal object BowerCommand : CommandLineTool {
     description = "The Bower package manager for JavaScript.",
     factory = PackageManagerFactory::class
 )
-class Bower(override val descriptor: PluginDescriptor = BowerFactory.descriptor) : PackageManager("Bower") {
+class Bower(override val descriptor: PluginDescriptor = BowerFactory.descriptor) : PackageManager(PROJECT_TYPE) {
     override val globsForDefinitionFiles = listOf("bower.json")
 
     private val graphBuilder = DependencyGraphBuilder(BowerDependencyHandler())
@@ -68,6 +72,7 @@ class Bower(override val descriptor: PluginDescriptor = BowerFactory.descriptor)
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {

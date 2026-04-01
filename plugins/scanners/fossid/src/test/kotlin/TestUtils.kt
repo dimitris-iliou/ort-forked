@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 package org.ossreviewtoolkit.plugins.scanners.fossid
 
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
@@ -69,6 +70,7 @@ import org.ossreviewtoolkit.clients.fossid.model.status.DownloadStatus
 import org.ossreviewtoolkit.clients.fossid.model.status.ScanStatus
 import org.ossreviewtoolkit.clients.fossid.model.status.UnversionedScanDescription
 import org.ossreviewtoolkit.clients.fossid.removeUploadedContent
+import org.ossreviewtoolkit.clients.fossid.runScan
 import org.ossreviewtoolkit.clients.fossid.uploadFile
 import org.ossreviewtoolkit.downloader.VersionControlSystem
 import org.ossreviewtoolkit.downloader.WorkingTree
@@ -85,7 +87,7 @@ import org.ossreviewtoolkit.model.TextLocation
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.Excludes
-import org.ossreviewtoolkit.model.config.SnippetChoices
+import org.ossreviewtoolkit.model.config.snippet.SnippetChoices
 import org.ossreviewtoolkit.plugins.api.Secret
 import org.ossreviewtoolkit.plugins.scanners.fossid.events.CloneRepositoryHandler
 import org.ossreviewtoolkit.plugins.scanners.fossid.events.UploadArchiveHandler
@@ -116,6 +118,12 @@ internal val IGNORE_RULE = IgnoreRule(1, RuleType.EXTENSION, ".docx", SCAN_ID, "
 
 /** The default scope used when creating ignore rule. */
 internal val DEFAULT_IGNORE_RULE_SCOPE = RuleScope.SCAN
+
+/** An empty VCS revision. */
+internal const val REVISION_EMPTY = ""
+
+/** The 'master' VCS revision. */
+internal const val REVISION_MASTER = "master"
 
 /**
  * Create a new [FossId] instance with the specified [config].
@@ -154,8 +162,7 @@ internal fun createConfig(
         writeToStorage = false,
         logRequests = false,
         isArchiveMode = isArchiveMode,
-        treatPendingIdentificationsAsError = false,
-        deleteUploadedArchiveAfterScan = true
+        treatPendingIdentificationsAsError = false
     )
 
     val namingProvider = createNamingProviderMock()
@@ -198,9 +205,9 @@ internal fun createVersionControlSystemMock(): VersionControlSystem {
     }
 
     val vcs = mockk<VersionControlSystem> {
-        every { getDefaultBranchName(any()) } returns "master"
+        every { getDefaultBranchName(any()) } returns REVISION_MASTER
         every { initWorkingTree(any(), any()) } returns wt
-        every { updateWorkingTree(any(), any()) } returns Result.success("master")
+        every { updateWorkingTree(any(), any()) } returns Result.success(REVISION_MASTER)
     }
 
     return vcs
@@ -229,7 +236,7 @@ internal fun createScan(
     revision: String,
     scanCode: String,
     scanId: Int = SCAN_ID,
-    comment: String = "master",
+    comment: String = REVISION_MASTER,
     legacyComment: Boolean = false
 ): Scan =
     mockk<Scan> {
@@ -253,7 +260,7 @@ internal fun createScanWithUploadedContent(
     revision: String,
     scanCode: String,
     scanId: Int = SCAN_ID,
-    comment: String = "master"
+    comment: String = REVISION_MASTER
 ): Scan =
     mockk<Scan> {
         every { gitRepoUrl } returns null
@@ -372,19 +379,23 @@ private fun createMarkedIdentifiedFile(index: Int): MarkedAsIdentifiedFile {
         sha1 = null,
         sha256 = null,
         size = index,
-        licenses = mutableMapOf(index to license)
+        licenses = PolymorphicData(mutableMapOf(index to license))
     )
 
     return file
 }
 
 /**
- * Create a [MarkedAsIdentifiedFile] with the give [license] and [path].
+ * Create a [MarkedAsIdentifiedFile] with the given [license] and [path]. When [comment] is provided and
+ * [includeLicensesWithComment] is false (the default), the file's licenses will be set to null, as is expected when
+ * the comment contains ORT JSON with authoritative license information. Set [includeLicensesWithComment] to true
+ * when testing plain text comments that should not override the file's license.
  */
 internal fun createMarkAsIdentifiedFile(
     license: String,
     path: String,
-    comment: String? = null
+    comment: String? = null,
+    includeLicensesWithComment: Boolean = false
 ): MarkedAsIdentifiedFile {
     val fileLicense = License(
         id = 1,
@@ -406,9 +417,11 @@ internal fun createMarkAsIdentifiedFile(
         )
     }
 
+    val includeLicenses = comment == null || includeLicensesWithComment
+
     return MarkedAsIdentifiedFile(
         comment = "comment",
-        comments = if (comment == null) emptyMap() else mapOf(1 to Comment(1, 1, comment)),
+        comments = PolymorphicData(if (comment == null) emptyMap() else mapOf(1 to Comment(1, 1, comment))),
         identificationId = 1,
         identificationCopyright = "copyright",
         isDistributed = 1,
@@ -421,7 +434,7 @@ internal fun createMarkAsIdentifiedFile(
             sha1 = "fileSha1",
             sha256 = "fileSha256",
             size = 0,
-            licenses = if (comment != null) null else mutableMapOf(1 to fileLicense)
+            licenses = PolymorphicData(if (includeLicenses) mutableMapOf(1 to fileLicense) else null)
         )
     }
 }
@@ -591,7 +604,7 @@ internal fun FossIdServiceWithVersion.expectRemoveUploadedContent(scanCode: Stri
 }
 
 /**
- * Prepare this service mock to expect a request to upload a file for the given [scanCode]. The file nane is not
+ * Prepare this service mock to expect a request to upload a file for the given [scanCode]. The filename is not
  * required as the FossID scanner generates a unique name for each file.
  */
 internal fun FossIdServiceWithVersion.expectUploadFile(scanCode: String): FossIdServiceWithVersion {
@@ -602,7 +615,7 @@ internal fun FossIdServiceWithVersion.expectUploadFile(scanCode: String): FossId
 }
 
 /**
- * Prepare this service mock to expect a request to extract archives for the given [scanCode]. The file nane is not
+ * Prepare this service mock to expect a request to extract archives for the given [scanCode]. The filename is not
  * required as the FossID scanner generates a unique name for each file.
  */
 internal fun FossIdServiceWithVersion.expectExtractArchives(scanCode: String): FossIdServiceWithVersion {
@@ -633,7 +646,7 @@ internal fun FossIdServiceWithVersion.expectCreateScan(
     projectCode: String,
     scanCode: String,
     vcsInfo: VcsInfo,
-    projectRevision: String = "master",
+    projectRevision: String = REVISION_MASTER,
     isArchiveMode: Boolean = false
 ): FossIdServiceWithVersion {
     val comment = createOrtScanComment(vcsInfo.url, vcsInfo.revision, projectRevision).asJsonString()
@@ -732,3 +745,154 @@ internal fun FossId.scan(
             snippetChoices = snippetChoices
         )
     )
+
+/**
+ * Mock all the different functions called during an upload archive workflow for a new scan [scanCode].
+ * If [deltaScans] is enabled, it also mocks the checks for existing scans.
+ * If [existingScans] is not empty, it also mocks the checks for the contained scans status.
+ */
+@Suppress("LongParameterList")
+internal fun FossIdServiceWithVersion.expectUploadArchiveWorkflow(
+    projectCode: String,
+    scanCode: String,
+    vcsInfo: VcsInfo,
+    projectRevision: String,
+    existingScans: List<Scan> = emptyList(),
+    deltaScans: Boolean
+): FossIdServiceWithVersion =
+    apply {
+        expectProjectRequest(projectCode)
+        expectListScans(projectCode, existingScans)
+        if (deltaScans) {
+            existingScans.forEach {
+                it.code?.also { existingScanCode ->
+                    expectCheckScanStatus(existingScanCode, ScanStatus.FINISHED)
+                }
+            }
+
+            expectCheckScanStatus(scanCode, ScanStatus.NOT_STARTED, ScanStatus.FINISHED)
+        } else {
+            expectCheckScanStatus(scanCode, ScanStatus.FINISHED)
+        }
+
+        expectCreateScan(projectCode, scanCode, vcsInfo, projectRevision, true)
+        expectRemoveUploadedContent(scanCode)
+        expectUploadFile(scanCode)
+        expectExtractArchives(scanCode)
+    }
+
+/**
+ * Verify that all functions called during an upload archive workflow for a new scan [scanCode] were called
+ */
+fun FossIdServiceWithVersion.verifyUploadArchiveWorkflow(
+    projectCode: String,
+    scanCode: String,
+    comment: OrtScanComment
+) {
+    coVerify(exactly = 1) {
+        createScan(USER, API_KEY, projectCode, scanCode, null, null, comment.asJsonString())
+        removeUploadedContent(USER, API_KEY, scanCode)
+        uploadFile(USER, API_KEY, scanCode, any())
+        extractArchives(USER, API_KEY, scanCode, any())
+    }
+
+    coVerify(exactly = 0) {
+        createProject(any())
+    }
+}
+
+/**
+ * Mock all the different functions called during a clone repository workflow for a new scan [scanCode].
+ * If [deltaScans] is enabled, it also mocks the checks for existing scans.
+ * If [existingScans] is not empty, it also mocks the list operation that return these scans. The last existing scan
+ * code will be status checked and its ignore rules listed.
+ * The [existingScanCode] can be used to specify which existing scan to check the status and list the ignore rules for,
+ * otherwise the last existing scan is used.
+ * The [checkScanStatuses] can be used to specify which statuses to expect when checking the status of the new scan.
+ */
+@Suppress("LongParameterList")
+internal fun FossIdServiceWithVersion.expectCloneRepositoryWorkflow(
+    projectCode: String,
+    scanCode: String,
+    vcsInfo: VcsInfo,
+    projectRevision: String = REVISION_MASTER,
+    existingScans: List<Scan> = emptyList(),
+    deltaScans: Boolean = false,
+    existingIgnoreRules: List<IgnoreRule> = emptyList(),
+    existingScanCode: String? = null,
+    checkScanStatuses: List<ScanStatus>? = null
+): FossIdServiceWithVersion =
+    apply {
+        expectProjectRequest(projectCode)
+        expectListScans(projectCode, existingScans)
+        if (deltaScans) {
+            val resolvedExistingScanCode = existingScanCode ?: existingScans.takeIf { it.isNotEmpty() }?.last()?.code
+            if (resolvedExistingScanCode != null) {
+                expectCheckScanStatus(resolvedExistingScanCode, ScanStatus.FINISHED)
+                expectListIgnoreRules(resolvedExistingScanCode, existingIgnoreRules)
+            }
+        }
+
+        val statuses = checkScanStatuses ?: if (deltaScans) {
+            listOf(ScanStatus.NOT_STARTED, ScanStatus.FINISHED)
+        } else {
+            listOf(ScanStatus.FINISHED)
+        }
+
+        expectCheckScanStatus(scanCode, *statuses.toTypedArray())
+
+        expectCreateScan(projectCode, scanCode, vcsInfo, projectRevision)
+        expectDownload(scanCode)
+    }
+
+/**
+ * Verify that all functions called during a clone repository workflow for a new scan [scanCode] were called.
+ * If [verifyRunScanOptions] is not null, it is verified that a scan has been run with the given options.
+ * If [verifyDeleteScan] is true, it is verified that the scan has been deleted after processing.
+ * If [ignoreRulesScancode] is not null, it is verified that ignore rules have been loaded for this scancode, and that
+ * they have been created for [scanCode].
+ */
+@Suppress("LongParameterList")
+internal fun FossIdServiceWithVersion.verifyCloneRepositoryWorkflow(
+    projectCode: String,
+    scanCode: String,
+    vcsInfo: VcsInfo,
+    comment: OrtScanComment,
+    verifyRunScanOptions: Map<String, String>? = null,
+    verifyDeleteScan: Boolean = false,
+    ignoreRulesScancode: String? = null
+) {
+    coVerify {
+        createScan(USER, API_KEY, projectCode, scanCode, vcsInfo.url, vcsInfo.revision, comment.asJsonString())
+        downloadFromGit(USER, API_KEY, scanCode)
+        checkDownloadStatus(USER, API_KEY, scanCode)
+        if (verifyDeleteScan) {
+            deleteScan(USER, API_KEY, scanCode)
+        }
+
+        verifyRunScanOptions?.also {
+            runScan(
+                USER,
+                API_KEY,
+                scanCode,
+                it
+            )
+        }
+
+        ignoreRulesScancode?.also {
+            listIgnoreRules(USER, API_KEY, it)
+            createIgnoreRule(
+                USER,
+                API_KEY,
+                scanCode,
+                IGNORE_RULE.type,
+                IGNORE_RULE.value,
+                DEFAULT_IGNORE_RULE_SCOPE
+            )
+        }
+    }
+
+    coVerify(exactly = 0) {
+        createProject(any())
+    }
+}

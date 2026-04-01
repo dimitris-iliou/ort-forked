@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,11 @@
 package org.ossreviewtoolkit.advisor
 
 import io.kotest.core.spec.style.WordSpec
+import io.kotest.matchers.collections.containExactlyInAnyOrder
+import io.kotest.matchers.collections.shouldBeSingleton
+import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.maps.beEmpty
+import io.kotest.matchers.maps.containExactly
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
@@ -39,6 +43,8 @@ import org.ossreviewtoolkit.model.OrtResult
 import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.config.AdvisorConfiguration
+import org.ossreviewtoolkit.plugins.advisors.api.AdviceProvider
+import org.ossreviewtoolkit.plugins.advisors.api.AdviceProviderFactory
 import org.ossreviewtoolkit.plugins.api.PluginConfig
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 
@@ -109,6 +115,102 @@ class AdvisorTest : WordSpec({
                 results shouldBe expectedResults
             }
         }
+
+        "continue with other providers when a provider fails to be created" {
+            val pkg = createPackage(1)
+            val packages = setOf(pkg)
+            val originResult = createOrtResultWithPackages(packages)
+
+            val successfulResult = mockkAdvisorResult()
+            val successfulProvider = mockkAdviceProvider("SuccessfulProvider")
+            coEvery { successfulProvider.retrievePackageFindings(packages) } returns mapOf(pkg to successfulResult)
+
+            val failingFactory = mockk<AdviceProviderFactory> {
+                every { descriptor } returns PluginDescriptor("failing-provider", "FailingProvider", "", emptyList())
+                every { create(any()) } throws IllegalStateException("Could not initialize provider")
+            }
+
+            val successfulFactory = mockk<AdviceProviderFactory> {
+                every { create(PluginConfig(emptyMap(), emptyMap())) } returns successfulProvider
+            }
+
+            val advisor = Advisor(listOf(failingFactory, successfulFactory), AdvisorConfiguration())
+
+            val result = advisor.advise(originResult)
+
+            result.advisor shouldNotBeNull {
+                results should containExactly(pkg.id to listOf(successfulResult))
+                providerIssues.shouldBeSingleton {
+                    it.message shouldBe "Failed to create provider 'FailingProvider': IllegalStateException: Could " +
+                        "not initialize provider"
+                }
+            }
+
+            coVerify(exactly = 1) {
+                successfulProvider.retrievePackageFindings(packages)
+            }
+        }
+
+        "continue with results from other providers when a provider fails to fetch findings" {
+            val pkg = createPackage(1)
+            val packages = setOf(pkg)
+            val originResult = createOrtResultWithPackages(packages)
+
+            val successfulResult = mockkAdvisorResult()
+
+            val failingProvider = mockkAdviceProvider("FailingProvider")
+            val successfulProvider = mockkAdviceProvider("SuccessfulProvider")
+
+            coEvery { failingProvider.retrievePackageFindings(packages) } throws
+                IllegalStateException("Could not query provider service")
+            coEvery { successfulProvider.retrievePackageFindings(packages) } returns mapOf(pkg to successfulResult)
+
+            val advisor = createAdvisor(listOf(failingProvider, successfulProvider))
+
+            val result = advisor.advise(originResult)
+
+            result.advisor shouldNotBeNull {
+                results should containExactly(pkg.id to listOf(successfulResult))
+                providerIssues.shouldBeSingleton {
+                    it.message shouldBe "Failed to retrieve findings via 'FailingProvider': IllegalStateException: " +
+                        "Could not query provider service"
+                }
+            }
+
+            coVerify(exactly = 1) {
+                failingProvider.retrievePackageFindings(packages)
+                successfulProvider.retrievePackageFindings(packages)
+            }
+        }
+
+        "collect provider issues from all providers that fail to fetch findings" {
+            val pkg = createPackage(1)
+            val packages = setOf(pkg)
+            val originResult = createOrtResultWithPackages(packages)
+
+            val failingProvider1 = mockkAdviceProvider("FailingProvider1")
+            val failingProvider2 = mockkAdviceProvider("FailingProvider2")
+
+            coEvery { failingProvider1.retrievePackageFindings(packages) } throws
+                IllegalArgumentException("Failure 1")
+            coEvery { failingProvider2.retrievePackageFindings(packages) } throws
+                IllegalStateException("Failure 2")
+
+            val advisor = createAdvisor(listOf(failingProvider1, failingProvider2))
+
+            val result = advisor.advise(originResult)
+
+            result.advisor shouldNotBeNull {
+                results should beEmpty()
+                providerIssues shouldHaveSize 2
+
+                val messages = providerIssues.map { it.message }
+                messages should containExactlyInAnyOrder(
+                    "Failed to retrieve findings via 'FailingProvider1': IllegalArgumentException: Failure 1",
+                    "Failed to retrieve findings via 'FailingProvider2': IllegalStateException: Failure 2"
+                )
+            }
+        }
     }
 })
 
@@ -146,9 +248,9 @@ private fun createOrtResultWithPackages(packages: Set<Package>): OrtResult =
 private fun createPackage(index: Int): Package =
     Package.EMPTY.copy(id = Identifier.EMPTY.copy(name = "test-package$index"))
 
-private fun mockkAdviceProvider(): AdviceProvider =
+private fun mockkAdviceProvider(displayName: String = "Provider"): AdviceProvider =
     mockk<AdviceProvider>().apply {
-        every { descriptor } returns PluginDescriptor("Provider", "provider", "", emptyList())
+        every { descriptor } returns PluginDescriptor(displayName, displayName, "", emptyList())
     }
 
 private fun mockkAdvisorResult(): AdvisorResult =

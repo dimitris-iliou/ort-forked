@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ interface PluginFactory<out PLUGIN : Plugin> {
         /**
          * Return all plugin factories of type [FACTORY].
          */
-        inline fun <reified FACTORY : PluginFactory<PLUGIN>, PLUGIN> getAll() =
+        inline fun <reified FACTORY : PluginFactory<PLUGIN>, PLUGIN : Plugin> getAll() =
             getLoaderFor<FACTORY>()
                 .iterator()
                 .asSequence()

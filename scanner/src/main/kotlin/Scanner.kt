@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -344,26 +344,28 @@ class Scanner(
                             "'${scanner.descriptor.displayName}'."
                     }
 
+                    val nestedProvenanceScanResult = controller.addAndDeduplicateNestedScanResult(
+                        scanner,
+                        scanResult.toNestedProvenanceScanResult(nestedProvenance)
+                    )
+
                     val provenanceScanResultsToStore = mutableSetOf<Pair<KnownProvenance, ScanResult>>()
                     packagesWithIncompleteScanResult.forEach { pkg ->
-                        val nestedProvenanceScanResult = scanResult.toNestedProvenanceScanResult(nestedProvenance)
-                        controller.addNestedScanResult(scanner, nestedProvenanceScanResult)
-
                         // TODO: Run in coroutine.
                         if (scanner.writeToStorage) {
                             storePackageScanResult(pkg, nestedProvenanceScanResult)
 
                             nestedProvenanceScanResult.scanResults.forEach { (provenance, scanResults) ->
-                                scanResults.forEach { scanResult ->
-                                    provenanceScanResultsToStore += provenance to scanResult
+                                scanResults.forEach { provenanceScanResult ->
+                                    provenanceScanResultsToStore += provenance to provenanceScanResult
                                 }
                             }
                         }
                     }
 
                     // Store only deduplicated provenance scan results.
-                    provenanceScanResultsToStore.forEach { (provenance, scanResult) ->
-                        storeProvenanceScanResult(provenance, scanResult)
+                    provenanceScanResultsToStore.forEach { (provenance, provenanceScanResult) ->
+                        storeProvenanceScanResult(provenance, provenanceScanResult)
                     }
                 }.onFailure { e ->
                     val issue = scanner.createAndLogIssue(
@@ -417,7 +419,7 @@ class Scanner(
                 }.onSuccess { scanResult ->
                     val completedPackages = controller.getPackagesCompletedByProvenance(scanner, provenance)
 
-                    controller.addScanResults(scanner, provenance, listOf(scanResult))
+                    controller.addAndDeduplicateScanResults(scanner, provenance, listOf(scanResult))
 
                     storeProvenanceScanResult(provenance, scanResult)
 
@@ -467,7 +469,7 @@ class Scanner(
             scanResults.forEach { (scanner, scanResult) ->
                 val completedPackages = controller.getPackagesCompletedByProvenance(scanner, provenance)
 
-                controller.addScanResults(scanner, provenance, listOf(scanResult))
+                controller.addAndDeduplicateScanResults(scanner, provenance, listOf(scanResult))
 
                 storeProvenanceScanResult(provenance, scanResult)
 
@@ -539,7 +541,7 @@ class Scanner(
                         reader.read(pkg, nestedProvenance, scannerMatcher)
                     }.onSuccess { results ->
                         results.forEach { result ->
-                            controller.addNestedScanResult(scanner, result)
+                            controller.addAndDeduplicateNestedScanResult(scanner, result)
                         }
                     }.onFailure { e ->
                         e.showStackTrace()
@@ -566,7 +568,7 @@ class Scanner(
                     runCatching {
                         reader.read(provenance, scannerMatcher)
                     }.onSuccess { results ->
-                        controller.addScanResults(scanner, provenance, results)
+                        controller.addAndDeduplicateScanResults(scanner, provenance, results)
                     }.onFailure { e ->
                         e.showStackTrace()
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -53,22 +53,27 @@ class PackageManagerFunTest : WordSpec({
         "conan-py/conanfile.py",
         "conan-txt/conanfile.txt",
         "dotnet/test.csproj",
+        "gleam/gleam.toml",
         "gomod/go.mod",
         "gradle-groovy/build.gradle",
         "gradle-kotlin/build.gradle.kts",
         "maven/pom.xml",
+        "mix/mix.exs",
 
         // Note that the NPM, PNPM and Yarn implementations share code. Internal logic decides dynamically whether to
         // process "package.json" with NPM, PNPM or Yarn.
         "npm-pnpm-and-yarn/package.json",
 
         "nuget/packages.config",
+        "ort-project/ortproject.yml",
         "pip-requirements/requirements.txt",
         "pip-setup/setup.py",
         "pipenv/Pipfile.lock",
         "poetry/poetry.lock",
+        "rebar3/rebar.config",
         "pub/pubspec.yaml",
         "sbt/build.sbt",
+        "spdx/document.spdx.jsonld",
         "spdx-package/package.spdx.yml",
         "spdx-project/project.spdx.yml",
         "spm-app/Package.resolved",
@@ -106,12 +111,14 @@ class PackageManagerFunTest : WordSpec({
                     "conan-py/conanfile.py",
                     "conan-txt/conanfile.txt"
                 )
+                managedFilesById["Gleam"] should containExactly("gleam/gleam.toml")
                 managedFilesById["GoMod"] should containExactly("gomod/go.mod")
                 managedFilesById["GradleInspector"] should containExactlyInAnyOrder(
                     "gradle-groovy/build.gradle",
                     "gradle-kotlin/build.gradle.kts"
                 )
                 managedFilesById["Maven"] should containExactly("maven/pom.xml")
+                managedFilesById["Mix"] should containExactly("mix/mix.exs")
                 managedFilesById["NPM"] should containExactly("npm-pnpm-and-yarn/package.json")
                 managedFilesById["NuGet"] should containExactlyInAnyOrder(
                     "dotnet/test.csproj",
@@ -125,7 +132,9 @@ class PackageManagerFunTest : WordSpec({
                 managedFilesById["PNPM"] should containExactly("npm-pnpm-and-yarn/package.json")
                 managedFilesById["Poetry"] should containExactly("poetry/poetry.lock")
                 managedFilesById["Pub"] should containExactly("pub/pubspec.yaml")
+                managedFilesById["Rebar3"] should containExactly("rebar3/rebar.config")
                 managedFilesById["SBT"] should containExactly("sbt/build.sbt")
+                managedFilesById["Spdx"] should containExactly("spdx/document.spdx.jsonld")
                 managedFilesById["SpdxDocumentFile"] should containExactlyInAnyOrder(
                     "spdx-package/package.spdx.yml",
                     "spdx-project/project.spdx.yml"

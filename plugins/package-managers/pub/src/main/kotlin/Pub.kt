@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The ORT Project Authors (see <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>)
+ * Copyright (C) 2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,6 +51,7 @@ import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.OrtPluginOption
@@ -81,6 +82,9 @@ import org.ossreviewtoolkit.utils.ort.showStackTrace
 import org.semver4j.range.RangeList
 import org.semver4j.range.RangeListFactory
 
+private const val PROJECT_TYPE = "Pub"
+private const val PACKAGE_TYPE = "Pub"
+
 private const val PUBSPEC_YAML = "pubspec.yaml"
 private const val PUB_LOCK_FILE = "pubspec.lock"
 private const val SCOPE_NAME_DEPENDENCIES = "dependencies"
@@ -90,9 +94,9 @@ private val ALL_PUB_SCOPE_NAMES = setOf(SCOPE_NAME_DEPENDENCIES, SCOPE_NAME_DEV_
 private val flutterCommand = if (Os.isWindows) "flutter.bat" else "flutter"
 private val dartCommand = if (Os.isWindows) "dart.bat" else "dart"
 
-internal class PubCommand(private val flutterAbsolutePath: File) : CommandLineTool {
+internal class PubCommand(private val flutterAbsolutePath: File?) : CommandLineTool {
     @Suppress("unused") // The no-arg constructor is required by the requirements command.
-    constructor() : this(File(""))
+    constructor() : this(null)
 
     override fun getVersion(workingDir: File?): String {
         val result = ProcessCapture(workingDir, command(workingDir), getVersionArguments()).requireSuccess()
@@ -105,7 +109,10 @@ internal class PubCommand(private val flutterAbsolutePath: File) : CommandLineTo
     override fun transformVersion(output: String) = output.removePrefix("Dart SDK version: ").substringBefore(' ')
 
     override fun command(workingDir: File?): String =
-        if (flutterAbsolutePath.isDirectory) "$flutterAbsolutePath${File.separator}$dartCommand" else dartCommand
+        when {
+            flutterAbsolutePath?.isDirectory == true -> "$flutterAbsolutePath${File.separator}$dartCommand"
+            else -> dartCommand
+        }
 
     private fun commandPub(): String = "${command()} pub"
 
@@ -164,7 +171,7 @@ data class PubConfig(
 )
 @Suppress("TooManyFunctions")
 class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, private val config: PubConfig) :
-    PackageManager("Pub") {
+    PackageManager(PROJECT_TYPE) {
     override val globsForDefinitionFiles = listOf(PUBSPEC_YAML)
 
     private val flutterVersion = Os.env["FLUTTER_VERSION"] ?: config.flutterVersion
@@ -224,12 +231,15 @@ class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, pri
 
         val archive = when (Os.Name.current) {
             Os.Name.WINDOWS -> "windows/flutter_windows_$flutterVersion.zip"
+
             Os.Name.LINUX -> "linux/flutter_linux_$flutterVersion.tar.xz"
+
             Os.Name.MAC -> when (Os.Arch.current) {
                 Os.Arch.X86_64 -> "macos/flutter_macos_$flutterVersion.zip"
                 Os.Arch.AARCH64 -> "macos/flutter_macos_arm64_$flutterVersion.zip"
                 else -> throw IllegalArgumentException("Unsupported macOS architecture '${Os.Arch.current}'.")
             }
+
             else -> throw IllegalArgumentException("Unsupported operating system '${Os.Name.current}'.")
         }
 
@@ -319,6 +329,7 @@ class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, pri
         analysisRoot: File,
         definitionFile: File,
         excludes: Excludes,
+        includes: Includes,
         analyzerConfig: AnalyzerConfiguration,
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult> {
@@ -444,7 +455,7 @@ class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, pri
             if (pkgInfoFromLockfile == null || pkgInfoFromLockfile.source == "sdk") return@forEach
 
             val id = Identifier(
-                type = if (pkgInfoFromLockfile.isProject) projectType else "Pub",
+                type = if (pkgInfoFromLockfile.isProject) projectType else PACKAGE_TYPE,
                 namespace = "",
                 name = packageName,
                 version = pkgInfoFromLockfile.version.orEmpty()
@@ -532,7 +543,14 @@ class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, pri
             val gradleAnalyzerConfig = PluginConfig(mapOf("gradleVersion" to config.gradleVersion))
 
             val gradle = gradleFactory.create(gradleAnalyzerConfig)
-            gradle.resolveDependencies(androidDir, listOf(definitionFile), Excludes.EMPTY, analyzerConfig, labels).run {
+            gradle.resolveDependencies(
+                androidDir,
+                listOf(definitionFile),
+                Excludes.EMPTY,
+                Includes.EMPTY,
+                analyzerConfig,
+                labels
+            ).run {
                 projectResults.getValue(definitionFile).map { result ->
                     val project = result.project.withResolvedScopes(dependencyGraph)
                     result.copy(project = project, packages = sharedPackages)
@@ -586,6 +604,7 @@ class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, pri
         )
     }
 
+    @Suppress("CyclomaticComplexMethod")
     private fun parseInstalledPackages(
         lockfile: Lockfile,
         labels: Map<String, String>,
@@ -602,17 +621,16 @@ class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, pri
 
         lockfile.packages.forEach { (packageName, packageInfo) ->
             runCatching {
-                val version = packageInfo.version.orEmpty()
-                var description = ""
                 var rawName = ""
+                var authors = emptySet<String>()
+                var description = ""
                 var homepageUrl = ""
                 var vcs = VcsInfo.EMPTY
-                var authors = emptySet<String>()
 
-                val source = packageInfo.source.orEmpty()
+                val source = packageInfo.source
 
-                when {
-                    source == "path" -> {
+                when (source) {
+                    "path" -> {
                         rawName = packageName
                         val path = packageInfo.description.path.orEmpty()
                         vcs = VersionControlSystem.forDirectory(workingDir / path)?.getInfo() ?: run {
@@ -625,13 +643,13 @@ class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, pri
                         }
                     }
 
-                    source == "git" -> {
+                    "git" -> {
                         val pkgInfoFromYamlFile = readPackageInfoFromCache(packageInfo, workingDir)
 
                         rawName = pkgInfoFromYamlFile?.name ?: packageName
+                        authors = pkgInfoFromYamlFile?.let { parseAuthors(it) }.orEmpty()
                         description = pkgInfoFromYamlFile?.description.orEmpty().trim()
                         homepageUrl = pkgInfoFromYamlFile?.homepage.orEmpty()
-                        authors = pkgInfoFromYamlFile?.let { parseAuthors(it) }.orEmpty()
 
                         vcs = VcsInfo(
                             type = VcsType.GIT,
@@ -641,14 +659,39 @@ class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, pri
                         )
                     }
 
-                    // For now, we ignore SDKs like the Dart SDK and the Flutter SDK in the analyzer.
-                    source != "sdk" -> {
+                    "sdk" -> when (packageInfo.description.name) {
+                        "flutter" -> {
+                            // Set Flutter flag, which triggers another scan for iOS and Android native dependencies.
+                            containsFlutter = true
+                            // Set hardcoded package details.
+                            rawName = "flutter"
+                            description = "Flutter SDK"
+                            homepageUrl = "https://github.com/flutter/flutter"
+                        }
+
+                        "flutter_test" -> {
+                            // Set hardcoded package details.
+                            rawName = "flutter_test"
+                            description = "Flutter Test SDK"
+                            homepageUrl = "https://github.com/flutter/flutter/tree/master/packages/flutter_test"
+                        }
+
+                        else -> {
+                            issues += createAndLogIssue(
+                                message = "Unhandled SDK source '${packageInfo.description.name}'.",
+                                severity = Severity.WARNING,
+                                affectedPath = packageInfo.description.path
+                            )
+                        }
+                    }
+
+                    else -> {
                         val pkgInfoFromYamlFile = readPackageInfoFromCache(packageInfo, workingDir)
 
                         rawName = pkgInfoFromYamlFile?.name.orEmpty()
+                        authors = pkgInfoFromYamlFile?.let { parseAuthors(it) }.orEmpty()
                         description = pkgInfoFromYamlFile?.description.orEmpty().trim()
                         homepageUrl = pkgInfoFromYamlFile?.homepage.orEmpty()
-                        authors = pkgInfoFromYamlFile?.let { parseAuthors(it) }.orEmpty()
 
                         val repositoryUrl = pkgInfoFromYamlFile?.repository.orEmpty()
 
@@ -657,23 +700,9 @@ class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, pri
                         // the version of the package.
                         vcs = VcsHost.parseUrl(repositoryUrl).copy(revision = "")
                     }
-
-                    packageInfo.description.path.orEmpty() == "flutter" -> {
-                        // Set Flutter flag, which triggers another scan for iOS and Android native dependencies.
-                        containsFlutter = true
-                        // Set hardcoded package details.
-                        rawName = "flutter"
-                        homepageUrl = "https://github.com/flutter/flutter"
-                        description = "Flutter SDK"
-                    }
-
-                    packageInfo.description.path.orEmpty() == "flutter_test" -> {
-                        // Set hardcoded package details.
-                        rawName = "flutter_test"
-                        homepageUrl = "https://github.com/flutter/flutter/tree/master/packages/flutter_test"
-                        description = "Flutter Test SDK"
-                    }
                 }
+
+                val version = packageInfo.version.orEmpty()
 
                 if (version.isEmpty()) {
                     logger.warn { "No version information found for package $rawName." }
@@ -693,7 +722,7 @@ class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, pri
                 }
 
                 val id = Identifier(
-                    type = if (packageInfo.isProject) projectType else "Pub",
+                    type = if (packageInfo.isProject) projectType else PACKAGE_TYPE,
                     namespace = "",
                     name = rawName,
                     version = version
@@ -715,9 +744,9 @@ class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, pri
             }.onFailure {
                 it.showStackTrace()
 
-                val packageVersion = packageInfo.version
                 issues += createAndLogIssue(
-                    "Failed to parse $PUBSPEC_YAML for package $packageName:$packageVersion: ${it.collectMessages()}"
+                    "Failed to parse $PUBSPEC_YAML for package $packageName:${packageInfo.version}: " +
+                        it.collectMessages()
                 )
             }
         }
@@ -802,11 +831,10 @@ class Pub(override val descriptor: PluginDescriptor = PubFactory.descriptor, pri
         PackageManagerResult(projectResults.filterProjectPackages())
 }
 
-private fun commandFlutter(flutterAbsolutePath: File): String =
-    if (flutterAbsolutePath.isDirectory) {
-        "$flutterAbsolutePath${File.separator}$flutterCommand pub"
-    } else {
-        "$flutterCommand pub"
+private fun commandFlutter(flutterAbsolutePath: File?): String =
+    when {
+        flutterAbsolutePath?.isDirectory == true -> "$flutterAbsolutePath${File.separator}$flutterCommand pub"
+        else -> "$flutterCommand pub"
     }
 
 private val PackageInfo.isProject: Boolean
