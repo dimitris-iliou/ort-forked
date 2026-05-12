@@ -58,6 +58,7 @@ internal fun generateSummary(startTime: Instant, endTime: Instant, results: List
             when (details.matchType) {
                 MatchType.file -> {
                     val localFile = requireNotNull(result.filePath)
+                    logger.info { "File '$localFile' was matched completely, not including in snippet findings." }
                     licenseFindings += getLicenseFindings(details, localFile)
                     copyrightFindings += getCopyrightFindings(details, localFile)
                 }
@@ -65,9 +66,10 @@ internal fun generateSummary(startTime: Instant, endTime: Instant, results: List
                 MatchType.snippet -> {
                     val localFile = requireNotNull(result.filePath)
                     if (details.status == StatusType.pending) {
+                        logger.info { "Adding snippet for '$localFile' as identification is pending." }
                         snippetFindings += createSnippetFindings(details, localFile)
                     } else {
-                        logger.info { "File '$localFile' is identified, not including in snippet findings." }
+                        logger.info { "File '$localFile' was identified, not including in snippet findings." }
                         licenseFindings += getLicenseFindings(details, result.filePath)
                         copyrightFindings += getCopyrightFindings(details, result.filePath)
                     }
@@ -159,7 +161,7 @@ private fun createSnippetFindings(details: ScanFileDetails, localFilePath: Strin
 
     val additionalData = buildMap {
         put("file_hash", details.fileHash)
-        put("file_url", details.fileUrl)
+        if (details.fileUrl.isNotBlank()) put("file_url", details.fileUrl)
         put("source_hash", details.sourceHash)
 
         // Purls can be empty if only one entry is provided which is used as the primary purl.

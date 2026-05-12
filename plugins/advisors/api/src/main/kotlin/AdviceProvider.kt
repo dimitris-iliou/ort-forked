@@ -25,13 +25,13 @@ import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.plugins.api.Plugin
 
 /**
- * An abstract class that represents a service that can retrieve any kind of advice information
- * for a list of given [Package]s. Examples of such information can be security vulnerabilities, known defects,
- * or code analysis results.
+ * An abstract class that represents a service that can retrieve security vulnerabilities for a list of given
+ * [Package]s.
  */
 interface AdviceProvider : Plugin {
     /**
-     * For a given set of [Package]s, retrieve findings and return a map that associates packages with [AdvisorResult]s.
+     * For a given set of [packages], retrieve findings and return a map of only those packages that actually have
+     * findings associated with an [AdvisorResult].
      */
     suspend fun retrievePackageFindings(packages: Set<Package>): Map<Package, AdvisorResult>
 

@@ -28,6 +28,7 @@ import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.LicenseFinding
 import org.ossreviewtoolkit.model.OrtResult
 import org.ossreviewtoolkit.model.Package
+import org.ossreviewtoolkit.model.PackageLinkage
 import org.ossreviewtoolkit.model.PackageReference
 import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.RemoteArtifact
@@ -41,9 +42,12 @@ import org.ossreviewtoolkit.model.TextLocation
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.Excludes
+import org.ossreviewtoolkit.model.config.LicenseChoices
+import org.ossreviewtoolkit.model.config.PackageLicenseChoice
 import org.ossreviewtoolkit.model.config.RepositoryConfiguration
 import org.ossreviewtoolkit.model.config.ScopeExclude
 import org.ossreviewtoolkit.model.config.ScopeExcludeReason
+import org.ossreviewtoolkit.utils.spdx.SpdxLicenseChoice
 import org.ossreviewtoolkit.utils.spdx.toSpdx
 import org.ossreviewtoolkit.utils.test.scannerRunOf
 
@@ -64,6 +68,19 @@ val ORT_RESULT = OrtResult(
                         comment = "Packages for testing only."
                     )
                 )
+            ),
+            licenseChoices = LicenseChoices(
+                packageLicenseChoices = listOf(
+                    PackageLicenseChoice(
+                        packageId = Identifier("Maven:pkg7-grp:pkg7:0.0.1"),
+                        licenseChoices = listOf(
+                            SpdxLicenseChoice(
+                                given = "BSD-3-Clause OR MIT".toSpdx(),
+                                choice = "BSD-3-Clause".toSpdx()
+                            )
+                        )
+                    )
+                )
             )
         ),
         vcs = ANALYZED_VCS,
@@ -75,7 +92,7 @@ val ORT_RESULT = OrtResult(
                 Project(
                     id = Identifier("Maven:proj1-grp:proj1:0.0.1"),
                     declaredLicenses = setOf("MIT"),
-                    definitionFilePath = "",
+                    definitionFilePath = "proj1/pom.xml",
                     homepageUrl = "https://example.com/proj1/homepage",
                     scopeDependencies = setOf(
                         Scope(
@@ -101,7 +118,8 @@ val ORT_RESULT = OrtResult(
                                     id = Identifier("Maven:pkg4-grp:pkg4:0.0.1"),
                                     dependencies = setOf(
                                         PackageReference(
-                                            id = Identifier("Maven:pkg7-grp:pkg7:0.0.1")
+                                            id = Identifier("Maven:pkg7-grp:pkg7:0.0.1"),
+                                            linkage = PackageLinkage.STATIC
                                         )
                                     )
                                 ),
@@ -115,6 +133,42 @@ val ORT_RESULT = OrtResult(
                             dependencies = setOf(
                                 PackageReference(
                                     id = Identifier("Maven:pkg-grp:pkg5:0.0.1")
+                                )
+                            )
+                        )
+                    ),
+                    vcs = ANALYZED_VCS
+                ),
+                Project(
+                    id = Identifier("Maven:proj2-grp:proj2:0.0.1"),
+                    declaredLicenses = emptySet(),
+                    definitionFilePath = "proj2/pom.xml",
+                    homepageUrl = "",
+                    scopeDependencies = setOf(
+                        Scope(
+                            name = "compile",
+                            dependencies = setOf(
+                                PackageReference(
+                                    id = Identifier("Maven:pkg1-grp:pkg1:0.0.1"),
+                                    linkage = PackageLinkage.PROJECT_STATIC
+                                )
+                            )
+                        )
+                    ),
+                    vcs = ANALYZED_VCS
+                ),
+                Project(
+                    id = Identifier("Maven:proj3-grp:proj3:0.0.1"),
+                    declaredLicenses = emptySet(),
+                    definitionFilePath = "proj3/pom.xml",
+                    homepageUrl = "",
+                    scopeDependencies = setOf(
+                        Scope(
+                            name = "compile",
+                            dependencies = setOf(
+                                PackageReference(
+                                    id = Identifier("Maven:pkg1-grp:pkg1:0.0.1"),
+                                    linkage = PackageLinkage.PROJECT_DYNAMIC
                                 )
                             )
                         )
@@ -154,7 +208,8 @@ val ORT_RESULT = OrtResult(
                     description = "",
                     homepageUrl = "",
                     sourceArtifact = RemoteArtifact.EMPTY,
-                    vcs = VcsInfo.EMPTY
+                    vcs = VcsInfo.EMPTY,
+                    isModified = true
                 ),
                 // A package with only unmapped declared license.
                 Package(
@@ -199,11 +254,11 @@ val ORT_RESULT = OrtResult(
                     sourceArtifact = RemoteArtifact.EMPTY,
                     vcs = VcsInfo.EMPTY
                 ),
-                // A package with a source artifact scan result.
+                // A package with a source artifact scan result with a license choice.
                 Package(
                     id = Identifier("Maven:pkg7-grp:pkg7:0.0.1"),
                     binaryArtifact = RemoteArtifact.EMPTY,
-                    declaredLicenses = setOf(),
+                    declaredLicenses = setOf("Apache-2.0"),
                     description = "",
                     homepageUrl = "",
                     sourceArtifact = RemoteArtifact(
@@ -305,6 +360,10 @@ val ORT_RESULT = OrtResult(
                         LicenseFinding(
                             license = "GPL-2.0-only WITH NOASSERTION",
                             location = TextLocation("LICENSE", 1)
+                        ),
+                        LicenseFinding(
+                            license = "BSD-3-Clause OR MIT",
+                            location = TextLocation("some/other/file", 1)
                         )
                     ),
                     copyrightFindings = setOf(

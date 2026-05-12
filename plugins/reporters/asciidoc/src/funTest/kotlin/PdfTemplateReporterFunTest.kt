@@ -53,7 +53,7 @@ class PdfTemplateReporterFunTest : StringSpec({
                     String(header) shouldBe "%PDF"
                 }
 
-                reportFile.length() should beInRange(111000L..115000L)
+                reportFile.length() should beInRange(152000L..156000L)
             }
         }
     }
@@ -81,7 +81,6 @@ class PdfTemplateReporterFunTest : StringSpec({
 
         val reportFiles = reportFileResults.map { it.shouldBeSuccess() }
         reportFiles should containExactlyInAnyOrder(
-            outputDir / "AsciiDoc_defect_report.pdf",
             outputDir / "AsciiDoc_disclosure_document.pdf",
             outputDir / "AsciiDoc_vulnerability_report.pdf"
         )

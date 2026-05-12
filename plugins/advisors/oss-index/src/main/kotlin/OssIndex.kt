@@ -32,7 +32,6 @@ import org.apache.logging.log4j.kotlin.logger
 import org.ossreviewtoolkit.clients.ossindex.OssIndexService
 import org.ossreviewtoolkit.clients.ossindex.OssIndexService.ComponentReport
 import org.ossreviewtoolkit.clients.ossindex.OssIndexService.ComponentReportRequest
-import org.ossreviewtoolkit.model.AdvisorCapability
 import org.ossreviewtoolkit.model.AdvisorDetails
 import org.ossreviewtoolkit.model.AdvisorResult
 import org.ossreviewtoolkit.model.AdvisorSummary
@@ -46,7 +45,6 @@ import org.ossreviewtoolkit.plugins.advisors.api.AdviceProviderFactory
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.utils.common.collectMessages
-import org.ossreviewtoolkit.utils.common.enumSetOf
 import org.ossreviewtoolkit.utils.ort.OkHttpClientHelper
 
 /**
@@ -55,7 +53,8 @@ import org.ossreviewtoolkit.utils.ort.OkHttpClientHelper
 private const val BULK_REQUEST_SIZE = 128
 
 /**
- * A wrapper for Sonatype's [OSS Index](https://ossindex.sonatype.org/) security vulnerability data.
+ * A wrapper for Sonatype's [OSS Index](https://www.sonatype.com/products/sonatype-guide/oss-index-users/) security
+ * vulnerability data.
  */
 @OrtPlugin(
     id = "OSSIndex",
@@ -67,7 +66,7 @@ class OssIndex(
     override val descriptor: PluginDescriptor = OssIndexFactory.descriptor,
     config: OssIndexConfiguration
 ) : AdviceProvider {
-    override val details = AdvisorDetails(descriptor.id, enumSetOf(AdvisorCapability.VULNERABILITIES))
+    override val details = AdvisorDetails(descriptor.id)
 
     private val service by lazy {
         OssIndexService.create(
@@ -137,7 +136,9 @@ class OssIndex(
         externalReferences?.mapTo(references) { reference.copy(url = URI(it)) }
         return Vulnerability(
             id = cve ?: displayName ?: title,
-            summary = title,
+            summary = title.removePrefix("[$cve]").trimStart()
+                .removePrefix(cwe.orEmpty()).trimStart()
+                .removePrefix(":").trimStart(),
             description = description,
             references = references
         )

@@ -23,6 +23,7 @@ import java.io.File
 
 import kotlin.jvm.optionals.getOrNull
 
+import org.apache.commons.compress.compressors.zstandard.ZstdCompressorInputStream
 import org.apache.logging.log4j.kotlin.logger
 
 import org.ossreviewtoolkit.analyzer.PackageManager
@@ -50,7 +51,6 @@ import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.utils.common.enumSetOf
 import org.ossreviewtoolkit.utils.ort.DeclaredLicenseProcessor
 import org.ossreviewtoolkit.utils.spdx.toExpression
-import org.ossreviewtoolkit.utils.spdx.toSpdx
 import org.ossreviewtoolkit.utils.spdx.toSpdxOrNull
 
 import org.spdx.library.SpdxModelFactory
@@ -78,7 +78,10 @@ class Spdx(override val descriptor: PluginDescriptor = SpdxFactory.descriptor) :
         SpdxModelFactory.init()
     }
 
-    override val globsForDefinitionFiles = listOf("*.spdx.json", "*.spdx.jsonld")
+    override val globsForDefinitionFiles = listOf(
+        "*.spdx.json", "*.spdx.jsonld",
+        "*.spdx.json.zst", "*.spdx.jsonld.zst" // Zstandard-compressed variants.
+    )
 
     override fun resolveDependencies(
         analysisRoot: File,
@@ -90,13 +93,16 @@ class Spdx(override val descriptor: PluginDescriptor = SpdxFactory.descriptor) :
     ): List<ProjectAnalyzerResult> {
         val spdxDocument = parseSpdx3File(definitionFile)
 
+        logger.debug {
+            val counts = spdxDocument.elements.groupingBy { it.type }.eachCount().toSortedMap()
+
+            counts.entries.joinToString("\n", prefix = "Found ${spdxDocument.elements.size} SPDX element(s):\n") {
+                "\t${it.key}: ${it.value}"
+            }
+        }
+
         val spdxPackages = spdxDocument.elements.filterIsInstance<SpdxPackage>()
         val relationships = spdxDocument.elements.filterIsInstance<Relationship>()
-
-        logger.debug {
-            "Found ${spdxDocument.elements.size} SPDX elements:" +
-                " ${spdxPackages.size} package(s), ${relationships.size} relationship(s)."
-        }
 
         val packagesByScope = spdxPackages.groupBy { pkg ->
             pkg.primaryPurpose.getOrNull()?.name?.lowercase() ?: "other"
@@ -195,7 +201,7 @@ class Spdx(override val descriptor: PluginDescriptor = SpdxFactory.descriptor) :
         }.firstNotNullOfOrNull { it.identifier }
 
         // Prefer a PURL as it might contain proper type and namespace information.
-        val id = purl?.toPackageUrl()?.toIdentifier() ?: Identifier(
+        val ortId = purl?.toPackageUrl()?.toIdentifier() ?: Identifier(
             type = PACKAGE_TYPE_SPDX,
             namespace = "",
             name = pkgName,
@@ -226,14 +232,14 @@ class Spdx(override val descriptor: PluginDescriptor = SpdxFactory.descriptor) :
         val description = description.getOrNull() ?: summary.getOrNull()
 
         return Package(
-            id = id,
-            purl = purl ?: id.toPurl(),
+            id = ortId,
+            purl = purl ?: ortId.toPurl(),
             cpe = cpe,
             authors = emptySet(),
             declaredLicenses = declaredLicenses,
             concludedLicense = if (concludedLicenses.size > 1) {
-                logger.warn { "Multiple concluded licenses found for package '$name', using only the first one." }
-                concludedLicenses.first().toSpdx()
+                logger.warn { "Multiple concluded licenses found for ID $id, using their conjunction." }
+                concludedLicenses.mapNotNull { it.toSpdxOrNull() }.toExpression()
             } else {
                 concludedLicenses.singleOrNull()?.toSpdxOrNull()
             },
@@ -260,5 +266,13 @@ private fun Package.mergeLicenses(other: Package): Package {
 private fun parseSpdx3File(spdxFile: File): SpdxDocument {
     val baseStore = InMemSpdxStore()
     val store = JsonLDStore(baseStore)
-    return spdxFile.inputStream().use { store.deSerialize(it, /* overwrite = */ false) }
+    return spdxFile.inputStream().use { rawStream ->
+        when (spdxFile.extension) {
+            "zst" -> ZstdCompressorInputStream(rawStream).use { uncompressedStream ->
+                store.deSerialize(uncompressedStream, /* overwrite = */ false)
+            }
+
+            else -> store.deSerialize(rawStream, /* overwrite = */ false)
+        }
+    }
 }

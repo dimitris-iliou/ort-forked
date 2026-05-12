@@ -23,22 +23,24 @@ import io.kotest.core.spec.style.WordSpec
 import io.kotest.inspectors.forAll
 import io.kotest.matchers.collections.beEmpty
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
+import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNot
 
-import java.time.Instant
-
-import org.ossreviewtoolkit.model.AdvisorResult
 import org.ossreviewtoolkit.model.Identifier
-import org.ossreviewtoolkit.plugins.advisors.api.normalizeVulnerabilityData
+import org.ossreviewtoolkit.model.Package
+import org.ossreviewtoolkit.model.VcsInfo
+import org.ossreviewtoolkit.model.vulnerabilities.Vulnerability
 import org.ossreviewtoolkit.utils.test.identifierToPackage
 import org.ossreviewtoolkit.utils.test.readResourceValue
 
 class OsvFunTest : WordSpec({
     "retrievePackageFindings()" should {
         "return the vulnerabilities for the supported ecosystems" {
-            val osv = createOsv()
-            val packages = setOf(
+            val osv = OsvFactory.create()
+            val dummyPackage = "A:dummy:package:1.2.3"
+            val packageCoordinates = setOf(
+                dummyPackage,
                 "Crate::sys-info:0.7.0",
                 "Composer:thorsten:phpmyfaq:3.0.7",
                 "Gem::rack:2.0.4",
@@ -50,24 +52,23 @@ class OsvFunTest : WordSpec({
                 "Pub::http:0.13.1",
                 "PyPI::django:3.2",
                 "Swift::github.com/apple/swift-nio:2.41.0"
-            ).mapTo(mutableSetOf()) {
-                identifierToPackage(it)
-            }
+            )
+            val packages = packageCoordinates.mapTo(mutableSetOf()) { identifierToPackage(it) }
 
             val packageFindings = osv.retrievePackageFindings(packages).mapKeys { it.key.id.toCoordinates() }
 
-            packageFindings.keys shouldContainExactlyInAnyOrder packages.map { it.id.toCoordinates() }
+            packageFindings.keys shouldContainExactlyInAnyOrder packageCoordinates - dummyPackage
             packageFindings.keys.forAll { coordinates ->
-                packageFindings.getValue(coordinates).vulnerabilities shouldNot beEmpty()
+                with(packageFindings.getValue(coordinates)) {
+                    vulnerabilities shouldNot beEmpty()
+                    summary.issues should beEmpty()
+                }
             }
         }
 
         "return the expected result for the given package(s)" {
-            val expectedResult = readResourceValue<Map<Identifier, AdvisorResult>>(
-                "/retrieve-package-findings-expected-result.json"
-            )
+            val osv = OsvFactory.create()
 
-            val osv = createOsv()
             // The following packages have been chosen because they have only one vulnerability with the oldest possible
             // modified date from the current OSV database, in order to hopefully minimize the flakiness.
             val packages = setOf(
@@ -81,21 +82,32 @@ class OsvFunTest : WordSpec({
                 identifierToPackage(it)
             }
 
-            val packageFindings = osv.retrievePackageFindings(packages).mapKeys { it.key.id }
+            val packageFindings = osv.retrievePackageFindings(packages).entries.associate {
+                it.key.id to it.value.vulnerabilities
+            }
 
-            packageFindings.patchTimes() shouldBe expectedResult.patchTimes()
+            val expectedResult = readResourceValue<Map<Identifier, List<Vulnerability>>>(
+                "/retrieve-package-findings-expected-result.yml"
+            )
+
+            packageFindings shouldBe expectedResult
+        }
+
+        "return the vulnerabilities for the commit of Hadoop 3.3.1" {
+            val osv = OsvFactory.create()
+            val pkg = Package.EMPTY.copy(
+                vcsProcessed = VcsInfo.EMPTY.copy(revision = "a3b9c37a397ad4188041dd80621bdeefc46885f2")
+            )
+
+            val packageFindings = osv.retrievePackageFindings(setOf(pkg)).entries.associate {
+                it.key.id to it.value.vulnerabilities
+            }
+
+            val expectedResult = readResourceValue<Map<Identifier, List<Vulnerability>>>(
+                "/hadoop-commit-has-expected-result.yml"
+            )
+
+            packageFindings shouldBe expectedResult
         }
     }
 })
-
-private fun createOsv(): Osv = OsvFactory.create()
-
-private fun Map<Identifier, AdvisorResult>.patchTimes(): Map<Identifier, AdvisorResult> =
-    mapValues { (_, advisorResult) ->
-        advisorResult.normalizeVulnerabilityData().copy(
-            summary = advisorResult.summary.copy(
-                startTime = Instant.EPOCH,
-                endTime = Instant.EPOCH
-            )
-        )
-    }

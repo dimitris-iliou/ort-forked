@@ -70,17 +70,22 @@ fun SpdxLicense.toExpression(): SpdxLicenseIdExpression {
 }
 
 /**
- * Return true if and only if this string can be successfully parsed to a [SpdxExpression] of the given [strictness].
+ * Return true if this string can be successfully parsed to a [SpdxExpression] of the given [strictness].
  */
 fun String.isSpdxExpression(strictness: Strictness = Strictness.ALLOW_DEPRECATED): Boolean =
     runCatching { SpdxExpression.parse(this, strictness) }.isSuccess
 
 /**
- * Return true if and only if this String can be successfully parsed to an [SpdxExpression] with the given [strictness],
+ * Return true if this String can be successfully parsed to an [SpdxExpression] with the given [strictness],
  * or if it equals [SpdxConstants.NONE] or [SpdxConstants.NOASSERTION].
  */
 fun String.isSpdxExpressionOrNotPresent(strictness: Strictness = Strictness.ALLOW_DEPRECATED): Boolean =
     SpdxConstants.isNotPresent(this) || isSpdxExpression(strictness)
+
+/**
+ * Convert a null or blank [String] to `NONE`.
+ */
+fun String?.nullOrBlankToSpdxNone(): String = if (isNullOrBlank()) SpdxConstants.NONE else this
 
 /**
  * Parse this string as an [SpdxExpression] of the given [strictness] and return the result on success, or throw an

@@ -131,16 +131,24 @@ const config = {
               },
               {
                 label: 'Slack',
-                href: 'http://slack.oss-review-toolkit.org',
+                href: 'https://oss-review-toolkit.slack.com',
+              },
+              {
+                label: 'Team',
+                href: 'mailto:ort@oss-review-toolkit.org',
               },
             ],
           },
           {
-            title: 'More',
+            title: 'GitHub',
             items: [
               {
-                label: 'GitHub',
+                label: 'Project',
                 href: 'https://github.com/oss-review-toolkit/ort',
+              },
+              {
+                label: 'Governance',
+                href: 'https://github.com/oss-review-toolkit/ort-governance',
               },
             ],
           },

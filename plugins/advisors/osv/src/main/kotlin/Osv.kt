@@ -29,7 +29,6 @@ import org.apache.logging.log4j.kotlin.logger
 import org.ossreviewtoolkit.clients.osv.OsvServiceWrapper
 import org.ossreviewtoolkit.clients.osv.VulnerabilitiesForPackageRequest
 import org.ossreviewtoolkit.clients.osv.Vulnerability
-import org.ossreviewtoolkit.model.AdvisorCapability
 import org.ossreviewtoolkit.model.AdvisorDetails
 import org.ossreviewtoolkit.model.AdvisorResult
 import org.ossreviewtoolkit.model.AdvisorSummary
@@ -41,7 +40,6 @@ import org.ossreviewtoolkit.plugins.advisors.api.AdviceProviderFactory
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.utils.common.collectMessages
-import org.ossreviewtoolkit.utils.common.enumSetOf
 import org.ossreviewtoolkit.utils.common.toUri
 import org.ossreviewtoolkit.utils.ort.OkHttpClientHelper
 
@@ -58,7 +56,7 @@ class Osv(
     override val descriptor: PluginDescriptor = OsvFactory.descriptor,
     config: OsvConfiguration
 ) : AdviceProvider {
-    override val details = AdvisorDetails(descriptor.id, enumSetOf(AdvisorCapability.VULNERABILITIES))
+    override val details = AdvisorDetails(descriptor.id)
 
     private val service = OsvServiceWrapper(
         serverUrl = config.serverUrl,
@@ -68,42 +66,42 @@ class Osv(
     override suspend fun retrievePackageFindings(packages: Set<Package>): Map<Package, AdvisorResult> {
         val startTime = Instant.now()
 
-        val vulnerabilitiesForPackage = getVulnerabilitiesForPackages(packages)
+        val vulnerabilityIdsForPackageId = getVulnerabilityIdsForPackages(packages)
+        val allVulnerabilityIds = vulnerabilityIdsForPackageId.values.flatten().toSet()
+        val vulnerabilityForId = getVulnerabilitiesForIds(allVulnerabilityIds).associateBy { it.id }
 
         return packages.mapNotNull { pkg ->
-            vulnerabilitiesForPackage[pkg.id]?.let { vulnerabilities ->
+            vulnerabilityIdsForPackageId[pkg.id]?.let { ids ->
                 pkg to AdvisorResult(
                     advisor = details,
-                    summary = AdvisorSummary(
-                        startTime = startTime,
-                        endTime = Instant.now()
-                    ),
-                    vulnerabilities = vulnerabilities.map { it.toOrtVulnerability() }
+                    summary = AdvisorSummary(startTime = startTime, endTime = Instant.now()),
+                    vulnerabilities = ids.map { vulnerabilityForId.getValue(it).toOrtVulnerability() }
                 )
             }
         }.toMap()
     }
 
-    private fun getVulnerabilitiesForPackages(packages: Set<Package>): Map<Identifier, List<Vulnerability>> {
-        val vulnerabilityIdsForPackageId = getVulnerabilityIdsForPackages(packages)
-        val allVulnerabilityIds = vulnerabilityIdsForPackageId.values.flatten().toSet()
-        val vulnerabilityForId = getVulnerabilitiesForIds(allVulnerabilityIds).associateBy { it.id }
-
-        return packages.associate { pkg ->
-            pkg.id to vulnerabilityIdsForPackageId[pkg.id].orEmpty().map { vulnerabilityForId.getValue(it) }
-        }
-    }
-
     private fun getVulnerabilityIdsForPackages(packages: Set<Package>): Map<Identifier, List<String>> {
-        val requests = packages.map { pkg ->
-            // TODO: Support querying vulnerabilities by Git commit hash as described at
-            //       https://google.github.io/osv.dev/post-v1-query/. That would allow to generally support e.g. C / C++
-            //       projects that do not use a dedicated package manager, like Conan.
-            val request = VulnerabilitiesForPackageRequest(
-                pkg = org.ossreviewtoolkit.clients.osv.Package(purl = pkg.purl)
-            )
+        val requests = packages.mapNotNull { pkg ->
+            when {
+                pkg.purl.isNotEmpty() -> pkg to VulnerabilitiesForPackageRequest(
+                    pkg = org.ossreviewtoolkit.clients.osv.Package(purl = pkg.purl)
+                )
 
-            pkg to request
+                // TODO: Consider doing this in more cases, like for the upcoming generic "git" type of PURLs, see
+                //       https://github.com/package-url/purl-spec/issues/780.
+                pkg.vcsProcessed.revision.isNotEmpty() -> pkg to VulnerabilitiesForPackageRequest(
+                    commit = pkg.vcsProcessed.revision
+                )
+
+                else -> {
+                    logger.warn {
+                        "${pkg.id.toCoordinates()} does not provide any metadata to identify vulnerabilities."
+                    }
+
+                    null
+                }
+            }
         }
 
         val result = service.getVulnerabilityIdsForPackages(requests.map { it.second })

@@ -22,6 +22,7 @@ package org.ossreviewtoolkit.plugins.scanners.scanoss
 import com.scanoss.Scanner
 import com.scanoss.filters.FilterConfig
 import com.scanoss.settings.Bom
+import com.scanoss.settings.FileSnippet
 import com.scanoss.settings.RemoveRule
 import com.scanoss.settings.ReplaceRule
 import com.scanoss.settings.Rule
@@ -35,9 +36,11 @@ import java.time.Instant
 import org.apache.logging.log4j.kotlin.logger
 
 import org.ossreviewtoolkit.model.ScanSummary
+import org.ossreviewtoolkit.model.config.orEmpty
 import org.ossreviewtoolkit.model.config.snippet.SnippetChoice
 import org.ossreviewtoolkit.model.config.snippet.SnippetChoiceReason
 import org.ossreviewtoolkit.model.config.snippet.SnippetChoices
+import org.ossreviewtoolkit.model.utils.isPathIncluded
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.scanner.PathScannerWrapper
@@ -53,7 +56,7 @@ import org.ossreviewtoolkit.scanner.ScannerWrapperFactory
 )
 class ScanOss(
     override val descriptor: PluginDescriptor = ScanOssFactory.descriptor,
-    config: ScanOssConfig
+    private val config: ScanOssConfig
 ) : PathScannerWrapper {
     private val scanossBuilder = Scanner.builder()
         // As there is only a single endpoint, the SCANOSS API client expects the path to be part of the API URL.
@@ -84,7 +87,12 @@ class ScanOss(
                 // This is provided by the Scanner and represents individual files/directories during traversal.
                 try {
                     val relativePath = currentPath.toFile().toRelativeString(path)
-                    val isExcluded = context.excludes?.isPathExcluded(relativePath) ?: false
+                    val isExcluded = !isPathIncluded(
+                        relativePath,
+                        context.excludes.orEmpty(),
+                        context.includes.orEmpty()
+                    )
+
                     logger.debug { "Path: $currentPath, relative: $relativePath, isExcluded: $isExcluded" }
                     isExcluded
                 } catch (e: IllegalArgumentException) {
@@ -117,7 +125,7 @@ class ScanOss(
         val removeRules: List<RemoveRule>
     )
 
-    private fun buildSettingsFromORTContext(context: ScanContext): ScanossSettings {
+    internal fun buildSettingsFromORTContext(context: ScanContext): ScanossSettings {
         val rules = processSnippetChoices(context.snippetChoices)
         val bom = Bom.builder()
             .ignore(rules.ignoreRules)
@@ -125,7 +133,17 @@ class ScanOss(
             .replace(rules.replaceRules)
             .remove(rules.removeRules)
             .build()
-        return ScanossSettings.builder().bom(bom).build()
+        val fileSnippet = FileSnippet.builder()
+            .minSnippetHits(config.minSnippetHits)
+            .minSnippetLines(config.minSnippetLines)
+            .honourFileExts(config.honourFileExts)
+            .rankingEnabled(config.rankingEnabled)
+            .rankingThreshold(config.rankingThreshold)
+            .skipHeaders(config.skipHeaders)
+            .skipHeadersLimit(config.skipHeadersLimit)
+            .build()
+        val settings = ScanossSettings.Settings.builder().fileSnippet(fileSnippet).build()
+        return ScanossSettings.builder().bom(bom).settings(settings).build()
     }
 
     fun processSnippetChoices(snippetChoices: List<SnippetChoices>): ProcessedRules {

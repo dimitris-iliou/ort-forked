@@ -137,10 +137,9 @@ data class OrtResult(
         projects.forEach { project ->
             dependencyNavigator.scopeNames(project).forEach { scopeName ->
                 dependencyNavigator.scopeDependencies(project, scopeName).forEach { dependencies ->
-                    val isScopeIncluded = isScopeIncluded(scopeName, getExcludes(), getIncludes())
                     allDependencies += dependencies
 
-                    if (!isProjectExcluded(project.id) && isScopeIncluded) {
+                    if (!isProjectExcluded(project.id) && !isScopeExcluded(scopeName)) {
                         includedDependencies += dependencies
                     }
                 }
@@ -196,7 +195,7 @@ data class OrtResult(
             { project -> project.id },
             { project ->
                 val definitionFilePath = getDefinitionFilePathRelativeToAnalyzerRoot(project)
-                val isExcluded = !isPathIncluded(definitionFilePath, getExcludes(), getIncludes())
+                val isExcluded = isPathExcluded(definitionFilePath)
 
                 ProjectEntry(
                     project = project,
@@ -512,13 +511,13 @@ data class OrtResult(
     fun getResolutions(): Resolutions = resolvedConfiguration.resolutions.orEmpty()
 
     /**
-     * Return true if and only if [violation] is resolved in this [OrtResult].
+     * Return true if [violation] is resolved in this [OrtResult].
      */
     override fun isResolved(violation: RuleViolation): Boolean =
         getResolutions().ruleViolations.any { it.matches(violation) }
 
     /**
-     * Return true if and only if [vulnerability] is resolved in this [OrtResult].
+     * Return true if [vulnerability] is resolved in this [OrtResult].
      */
     override fun isResolved(vulnerability: Vulnerability): Boolean =
         getResolutions().vulnerabilities.any { it.matches(vulnerability) }
@@ -641,7 +640,7 @@ data class OrtResult(
         }
 
     /**
-     * Return `true` if and only if the given [issue] is excluded in context of the given [id]. This is the case when
+     * Return `true` if the given [issue] is excluded in context of the given [id]. This is the case when
      * either [id] is excluded, or the [affected path][Issue.affectedPath] of [issue] is matched by a path exclude.
      */
     fun isExcluded(issue: Issue, id: Identifier): Boolean =
@@ -671,14 +670,24 @@ data class OrtResult(
     fun isProjectExcluded(id: Identifier): Boolean = projects[id]?.isExcluded == true
 
     /**
-     * Return true if and only if the given [id] denotes a [Package] contained in this [OrtResult].
+     * Return true if the given [id] denotes a [Package] contained in this [OrtResult].
      */
     fun isPackage(id: Identifier): Boolean = getPackage(id) != null
 
     /**
-     * Return true if and only if the given [id] denotes a [Project] contained in this [OrtResult].
+     * Return true if the given [path] is excluded in the project's source tree. For details see [isPathIncluded].
+     */
+    fun isPathExcluded(path: String): Boolean = !isPathIncluded(path, getExcludes(), getIncludes())
+
+    /**
+     * Return true if the given [id] denotes a [Project] contained in this [OrtResult].
      */
     fun isProject(id: Identifier): Boolean = getProject(id) != null
+
+    /**
+     * Return true if and only if the given [scopeName] is excluded.
+     */
+    fun isScopeExcluded(scopeName: String): Boolean = !isScopeIncluded(scopeName, getExcludes(), getIncludes())
 
     /**
      * Return a copy of this [OrtResult] with the [Repository.config] replaced by [config]. The package curations

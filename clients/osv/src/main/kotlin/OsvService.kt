@@ -41,6 +41,7 @@ import retrofit2.http.Path
 
 /**
  * An interface for the REST API of the Google Open Source Vulnerabilities (OSV) service, see https://osv.dev/.
+ * The list of data sources is documented at https://google.github.io/osv.dev/data/#current-data-sources.
  */
 interface OsvService {
     companion object {
@@ -78,26 +79,36 @@ interface OsvService {
         @Body request: VulnerabilitiesForPackageBatchRequest
     ): VulnerabilitiesForPackageBatchResponse
 
-    /**
-     * Return the vulnerability denoted by the given [id].
-     */
+    /** Return the vulnerability denoted by the given [id]. */
     @GET("v1/vulns/{id}")
     suspend fun getVulnerabilityForId(@Path("id") id: String): Vulnerability
 }
 
+/** See https://google.github.io/osv.dev/post-v1-query/#parameters. */
 @Serializable
 class VulnerabilitiesForPackageRequest(
+    /** The commit hash to query for. If specified, [version] should not be set. */
     val commit: String? = null,
+
+    /**
+     * The version string to query for. A fuzzy match is done against upstream versions. If set, [commit] must not be
+     * used, and [Package.purl] must not include a version.
+     */
+    val version: String? = null,
+
+    /** The package to query against. When a commit hash is given, this is optional. */
     @SerialName("package")
-    val pkg: Package? = null,
-    val version: String? = null
+    val pkg: Package? = null
 )
 
+/** See https://google.github.io/osv.dev/post-v1-querybatch/#parameters. */
 @Serializable
 data class VulnerabilitiesForPackageBatchRequest(
+    /** Each query item must follow the same rules as [VulnerabilitiesForPackageRequest]. */
     val queries: List<VulnerabilitiesForPackageRequest>
 )
 
+/** See https://google.github.io/osv.dev/post-v1-querybatch/#sample-200-response. */
 @Serializable
 data class VulnerabilitiesForPackageBatchResponse(
     val results: List<IdList>
@@ -110,7 +121,10 @@ data class VulnerabilitiesForPackageBatchResponse(
 
     @Serializable
     data class Id(
+        /** The data-source-specific ID of the vulnerability. */
         val id: String,
+
+        /** The date when the vulnerability was last modified. */
         val modified: InstantAsString
     )
 }

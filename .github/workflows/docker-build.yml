@@ -31,7 +31,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@39e147cb9de83bb9910b8ef8bd7fff0ee20fcd6f # v6.0.1
+        uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e # v6.1.0
       - name: Get ORT version
         id: get-version
         run: |
@@ -86,7 +86,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -94,7 +94,7 @@ jobs:
       - name: Build & Push 'ort' Docker Image
         id: build-ort
         if: ${{ github.event_name != 'pull_request' }}
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           context: .
           labels: ${{ needs.metadata.outputs.ort-labels }}
@@ -105,7 +105,7 @@ jobs:
           outputs: type=image,name=${{ env.REGISTRY }}/${{ github.repository_owner }}/ort,push-by-digest=true,name-canonical=true,push=true
       - name: Build 'ort' Docker Image
         if: ${{ github.event_name == 'pull_request' }}
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           context: .
           tags: ${{ needs.metadata.outputs.ort-tags }}
@@ -116,7 +116,7 @@ jobs:
       - name: Build & Push 'ort-minimal' Docker Image
         id: build-ort-minimal
         if: ${{ github.event_name != 'pull_request' }}
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           context: .
           # Do not "cache-to" here to not overwrite additional layers from the "full" image, which also contains all
@@ -129,7 +129,7 @@ jobs:
           outputs: type=image,name=${{ env.REGISTRY }}/${{ github.repository_owner }}/ort-minimal,push-by-digest=true,name-canonical=true,push=true
       - name: Build 'ort-minimal' Docker Image
         if: ${{ github.event_name == 'pull_request' }}
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           context: .
           labels: ${{ needs.metadata.outputs.ort-minimal-labels }}
@@ -145,13 +145,13 @@ jobs:
           echo "${{ steps.build-ort-minimal.outputs.digest }}" > "/tmp/digests/ort-minimal/${{ matrix.name }}"
       - name: Upload ORT digest
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ort-digest-${{ matrix.name }}
           path: /tmp/digests/ort/*
       - name: Upload ORT-minimal digest
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ort-minimal-digest-${{ matrix.name }}
           path: /tmp/digests/ort-minimal/*
@@ -181,7 +181,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}

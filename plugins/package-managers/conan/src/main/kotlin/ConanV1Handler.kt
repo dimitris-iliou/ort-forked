@@ -29,7 +29,6 @@ import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.PackageReference
 import org.ossreviewtoolkit.model.RemoteArtifact
 import org.ossreviewtoolkit.model.Scope
-import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.plugins.packagemanagers.conan.Conan.Companion.DUMMY_COMPILER_SETTINGS
 import org.ossreviewtoolkit.plugins.packagemanagers.conan.Conan.Companion.SCOPE_NAME_DEPENDENCIES
 import org.ossreviewtoolkit.plugins.packagemanagers.conan.Conan.Companion.SCOPE_NAME_DEV_DEPENDENCIES
@@ -152,8 +151,18 @@ internal class ConanV1Handler(private val conan: Conan) : ConanVersionHandler {
             description = conan.inspectField(pkgInfo.displayName, workingDir, "description").orEmpty(),
             homepageUrl = homepageUrl,
             binaryArtifact = RemoteArtifact.EMPTY, // TODO: implement me!
-            sourceArtifact = conan.parseSourceArtifact(conanData),
-            vcs = processPackageVcs(VcsInfo.EMPTY, homepageUrl),
+            sourceArtifact = conan.parseSourceArtifacts(conanData).also {
+                if (it.size > 1) {
+                    logger.warn {
+                        "Package '${id.toCoordinates()}' has ${it.size} source archives. " +
+                            "Only the first one will be used as the source artifact."
+                    }
+                }
+            }.firstOrNull() ?: RemoteArtifact.EMPTY,
+            vcs = processPackageVcs(
+                conanData.toVcsInfo(),
+                homepageUrl
+            ),
             isModified = conanData.hasPatches
         )
     }
@@ -195,7 +204,7 @@ internal class ConanV1Handler(private val conan: Conan) : ConanVersionHandler {
             homepageUrl = pkgInfo.homepage.orEmpty(),
             binaryArtifact = RemoteArtifact.EMPTY, // TODO: implement me!
             sourceArtifact = RemoteArtifact.EMPTY, // TODO: implement me!
-            vcs = conan.parseVcsInfo(pkgInfo)
+            vcs = pkgInfo.toVcsInfo()
         )
     }
 

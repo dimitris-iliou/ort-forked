@@ -51,6 +51,7 @@ import org.ossreviewtoolkit.utils.spdx.SpdxExpression
 import org.ossreviewtoolkit.utils.spdx.SpdxLicense
 import org.ossreviewtoolkit.utils.spdx.calculatePackageVerificationCode
 import org.ossreviewtoolkit.utils.spdx.nullOrBlankToSpdxNoassertionOrNone
+import org.ossreviewtoolkit.utils.spdx.nullOrBlankToSpdxNone
 import org.ossreviewtoolkit.utils.spdx.toSpdxId
 import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxChecksum
 import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxDocument
@@ -157,6 +158,12 @@ internal fun Package.toSpdxPackage(
         .applyChoices(ortResult.getPackageLicenseChoices(id))
         .applyChoices(ortResult.getRepositoryLicenseChoices())
 
+    val effectiveLicense = resolvedLicenseInfo.effectiveLicense(
+        LicenseView.CONCLUDED_OR_DECLARED_AND_DETECTED,
+        ortResult.getPackageLicenseChoices(id),
+        ortResult.getRepositoryLicenseChoices()
+    )
+
     return SpdxPackage(
         spdxId = id.toSpdxId(type),
         checksums = when (type) {
@@ -175,6 +182,7 @@ internal fun Package.toSpdxPackage(
         externalRefs = if (type == SpdxPackageType.PROJECT) emptyList() else toSpdxExternalReferences(),
         filesAnalyzed = packageVerificationCode != null,
         homepage = homepageUrl.nullOrBlankToSpdxNone(),
+        licenseComments = "effectiveLicense: ${effectiveLicense?.toString().nullOrBlankToSpdxNone()}",
         licenseConcluded = when (type) {
             // Clear the concluded license as it might need to be different for the source artifact.
             SpdxPackageType.SOURCE_PACKAGE -> SpdxConstants.NOASSERTION
@@ -201,6 +209,9 @@ internal fun Package.toSpdxPackage(
         name = id.name,
         originator = authors.takeUnless { it.isEmpty() }?.joinToString(prefix = "${SpdxConstants.PERSON} "),
         packageVerificationCode = packageVerificationCode,
+        sourceInfo = "This package's sources has been modified compared to its upstream original.".takeIf {
+            isModified
+        }.orEmpty(),
         supplier = authors.takeUnless { it.isEmpty() }?.joinToString(prefix = "${SpdxConstants.PERSON} "),
         versionInfo = id.version
     ).also { spdxPackage ->
@@ -253,11 +264,6 @@ internal fun SpdxDocument.addExtractedLicenseInfo(licenseFactProvider: LicenseFa
 
     return copy(hasExtractedLicensingInfos = extractedLicenseInfo)
 }
-
-/**
- * Convert a null or blank [String] to `NONE`.
- */
-internal fun String?.nullOrBlankToSpdxNone(): String = if (isNullOrBlank()) SpdxConstants.NONE else this
 
 /**
  * Create an SPDX download location string from [VcsInfo] and an optional [resolvedRevision].
@@ -423,7 +429,7 @@ private fun Findings.getLicensesByFilePath(): Map<String, Set<SpdxExpression>> {
 }
 
 /**
- * Return true if and only if this provenance is of the type specified by [sourceCodeOrigin].
+ * Return true if this provenance is of the type specified by [sourceCodeOrigin].
  */
 private fun Provenance.matches(sourceCodeOrigin: SourceCodeOrigin): Boolean =
     when (sourceCodeOrigin) {

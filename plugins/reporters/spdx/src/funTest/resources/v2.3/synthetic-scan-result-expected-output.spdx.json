@@ -18,16 +18,39 @@
     "licenseId" : "LicenseRef-scancode-srgb"
   } ],
   "documentNamespace" : "<REPLACE_DOCUMENT_NAMESPACE>",
-  "documentDescribes" : [ "SPDXRef-Project-Maven-proj1-grp-proj1-0.0.1" ],
+  "documentDescribes" : [ "SPDXRef-Project-Maven-proj1-grp-proj1-0.0.1", "SPDXRef-Project-Maven-proj2-grp-proj2-0.0.1", "SPDXRef-Project-Maven-proj3-grp-proj3-0.0.1" ],
   "packages" : [ {
     "SPDXID" : "SPDXRef-Project-Maven-proj1-grp-proj1-0.0.1",
     "copyrightText" : "NONE",
     "downloadLocation" : "https://github.com/path/proj1-repo.git",
     "filesAnalyzed" : false,
     "homepage" : "https://example.com/proj1/homepage",
+    "licenseComments" : "effectiveLicense: MIT",
     "licenseConcluded" : "NOASSERTION",
     "licenseDeclared" : "MIT",
     "name" : "proj1",
+    "versionInfo" : "0.0.1"
+  }, {
+    "SPDXID" : "SPDXRef-Project-Maven-proj2-grp-proj2-0.0.1",
+    "copyrightText" : "NONE",
+    "downloadLocation" : "https://github.com/path/proj1-repo.git",
+    "filesAnalyzed" : false,
+    "homepage" : "NONE",
+    "licenseComments" : "effectiveLicense: NONE",
+    "licenseConcluded" : "NOASSERTION",
+    "licenseDeclared" : "NONE",
+    "name" : "proj2",
+    "versionInfo" : "0.0.1"
+  }, {
+    "SPDXID" : "SPDXRef-Project-Maven-proj3-grp-proj3-0.0.1",
+    "copyrightText" : "NONE",
+    "downloadLocation" : "https://github.com/path/proj1-repo.git",
+    "filesAnalyzed" : false,
+    "homepage" : "NONE",
+    "licenseComments" : "effectiveLicense: NONE",
+    "licenseConcluded" : "NOASSERTION",
+    "licenseDeclared" : "NONE",
+    "name" : "proj3",
     "versionInfo" : "0.0.1"
   }, {
     "SPDXID" : "SPDXRef-Package-Go-gopkg.in.yaml.v3-3.0.1",
@@ -40,6 +63,7 @@
     } ],
     "filesAnalyzed" : false,
     "homepage" : "NONE",
+    "licenseComments" : "effectiveLicense: Apache-2.0 AND MIT",
     "licenseConcluded" : "NOASSERTION",
     "licenseDeclared" : "Apache-2.0 AND MIT",
     "name" : "gopkg.in/yaml.v3",
@@ -56,6 +80,7 @@
     "filesAnalyzed" : true,
     "hasFiles" : [ "SPDXRef-File-1", "SPDXRef-File-2" ],
     "homepage" : "NONE",
+    "licenseComments" : "effectiveLicense: Apache-2.0 AND MIT",
     "licenseConcluded" : "NOASSERTION",
     "licenseDeclared" : "Apache-2.0 AND MIT",
     "licenseInfoFromFiles" : [ "Apache-2.0", "MIT" ],
@@ -80,6 +105,7 @@
     } ],
     "filesAnalyzed" : false,
     "homepage" : "https://example.com/pkg1/homepage",
+    "licenseComments" : "effectiveLicense: BSD-2-Clause AND BSD-3-Clause AND MIT",
     "licenseConcluded" : "BSD-2-Clause AND BSD-3-Clause AND MIT",
     "licenseDeclared" : "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND (GPL-2.0-only OR MIT) AND MIT",
     "name" : "pkg1",
@@ -97,6 +123,7 @@
     "filesAnalyzed" : true,
     "hasFiles" : [ "SPDXRef-File-3" ],
     "homepage" : "https://example.com/pkg1/homepage",
+    "licenseComments" : "effectiveLicense: BSD-2-Clause AND BSD-3-Clause AND MIT",
     "licenseConcluded" : "NOASSERTION",
     "licenseDeclared" : "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND (GPL-2.0-only OR MIT) AND MIT",
     "licenseInfoFromFiles" : [ "Apache-2.0", "BSD-2-Clause" ],
@@ -121,6 +148,7 @@
     } ],
     "filesAnalyzed" : false,
     "homepage" : "https://example.com/pkg1/homepage",
+    "licenseComments" : "effectiveLicense: BSD-2-Clause AND BSD-3-Clause AND MIT",
     "licenseConcluded" : "NOASSERTION",
     "licenseDeclared" : "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND (GPL-2.0-only OR MIT) AND MIT",
     "name" : "pkg1",
@@ -136,9 +164,11 @@
     } ],
     "filesAnalyzed" : false,
     "homepage" : "NONE",
+    "licenseComments" : "effectiveLicense: NONE",
     "licenseConcluded" : "NOASSERTION",
     "licenseDeclared" : "NONE",
     "name" : "pkg2",
+    "sourceInfo" : "This package's sources has been modified compared to its upstream original.",
     "versionInfo" : "0.0.1"
   }, {
     "SPDXID" : "SPDXRef-Package-Maven-pkg3-grp-pkg3-0.0.1",
@@ -151,6 +181,7 @@
     } ],
     "filesAnalyzed" : false,
     "homepage" : "NONE",
+    "licenseComments" : "effectiveLicense: NONE",
     "licenseConcluded" : "NOASSERTION",
     "licenseDeclared" : "NONE",
     "name" : "pkg3",
@@ -166,6 +197,7 @@
     } ],
     "filesAnalyzed" : false,
     "homepage" : "NONE",
+    "licenseComments" : "effectiveLicense: MIT",
     "licenseConcluded" : "NOASSERTION",
     "licenseDeclared" : "MIT",
     "name" : "pkg4",
@@ -181,6 +213,7 @@
     } ],
     "filesAnalyzed" : false,
     "homepage" : "NONE",
+    "licenseComments" : "effectiveLicense: LicenseRef-scancode-srgb",
     "licenseConcluded" : "LicenseRef-scancode-srgb",
     "licenseDeclared" : "LicenseRef-scancode-asmus",
     "name" : "pkg6",
@@ -196,8 +229,9 @@
     } ],
     "filesAnalyzed" : false,
     "homepage" : "NONE",
+    "licenseComments" : "effectiveLicense: Apache-2.0 AND GPL-2.0-only WITH NOASSERTION AND BSD-3-Clause",
     "licenseConcluded" : "NOASSERTION",
-    "licenseDeclared" : "GPL-2.0-only WITH NOASSERTION",
+    "licenseDeclared" : "Apache-2.0 AND GPL-2.0-only WITH NOASSERTION",
     "name" : "pkg7",
     "versionInfo" : "0.0.1"
   }, {
@@ -214,14 +248,15 @@
       "referenceLocator" : "pkg:maven/pkg7-grp/pkg7@0.0.1"
     } ],
     "filesAnalyzed" : true,
-    "hasFiles" : [ "SPDXRef-File-4", "SPDXRef-File-5" ],
+    "hasFiles" : [ "SPDXRef-File-4", "SPDXRef-File-5", "SPDXRef-File-6" ],
     "homepage" : "NONE",
+    "licenseComments" : "effectiveLicense: Apache-2.0 AND GPL-2.0-only WITH NOASSERTION AND BSD-3-Clause",
     "licenseConcluded" : "NOASSERTION",
-    "licenseDeclared" : "GPL-2.0-only WITH NOASSERTION",
-    "licenseInfoFromFiles" : [ "GPL-2.0-only WITH NOASSERTION" ],
+    "licenseDeclared" : "Apache-2.0 AND GPL-2.0-only WITH NOASSERTION",
+    "licenseInfoFromFiles" : [ "BSD-3-Clause", "GPL-2.0-only WITH NOASSERTION" ],
     "name" : "pkg7",
     "packageVerificationCode" : {
-      "packageVerificationCodeValue" : "e14acc46fad3a38a1ef2830067619812b51cb4bc"
+      "packageVerificationCodeValue" : "b3ed5c0c343054d728700820f564a62fad4469ba"
     },
     "versionInfo" : "0.0.1"
   } ],
@@ -275,6 +310,16 @@
     "fileName" : "some/file",
     "licenseConcluded" : "NOASSERTION",
     "licenseInfoInFiles" : [ "NONE" ]
+  }, {
+    "SPDXID" : "SPDXRef-File-6",
+    "checksums" : [ {
+      "algorithm" : "SHA1",
+      "checksumValue" : "c927b088c3dd41fad44ef8397b3263c04aed87a0"
+    } ],
+    "copyrightText" : "NONE",
+    "fileName" : "some/other/file",
+    "licenseConcluded" : "NOASSERTION",
+    "licenseInfoInFiles" : [ "BSD-3-Clause OR MIT" ]
   } ],
   "relationships" : [ {
     "spdxElementId" : "SPDXRef-Package-Go-gopkg.in.yaml.v3-3.0.1",
@@ -294,15 +339,31 @@
     "relatedSpdxElement" : "SPDXRef-Package-Maven-pkg2-grp-pkg2-0.0.1"
   }, {
     "spdxElementId" : "SPDXRef-Package-Maven-pkg1-grp-pkg1-0.0.1",
+    "relationshipType" : "DYNAMIC_LINK",
+    "relatedSpdxElement" : "SPDXRef-Package-Maven-pkg2-grp-pkg2-0.0.1"
+  }, {
+    "spdxElementId" : "SPDXRef-Package-Maven-pkg1-grp-pkg1-0.0.1",
     "relationshipType" : "DEPENDS_ON",
+    "relatedSpdxElement" : "SPDXRef-Package-Maven-pkg3-grp-pkg3-0.0.1"
+  }, {
+    "spdxElementId" : "SPDXRef-Package-Maven-pkg1-grp-pkg1-0.0.1",
+    "relationshipType" : "DYNAMIC_LINK",
     "relatedSpdxElement" : "SPDXRef-Package-Maven-pkg3-grp-pkg3-0.0.1"
   }, {
     "spdxElementId" : "SPDXRef-Package-Maven-pkg3-grp-pkg3-0.0.1",
     "relationshipType" : "DEPENDS_ON",
     "relatedSpdxElement" : "SPDXRef-Package-Maven-pkg6-grp-pkg6-0.0.1"
   }, {
+    "spdxElementId" : "SPDXRef-Package-Maven-pkg3-grp-pkg3-0.0.1",
+    "relationshipType" : "DYNAMIC_LINK",
+    "relatedSpdxElement" : "SPDXRef-Package-Maven-pkg6-grp-pkg6-0.0.1"
+  }, {
     "spdxElementId" : "SPDXRef-Package-Maven-pkg4-grp-pkg4-0.0.1",
     "relationshipType" : "DEPENDS_ON",
+    "relatedSpdxElement" : "SPDXRef-Package-Maven-pkg7-grp-pkg7-0.0.1"
+  }, {
+    "spdxElementId" : "SPDXRef-Package-Maven-pkg4-grp-pkg4-0.0.1",
+    "relationshipType" : "STATIC_LINK",
     "relatedSpdxElement" : "SPDXRef-Package-Maven-pkg7-grp-pkg7-0.0.1"
   }, {
     "spdxElementId" : "SPDXRef-Package-Maven-pkg7-grp-pkg7-0.0.1",
@@ -314,11 +375,39 @@
     "relatedSpdxElement" : "SPDXRef-Package-Go-gopkg.in.yaml.v3-3.0.1"
   }, {
     "spdxElementId" : "SPDXRef-Project-Maven-proj1-grp-proj1-0.0.1",
+    "relationshipType" : "DYNAMIC_LINK",
+    "relatedSpdxElement" : "SPDXRef-Package-Go-gopkg.in.yaml.v3-3.0.1"
+  }, {
+    "spdxElementId" : "SPDXRef-Project-Maven-proj1-grp-proj1-0.0.1",
     "relationshipType" : "DEPENDS_ON",
+    "relatedSpdxElement" : "SPDXRef-Package-Maven-pkg1-grp-pkg1-0.0.1"
+  }, {
+    "spdxElementId" : "SPDXRef-Project-Maven-proj1-grp-proj1-0.0.1",
+    "relationshipType" : "DYNAMIC_LINK",
     "relatedSpdxElement" : "SPDXRef-Package-Maven-pkg1-grp-pkg1-0.0.1"
   }, {
     "spdxElementId" : "SPDXRef-Project-Maven-proj1-grp-proj1-0.0.1",
     "relationshipType" : "DEPENDS_ON",
     "relatedSpdxElement" : "SPDXRef-Package-Maven-pkg4-grp-pkg4-0.0.1"
+  }, {
+    "spdxElementId" : "SPDXRef-Project-Maven-proj1-grp-proj1-0.0.1",
+    "relationshipType" : "DYNAMIC_LINK",
+    "relatedSpdxElement" : "SPDXRef-Package-Maven-pkg4-grp-pkg4-0.0.1"
+  }, {
+    "spdxElementId" : "SPDXRef-Project-Maven-proj2-grp-proj2-0.0.1",
+    "relationshipType" : "DEPENDS_ON",
+    "relatedSpdxElement" : "SPDXRef-Package-Maven-pkg1-grp-pkg1-0.0.1"
+  }, {
+    "spdxElementId" : "SPDXRef-Project-Maven-proj2-grp-proj2-0.0.1",
+    "relationshipType" : "STATIC_LINK",
+    "relatedSpdxElement" : "SPDXRef-Package-Maven-pkg1-grp-pkg1-0.0.1"
+  }, {
+    "spdxElementId" : "SPDXRef-Project-Maven-proj3-grp-proj3-0.0.1",
+    "relationshipType" : "DEPENDS_ON",
+    "relatedSpdxElement" : "SPDXRef-Package-Maven-pkg1-grp-pkg1-0.0.1"
+  }, {
+    "spdxElementId" : "SPDXRef-Project-Maven-proj3-grp-proj3-0.0.1",
+    "relationshipType" : "DYNAMIC_LINK",
+    "relatedSpdxElement" : "SPDXRef-Package-Maven-pkg1-grp-pkg1-0.0.1"
   } ]
 }

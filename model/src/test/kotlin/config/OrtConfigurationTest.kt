@@ -125,7 +125,7 @@ class OrtConfigurationTest : WordSpec({
                 advisors shouldNotBeNull {
                     get("OssIndex") shouldNotBeNull {
                         options should containExactlyEntries(
-                            "serverUrl" to "https://ossindex.sonatype.org/"
+                            "serverUrl" to "https://api.guide.sonatype.com/"
                         )
 
                         secrets should containExactlyEntries(
@@ -175,7 +175,7 @@ class OrtConfigurationTest : WordSpec({
 
                     postgresStorage shouldNotBeNull {
                         with(connection) {
-                            url shouldBe "jdbc:postgresql://your-postgresql-server:5444/your-database"
+                            url shouldBe "jdbc:postgresql://your-postgresql-server:5432/your-database"
                             schema shouldBe "public"
                             username shouldBe "username"
                             password shouldBe "password"
@@ -205,7 +205,7 @@ class OrtConfigurationTest : WordSpec({
 
                     postgresStorage shouldNotBeNull {
                         with(connection) {
-                            url shouldBe "jdbc:postgresql://your-postgresql-server:5444/your-database"
+                            url shouldBe "jdbc:postgresql://your-postgresql-server:5432/your-database"
                             schema shouldBe "public"
                             username shouldBe "username"
                             password shouldBe "password"
@@ -257,7 +257,18 @@ class OrtConfigurationTest : WordSpec({
                     }
 
                     get("SCANOSS") shouldNotBeNull {
-                        options should containExactlyEntries("apiUrl" to "https://api.osskb.org/")
+                        options should containExactlyEntries(
+                            "apiUrl" to "https://api.osskb.org/",
+                            "writeToStorage" to "true",
+                            "enablePathObfuscation" to "false",
+                            "minSnippetHits" to "5",
+                            "minSnippetLines" to "3",
+                            "honourFileExts" to "true",
+                            "rankingEnabled" to "false",
+                            "rankingThreshold" to "0",
+                            "skipHeaders" to "false",
+                            "skipHeadersLimit" to "0"
+                        )
                         secrets should containExactlyEntries("apiKey" to "your API key")
                     }
                 }
@@ -299,7 +310,7 @@ class OrtConfigurationTest : WordSpec({
                     val postgresStorage = this["postgres"]
                     postgresStorage.shouldBeInstanceOf<PostgresStorageConfiguration>()
                     with(postgresStorage.connection) {
-                        url shouldBe "jdbc:postgresql://your-postgresql-server:5444/your-database"
+                        url shouldBe "jdbc:postgresql://your-postgresql-server:5432/your-database"
                         schema shouldBe "public"
                         username shouldBe "username"
                         password shouldBe "password"
@@ -329,7 +340,7 @@ class OrtConfigurationTest : WordSpec({
 
                     postgresStorage shouldNotBeNull {
                         with(connection) {
-                            url shouldBe "jdbc:postgresql://your-postgresql-server:5444/your-database"
+                            url shouldBe "jdbc:postgresql://your-postgresql-server:5432/your-database"
                             schema shouldBe "public"
                             username shouldBe "username"
                             password shouldBe "password"
@@ -398,14 +409,14 @@ class OrtConfigurationTest : WordSpec({
                     storages:
                       postgres:
                         connection:
-                          url: "postgresql://your-postgresql-server:5444/your-database"
+                          url: "postgresql://your-postgresql-server:5432/your-database"
                           schema: public
                           username: username
                           password: password
                     provenanceStorage:
                       postgresStorage:
                         connection:
-                          url: "postgresql://your-postgresql-server:5444/your-database"
+                          url: "postgresql://your-postgresql-server:5432/your-database"
                           schema: public
                           username: username
                           password: password
@@ -490,7 +501,7 @@ class OrtConfigurationTest : WordSpec({
                     storages:
                       postgresStorage:
                         connection:
-                          url: "postgresql://your-postgresql-server:5444/your-database"
+                          url: "postgresql://your-postgresql-server:5432/your-database"
                           schema: public
                           username: ${'$'}{POSTGRES_USERNAME}
                           password: ${'$'}{POSTGRES_PASSWORD}

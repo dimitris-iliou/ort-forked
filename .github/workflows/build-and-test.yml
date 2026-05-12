@@ -28,7 +28,7 @@ jobs:
         distribution: temurin
         java-version: 21
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@39e147cb9de83bb9910b8ef8bd7fff0ee20fcd6f # v6.0.1
+      uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e # v6.1.0
     - name: Build all classes
       run: ./gradlew classes
   codeql-analysis:
@@ -41,16 +41,16 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@c10b8064de6f491fea524254123dbe5e09572f13 # v4.35.1
+      uses: github/codeql-action/init@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4.35.4
       with:
         languages: java
         tools: nightly
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@39e147cb9de83bb9910b8ef8bd7fff0ee20fcd6f # v6.0.1
+      uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e # v6.1.0
     - name: Build all classes
       run: ./gradlew -Dorg.gradle.jvmargs=-Xmx1g --no-build-cache classes
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@c10b8064de6f491fea524254123dbe5e09572f13 # v4.35.1
+      uses: github/codeql-action/analyze@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4.35.4
   test:
     strategy:
       matrix:
@@ -67,7 +67,7 @@ jobs:
         distribution: temurin
         java-version: 21
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@39e147cb9de83bb9910b8ef8bd7fff0ee20fcd6f # v6.0.1
+      uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e # v6.1.0
     - name: Install Flox
       uses: flox/install-flox-action@c94e7e1ab56ae14fe98bae4fd84384fd135f0c2a # v2.4.0
       with:
@@ -80,7 +80,7 @@ jobs:
       run: ./gradlew --scan test jacocoTestReport
       if: runner.os == 'Windows'
     - name: Create Test Summary
-      uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2
+      uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2
       with:
         paths: "**/test-results/**/TEST-*.xml"
       if: always()
@@ -96,7 +96,7 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@39e147cb9de83bb9910b8ef8bd7fff0ee20fcd6f # v6.0.1
+      uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e # v6.1.0
     - name: Install Flox
       uses: flox/install-flox-action@c94e7e1ab56ae14fe98bae4fd84384fd135f0c2a # v2.4.0
       with:
@@ -104,7 +104,7 @@ jobs:
     - name: Run functional tests that do not require external tools
       run: ./flox/run_isolated.sh minimal ./gradlew --scan -Dkotest.tags=!RequiresExternalTool funTest jacocoFunTestReport
     - name: Create Test Summary
-      uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2
+      uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2
       with:
         paths: "**/test-results/**/TEST-*.xml"
       if: always()
@@ -125,7 +125,7 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
     - name: Build ORT Docker Image
-      uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+      uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
       with:
         context: .
         load: true
@@ -133,7 +133,7 @@ jobs:
         target: all-tools
         cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/ort:cache
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@39e147cb9de83bb9910b8ef8bd7fff0ee20fcd6f # v6.0.1
+      uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e # v6.1.0
     - name: Run functional tests that do require external tools
       run: |
         # Run the functional tests in the Docker container.
@@ -149,7 +149,7 @@ jobs:
           ${{ env.TEST_IMAGE_TAG }} \
           -c "./gradlew --scan -Dkotest.tags=RequiresExternalTool funTest jacocoFunTestReport"
     - name: Create Test Summary
-      uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2
+      uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2
       with:
         paths: "**/test-results/**/TEST-*.xml"
       if: always()
@@ -165,6 +165,6 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@39e147cb9de83bb9910b8ef8bd7fff0ee20fcd6f # v6.0.1
+      uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e # v6.1.0
     - name: Publish to local Maven repository
       run: ./gradlew publishToMavenLocal

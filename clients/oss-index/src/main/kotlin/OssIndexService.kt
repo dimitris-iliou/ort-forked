@@ -32,14 +32,15 @@ import retrofit2.http.Body
 import retrofit2.http.POST
 
 /**
- * Interface for the OSS Index REST API, based on the documentation from https://ossindex.sonatype.org/rest.
+ * Interface for the OSS Index REST API, based on the documentation from
+ * https://guide.sonatype.com/api#/OSS%20Index%20Compatibility.
  */
 interface OssIndexService {
     companion object {
         /**
          * The default base URL for the REST API of the public OSS Index service.
          */
-        const val DEFAULT_BASE_URL = "https://ossindex.sonatype.org/"
+        const val DEFAULT_BASE_URL = "https://api.guide.sonatype.com/"
 
         /**
          * The JSON (de-)serialization object used by this service.
@@ -47,21 +48,28 @@ interface OssIndexService {
         val JSON = Json.Default
 
         /**
-         * Create an OSS Index service instance for communicating with a server running at the given [url], optionally
-         * using [username] and [password] for basic authentication, and / or a pre-built OkHttp [client].
+         * Create an OSS Index service instance for communicating with a server running at the given [url].
+         * Authentication happens either via a Sonatype Guide personal access [token], or OSS Index [username] and
+         * [password][token]. Optionally, a custom HTTP [client] can be used.
          */
         fun create(
             url: String? = null,
             username: String? = null,
-            password: String? = null,
+            token: String,
             client: OkHttpClient? = null
         ): OssIndexService {
             val ossIndexClient = (client?.newBuilder() ?: OkHttpClient.Builder()).addInterceptor { chain ->
                 val request = chain.request()
                 val requestBuilder = request.newBuilder()
 
-                if (username != null && password != null) {
-                    requestBuilder.header("Authorization", Credentials.basic(username, password))
+                if (username == null) {
+                    require(token.startsWith("sonatype_pat_")) {
+                        "The token is not a valid Sonatype Guide PAT."
+                    }
+
+                    requestBuilder.header("Authorization", "Bearer $token")
+                } else {
+                    requestBuilder.header("Authorization", Credentials.basic(username, token))
                 }
 
                 chain.proceed(requestBuilder.build())
@@ -78,13 +86,11 @@ interface OssIndexService {
         }
     }
 
-    // See https://ossindex.sonatype.org/rest#model-ComponentReportRequest.
     @Serializable
     data class ComponentReportRequest(
         val coordinates: List<String>
     )
 
-    // See https://ossindex.sonatype.org/rest#model-ComponentReport.
     @Serializable
     data class ComponentReport(
         /** The Package URL coordinates. */
@@ -100,7 +106,6 @@ interface OssIndexService {
         val vulnerabilities: List<Vulnerability>
     )
 
-    // See https://ossindex.sonatype.org/rest#model-ComponentReportVulnerability.
     @Serializable
     data class Vulnerability(
         /** A UUID */
@@ -139,6 +144,7 @@ interface OssIndexService {
 
     /**
      * Request vulnerability reports for [components] (requires basic authentication; rate limits are relaxed).
+     * See https://guide.sonatype.com/api#/OSS%20Index%20Compatibility/getComponentReports_1.
      */
     @POST("api/v3/authorized/component-report")
     suspend fun getAuthorizedComponentReport(@Body components: ComponentReportRequest): List<ComponentReport>

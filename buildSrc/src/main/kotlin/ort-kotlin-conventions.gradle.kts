@@ -44,10 +44,20 @@ plugins {
 
     // Apply third-party plugins.
     id("com.autonomousapps.dependency-analysis")
+    id("com.gradleup.tapmoc")
     id("dev.detekt")
     id("org.jetbrains.dokka")
 
     kotlin("jvm")
+}
+
+val maxKotlinJvmTarget = runCatching { JvmTarget.fromTarget(javaLanguageVersion) }
+    .getOrDefault(enumEntries<JvmTarget>().max())
+
+tapmoc {
+    java(maxKotlinJvmTarget.target.toInt())
+
+    checkDependencies()
 }
 
 testing {
@@ -56,11 +66,11 @@ testing {
             useJUnitJupiter()
 
             dependencies {
-                implementation(project(":utils:test-utils"))
+                // See https://kotest.io/docs/framework/project-setup.html.
+                implementation(libs.kotest.runner.junit5)
 
                 implementation(libs.kotest.assertions.core)
                 implementation(libs.kotest.property)
-                implementation(libs.kotest.runner.junit5)
             }
         }
 
@@ -145,7 +155,7 @@ tasks.withType<JavaExec>().configureEach {
 
     // Work around https://youtrack.jetbrains.com/issue/KTIJ-34755.
     if (normalizedName.endsWith("main") || normalizedName.endsWith("run")) {
-        doNotTrackState("Interactive Java execution tasks are never supposed to be UP-TO-DATE.")
+        outputs.upToDateWhen { false }
     }
 }
 
@@ -154,9 +164,6 @@ tasks.withType<Jar>().configureEach {
         attributes["Build-Jdk"] = javaToolchains.compilerFor(java.toolchain).map { it.metadata.jvmVersion }
     }
 }
-
-val maxKotlinJvmTarget = runCatching { JvmTarget.fromTarget(javaLanguageVersion) }
-    .getOrDefault(enumEntries<JvmTarget>().max())
 
 val mergeDetektReportsTaskName = "mergeDetektReports"
 val mergeDetektReports = if (rootProject.tasks.findByName(mergeDetektReportsTaskName) != null) {
@@ -177,11 +184,8 @@ tasks.withType<Detekt>().configureEach detekt@{
     }
 
     reports {
+        // Disable these as they have issues with Gradle task output caching due to contained timestamps.
         html.required = false
-
-        // TODO: Enable this once https://github.com/detekt/detekt/issues/5034 is resolved and use the merged
-        //       Markdown file as a GitHub Action job summary, see
-        //       https://github.blog/2022-05-09-supercharging-github-actions-with-job-summaries/.
         markdown.required = false
 
         sarif.required = true
@@ -209,7 +213,6 @@ tasks.withType<KotlinCompile>().configureEach {
     compilerOptions {
         allWarningsAsErrors = true
         freeCompilerArgs.addAll("-Xannotation-default-target=param-property", "-Xconsistent-data-class-copy-visibility")
-        jvmTarget = maxKotlinJvmTarget
         optIn = optInRequirements
     }
 }

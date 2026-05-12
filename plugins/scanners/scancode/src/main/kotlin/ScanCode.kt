@@ -45,6 +45,9 @@ import org.semver4j.Semver
 import org.semver4j.range.RangeList
 import org.semver4j.range.RangeListFactory
 
+private const val LICENSE_REFERENCES_OPTION_VERSION = "32.0.0"
+private const val OUTPUT_FORMAT_OPTION = "--json"
+
 internal object ScanCodeCommand : CommandLineTool {
     override fun command(workingDir: File?): String {
         val executable = if (Os.isWindows) {
@@ -74,16 +77,11 @@ internal object ScanCodeCommand : CommandLineTool {
     description = "A wrapper for [ScanCode](https://github.com/aboutcode-org/scancode-toolkit).",
     factory = ScannerWrapperFactory::class
 )
-class ScanCode(
+open class ScanCode(
     override val descriptor: PluginDescriptor = ScanCodeFactory.descriptor,
     private val config: ScanCodeConfig
 ) : LocalPathScannerWrapper() {
-    companion object {
-        private const val LICENSE_REFERENCES_OPTION_VERSION = "32.0.0"
-        private const val OUTPUT_FORMAT_OPTION = "--json"
-    }
-
-    private val commandLineOptions by lazy { getCommandLineOptions(version) }
+    protected val commandLineOptions by lazy { getCommandLineOptions(version) }
 
     internal fun getCommandLineOptions(version: String) =
         buildList {

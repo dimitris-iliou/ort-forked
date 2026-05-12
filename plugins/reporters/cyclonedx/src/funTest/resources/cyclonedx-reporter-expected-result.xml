@@ -14,6 +14,37 @@
       <group>@ort</group>
       <name>https://github.com/oss-review-toolkit/ort.git</name>
       <version>1.0</version>
+      <licenses>
+        <license>
+          <id>MIT</id>
+          <text content-type="plain/text">Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+</text>
+          <properties>
+            <property name="ort:origin">detected license</property>
+          </properties>
+        </license>
+      </licenses>
+      <copyright>Copyright 1</copyright>
+      <properties>
+        <property name="ort:effectiveLicense">MIT</property>
+      </properties>
     </component>
     <licenses>
       <expression>CC0-1.0</expression>
@@ -146,13 +177,13 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       </licenses>
       <copyright>Copyright 1, Copyright 2</copyright>
       <purl>pkg:npm/%40ort/concluded-license@1.0?classifier=sources</purl>
-      <modified>false</modified>
       <externalReferences>
         <reference type="website">
           <url>https://github.com/oss-review-toolkit/ort</url>
         </reference>
       </externalReferences>
       <properties>
+        <property name="ort:effectiveLicense">MIT AND MIT WITH Libtool-exception</property>
         <property name="ort:dependencyType">direct</property>
       </properties>
     </component>
@@ -224,13 +255,16 @@ THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       </licenses>
       <copyright>Copyright 1</copyright>
       <purl>pkg:npm/%40ort/declared-license@1.0?classifier=sources</purl>
-      <modified>false</modified>
+      <pedigree>
+        <notes>This package's sources has been modified compared to its upstream original.</notes>
+      </pedigree>
       <externalReferences>
         <reference type="website">
           <url>https://github.com/oss-review-toolkit/ort</url>
         </reference>
       </externalReferences>
       <properties>
+        <property name="ort:effectiveLicense">MIT AND BSD-3-Clause</property>
         <property name="ort:dependencyType">direct</property>
       </properties>
     </component>
@@ -271,13 +305,13 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       </licenses>
       <copyright>Copyright 1, Copyright 2</copyright>
       <purl>pkg:npm/%40ort/license-file@1.0?classifier=sources</purl>
-      <modified>false</modified>
       <externalReferences>
         <reference type="website">
           <url>https://github.com/oss-review-toolkit/ort</url>
         </reference>
       </externalReferences>
       <properties>
+        <property name="ort:effectiveLicense">MIT</property>
         <property name="ort:dependencyType">direct</property>
       </properties>
     </component>
@@ -322,6 +356,18 @@ THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
           </properties>
         </license>
         <license>
+          <name>LGPL-3.0-or-later WITH openvpn-openssl-exception</name>
+          <properties>
+            <property name="ort:origin">detected license</property>
+          </properties>
+        </license>
+        <license>
+          <name>LicenseRef-scancode-truecrypt-3.1</name>
+          <properties>
+            <property name="ort:origin">detected license</property>
+          </properties>
+        </license>
+        <license>
           <id>MIT</id>
           <text content-type="plain/text">Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -349,13 +395,13 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       </licenses>
       <copyright>Copyright 1, Copyright 2, Copyright 3</copyright>
       <purl>pkg:npm/%40ort/license-file-and-additional-licenses@1.0?classifier=sources</purl>
-      <modified>false</modified>
       <externalReferences>
         <reference type="website">
           <url>https://github.com/oss-review-toolkit/ort</url>
         </reference>
       </externalReferences>
       <properties>
+        <property name="ort:effectiveLicense">MIT AND BSD-3-Clause AND LicenseRef-scancode-truecrypt-3.1 AND LGPL-3.0-or-later WITH openvpn-openssl-exception</property>
         <property name="ort:dependencyType">direct</property>
       </properties>
     </component>
@@ -393,13 +439,13 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       </licenses>
       <copyright>Copyright 1</copyright>
       <purl>pkg:npm/%40ort/no-license-file@1.0</purl>
-      <modified>false</modified>
       <externalReferences>
         <reference type="website">
           <url>https://github.com/oss-review-toolkit/ort</url>
         </reference>
       </externalReferences>
       <properties>
+        <property name="ort:effectiveLicense">MIT</property>
         <property name="ort:dependencyType">direct</property>
       </properties>
     </component>
