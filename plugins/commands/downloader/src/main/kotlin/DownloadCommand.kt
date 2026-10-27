@@ -88,7 +88,6 @@ import org.ossreviewtoolkit.plugins.commands.api.OrtCommand
 import org.ossreviewtoolkit.plugins.commands.api.OrtCommandFactory
 import org.ossreviewtoolkit.plugins.commands.api.utils.GroupTypes.FileType
 import org.ossreviewtoolkit.plugins.commands.api.utils.GroupTypes.StringType
-import org.ossreviewtoolkit.plugins.commands.api.utils.OPTION_GROUP_INPUT
 import org.ossreviewtoolkit.plugins.commands.api.utils.configurationGroup
 import org.ossreviewtoolkit.plugins.commands.api.utils.inputGroup
 import org.ossreviewtoolkit.plugins.commands.api.utils.outputGroup
@@ -104,11 +103,11 @@ import org.ossreviewtoolkit.utils.ort.ORT_CONFIG_FILENAME
 import org.ossreviewtoolkit.utils.ort.ORT_LICENSE_CLASSIFICATIONS_FILENAME
 import org.ossreviewtoolkit.utils.ort.ortConfigDirectory
 import org.ossreviewtoolkit.utils.ort.showStackTrace
-import org.ossreviewtoolkit.utils.spdx.SpdxLicenseChoice
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxLicenseChoice
 
 @OrtPlugin(
     displayName = "Download",
-    description = "Fetch source code from a remote location.",
+    summary = "Fetch source code from a remote location.",
     factory = OrtCommandFactory::class
 )
 class DownloadCommand(descriptor: PluginDescriptor = DownloadCommandFactory.descriptor) : OrtCommand(descriptor) {
@@ -250,13 +249,24 @@ class DownloadCommand(descriptor: PluginDescriptor = DownloadCommandFactory.desc
             val message = failureMessages.joinToString(separator, separator) { Theme.Default.danger(it) }
             echo(message)
 
-            throw ProgramResult(1)
+            when (input) {
+                is FileType -> if (failureMessages.any { "Exec failed" in it }) {
+                    // Problems with executing required tools are fatal.
+                    throw ProgramResult(STATUS_CODE_FATAL_ERROR)
+                } else {
+                    throw ProgramResult(STATUS_CODE_FAILURE)
+                }
+
+                // Problems with downloading are fatal if they occur for a single project URL.
+                is StringType -> throw ProgramResult(STATUS_CODE_FATAL_ERROR)
+            }
         }
     }
 
     private fun downloadFromOrtResult(ortFile: File, failureMessages: MutableList<String>) {
         val ortResult = readOrtResult(ortFile)
 
+        // This should never happen as an ORT result is always written with at least an analyzer result.
         if (ortResult.analyzer?.result == null) {
             echo(
                 Theme.Default.warning(
@@ -265,7 +275,7 @@ class DownloadCommand(descriptor: PluginDescriptor = DownloadCommandFactory.desc
                 )
             )
 
-            throw ProgramResult(0)
+            throw ProgramResult(STATUS_CODE_FAILURE)
         }
 
         val verb = if (dryRun) "Verifying" else "Downloading"
@@ -332,9 +342,7 @@ class DownloadCommand(descriptor: PluginDescriptor = DownloadCommandFactory.desc
 
         echo("$verb ${packages.size} project(s) / package(s) in total.")
 
-        val packageDownloadDirs = packages.associateWith { outputDir / it.id.toPath() }
-
-        downloadAllPackages(packageDownloadDirs, failureMessages, maxParallelDownloads)
+        val downloadDirs = downloadPackages(packages, failureMessages, maxParallelDownloads)
 
         if (archiveMode == ArchiveMode.BUNDLE && !dryRun) {
             val zipFile = outputDir / "archive.zip"
@@ -346,53 +354,63 @@ class DownloadCommand(descriptor: PluginDescriptor = DownloadCommandFactory.desc
                 logger.error { "Could not archive '$outputDir': ${it.collectMessages()}" }
             }
 
-            packageDownloadDirs.forEach { (_, dir) ->
+            downloadDirs.forEach { dir ->
                 dir.safeDeleteRecursively(baseDirectory = outputDir)
             }
         }
     }
 
     @Suppress("ForbiddenMethodCall")
-    private fun downloadAllPackages(
-        packageDownloadDirs: Map<Package, File>,
+    private fun downloadPackages(
+        packages: List<Package>,
         failureMessages: MutableList<String>,
         maxParallelDownloads: Int
-    ) = runBlocking {
-        val parallelDownloads = packageDownloadDirs.size.coerceAtMost(maxParallelDownloads)
+    ): Collection<File> =
+        runBlocking {
+            val parallelDownloads = packages.size.coerceAtMost(maxParallelDownloads)
 
-        val overallLayout = progressBarLayout(alignColumns = false) {
-            text(if (dryRun) "Verifying" else "Downloading", align = TextAlign.LEFT)
-            progressBar()
-            percentage()
-            timeRemaining()
-        }
+            val overallLayout = progressBarLayout(alignColumns = false) {
+                text(if (dryRun) "Verifying" else "Downloading", align = TextAlign.LEFT)
+                progressBar()
+                percentage()
+                timeRemaining()
+            }
 
-        val taskLayout = progressBarContextLayout<Pair<Package, Int>> {
-            text(fps = animationFps, align = TextAlign.LEFT) { "> Package '${context.first.id.toCoordinates()}'..." }
-            cell(width = ColumnWidth.Expand()) { EmptyWidget }
-            text(fps = animationFps, align = TextAlign.RIGHT) { "${context.second.inc()}/${packageDownloadDirs.size}" }
-        }
-
-        val progress = MultiProgressBarAnimation(terminal).animateInCoroutine()
-        val overall = progress.addTask(overallLayout, total = packageDownloadDirs.size.toLong())
-        val tasks = List(parallelDownloads) { progress.addTask(taskLayout, context = Package.EMPTY to 0, total = 1) }
-
-        launch { progress.execute() }
-
-        withContext(Dispatchers.IO.limitedParallelism(parallelDownloads)) {
-            packageDownloadDirs.entries.mapIndexed { index, (pkg, dir) ->
-                async {
-                    with(tasks[index % parallelDownloads]) {
-                        reset { context = pkg to index }
-                        downloadPackage(pkg, dir, failureMessages)
-                        advance()
-                    }
-
-                    overall.advance()
+            val taskLayout = progressBarContextLayout<Pair<Package, Int>> {
+                text(fps = animationFps, align = TextAlign.LEFT) {
+                    "> Package '${context.first.id.toCoordinates()}'..."
                 }
-            }.awaitAll()
+
+                cell(width = ColumnWidth.Expand()) { EmptyWidget }
+                text(fps = animationFps, align = TextAlign.RIGHT) { "${context.second.inc()}/${packages.size}" }
+            }
+
+            val progress = MultiProgressBarAnimation(terminal).animateInCoroutine()
+            val overall = progress.addTask(overallLayout, total = packages.size.toLong())
+            val tasks = List(parallelDownloads) {
+                progress.addTask(taskLayout, context = Package.EMPTY to 0, total = 1)
+            }
+
+            launch { progress.execute() }
+
+            val packageDownloadDirs = packages.associateWith { outputDir / it.id.toPath() }
+
+            withContext(Dispatchers.IO.limitedParallelism(parallelDownloads)) {
+                packages.mapIndexed { index, pkg ->
+                    async {
+                        with(tasks[index % parallelDownloads]) {
+                            reset { context = pkg to index }
+                            downloadPackage(pkg, packageDownloadDirs.getValue(pkg), failureMessages)
+                            advance()
+                        }
+
+                        overall.advance()
+                    }
+                }.awaitAll()
+            }
+
+            packageDownloadDirs.values
         }
-    }
 
     private fun downloadPackage(pkg: Package, dir: File, failureMessages: MutableList<String>) {
         try {
@@ -466,7 +484,7 @@ class DownloadCommand(descriptor: PluginDescriptor = DownloadCommandFactory.desc
             } else {
                 val vcs = VersionControlSystem.forUrl(projectUrl)
                 val vcsType = vcsTypeOption?.let { VcsType.forName(it) } ?: vcs?.type ?: VcsType.UNKNOWN
-                val vcsRevision = vcsRevisionOption ?: vcs?.getDefaultBranchName(projectUrl).orEmpty()
+                val vcsRevision = vcsRevisionOption ?: vcs?.getDefaultBranchName(projectUrl)?.getOrThrow().orEmpty()
 
                 val vcsInfo = VcsInfo(
                     type = vcsType,

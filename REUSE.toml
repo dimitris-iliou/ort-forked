@@ -11,11 +11,6 @@ SPDX-FileCopyrightText = "2017 The ORT Project Copyright Holders <https://github
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
-path = "**/.flox/**"
-SPDX-FileCopyrightText = "2025 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
 path = "**/.gitattributes"
 SPDX-FileCopyrightText = "2018 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>"
 SPDX-License-Identifier = "Apache-2.0"
@@ -71,21 +66,6 @@ SPDX-FileCopyrightText = "2017 The ORT Project Copyright Holders <https://github
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
-path = "ci/**"
-SPDX-FileCopyrightText = "2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = "clients/fossid-webapp/src/test/resources/**"
-SPDX-FileCopyrightText = "2020 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
-path = "clients/github-graphql/src/main/resources/**"
-SPDX-FileCopyrightText = "2021 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>"
-SPDX-License-Identifier = "Apache-2.0"
-
-[[annotations]]
 path = ".env.versions"
 SPDX-FileCopyrightText = "2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>"
 SPDX-License-Identifier = "Apache-2.0"
@@ -131,6 +111,11 @@ SPDX-FileCopyrightText = "2017 The ORT Project Copyright Holders <https://github
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
+path = "plugins/reporters/web-app-template/src/components/ui/*.tsx"
+SPDX-FileCopyrightText = "Copyright (c) 2023 shadcn"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
 path = "website/**"
 SPDX-FileCopyrightText = "2017 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>"
 SPDX-License-Identifier = "Apache-2.0"
@@ -146,9 +131,14 @@ SPDX-FileCopyrightText = "2007-2020 The original author or authors <info@gradle.
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
-path = "clients/github-graphql/src/main/resources/schema.graphql"
-SPDX-FileCopyrightText = "2017 Gregor Martynus"
-SPDX-License-Identifier = "MIT"
+path = "clients/fossid-webapp/src/test/resources/**"
+SPDX-FileCopyrightText = "2020 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "clients/open-source-insights/src/main/proto/api.proto"
+SPDX-FileCopyrightText = "Copyright 2024 Google LLC"
+SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
 path = "clients/osv/src/test/resources/vulnerability/examples/**"
@@ -159,6 +149,11 @@ SPDX-License-Identifier = "Apache-2.0"
 path = "clients/scanoss/swagger/**"
 SPDX-FileCopyrightText = "Copyright (c) 2022 SCANOSS"
 SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = "clients/vulnerable-code/openapi/**"
+SPDX-FileCopyrightText = "Copyright (c) nexB Inc. and others"
+SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
 path = "evaluator/src/main/resources/rules/matrixseqexpl.json"
@@ -189,6 +184,12 @@ SPDX-License-Identifier = "CC-BY-3.0"
 path = "plugins/reporters/opossum/src/funTest/resources/reporter-test-output.json"
 SPDX-FileCopyrightText = "2024 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>"
 SPDX-License-Identifier = "Apache-2.0"
+precedence = "override"
+
+[[annotations]]
+path = "plugins/scanners/scanoss/src/funTest/resources/unoconv*"
+SPDX-FileCopyrightText = "2007 Dag Wieers <dag@wieers.com>"
+SPDX-License-Identifier = "GPL-2.0-only"
 precedence = "override"
 
 [[annotations]]

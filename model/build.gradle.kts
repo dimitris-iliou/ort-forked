@@ -29,28 +29,32 @@ dependencies {
     api(projects.clients.clearlyDefinedClient)
     api(projects.plugins.api)
     api(projects.utils.ortUtils)
-    api(projects.utils.spdxUtils)
-
+    api(projects.utils.spdxExpressionUtils)
     api(jacksonLibs.jacksonDatabind)
     api(jacksonLibs.jacksonDataformatYaml)
+    api(libs.exposed.core)
+    api(libs.exposed.jdbc)
+    api(libs.hoplite.core)
     api(libs.log4j.api)
     api(libs.packageurl)
 
+    implementation(projects.utils.commonUtils)
+    implementation(projects.utils.spdxUtils)
     implementation(jacksonLibs.jacksonDatatypeJsr310)
     implementation(jacksonLibs.jacksonModuleKotlin)
-    implementation(libs.bundles.exposed)
-    implementation(libs.bundles.hoplite)
     implementation(libs.hikari)
-    implementation(libs.postgres)
     implementation(libs.semver4j)
     implementation(libs.tika)
 
     funTestImplementation(projects.utils.testUtils)
 
+    runtimeOnly(libs.exposed.dao)
+    runtimeOnly(libs.hoplite.yaml)
+    runtimeOnly(libs.postgres)
+
     testFixturesImplementation(projects.utils.testUtils)
 
     testImplementation(projects.utils.testUtils)
-
     testImplementation(libs.jsonSchemaValidator)
     testImplementation(libs.mockk)
 }

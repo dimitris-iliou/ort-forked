@@ -21,12 +21,13 @@ package org.ossreviewtoolkit.plugins.packagemanagers.bazel
 
 import io.kotest.core.annotation.Tags
 import io.kotest.core.spec.style.StringSpec
-import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.collections.shouldBeSingle
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 
 import org.ossreviewtoolkit.analyzer.analyze
 import org.ossreviewtoolkit.analyzer.create
+import org.ossreviewtoolkit.analyzer.getAnalyzerResult
 import org.ossreviewtoolkit.analyzer.resolveSingleProject
 import org.ossreviewtoolkit.model.config.PackageManagerConfiguration
 import org.ossreviewtoolkit.model.toYaml
@@ -99,8 +100,7 @@ class BazelFunTest : StringSpec({
 
         val result = BazelFactory.create().resolveSingleProject(definitionFile)
 
-        result.issues shouldHaveSize 1
-        result.issues.first().message shouldBe
+        result.issues.shouldBeSingle().message shouldBe
             "WARNING: For repository 'com_google_googletest', the root module requires module version " +
             "googletest@1.14.0, but got googletest@1.14.0.bcr.1 in the resolved dependency graph. Please update the " +
             "version in your MODULE.bazel or set --check_direct_dependencies=off"
@@ -215,8 +215,8 @@ class BazelFunTest : StringSpec({
                     )
                 )
             )
-        )
+        ).getAnalyzerResult()
 
-        result.analyzer?.result.toYaml() should matchExpectedResult(expectedResultFile, definitionFile)
+        result.toYaml() should matchExpectedResult(expectedResultFile, definitionFile)
     }
 })

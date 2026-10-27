@@ -28,6 +28,7 @@ import java.time.Instant
 import org.ossreviewtoolkit.model.AnalyzerResult
 import org.ossreviewtoolkit.model.DependencyGraph
 import org.ossreviewtoolkit.model.DependencyTreeNavigator
+import org.ossreviewtoolkit.model.Issue
 import org.ossreviewtoolkit.model.OrtResult
 import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.PackageReference
@@ -37,6 +38,8 @@ import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
 import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.config.PackageManagerConfiguration
+import org.ossreviewtoolkit.model.config.PathExclude
+import org.ossreviewtoolkit.model.config.PathExcludeReason
 import org.ossreviewtoolkit.model.config.RepositoryConfiguration
 import org.ossreviewtoolkit.model.config.ScopeExclude
 import org.ossreviewtoolkit.model.config.ScopeExcludeReason
@@ -112,6 +115,11 @@ fun Collection<PackageReference>.withInvariantIssues(): Set<PackageReference> =
         )
     }
 
+fun AnalyzerResult.withInvariantIssues() =
+    copy(
+        issues = issues.mapValues { (_, issues) -> issues.toInvariantIssues() }
+    )
+
 fun ProjectAnalyzerResult.withInvariantIssues() =
     copy(
         project = project.copy(
@@ -119,12 +127,15 @@ fun ProjectAnalyzerResult.withInvariantIssues() =
                 scope.copy(dependencies = scope.dependencies.withInvariantIssues())
             }
         ),
-        issues = issues.sortedBy { it.message }.map { it.copy(timestamp = Instant.EPOCH) }
+        issues = issues.toInvariantIssues()
     )
+
+private fun List<Issue>.toInvariantIssues() = sortedBy { it.message }.map { it.copy(timestamp = Instant.EPOCH) }
 
 fun analyze(
     projectDir: File,
     allowDynamicVersions: Boolean = false,
+    excludedPaths: Collection<String> = emptySet(),
     excludedScopes: Collection<String> = emptySet(),
     skipExcluded: Boolean = false,
     packageManagers: Collection<PackageManagerFactory> = PackageManagerFactory.ALL.values,
@@ -139,6 +150,9 @@ fun analyze(
 
     val repositoryConfig = RepositoryConfiguration(
         excludes = Excludes(
+            paths = excludedPaths.map {
+                PathExclude(it, PathExcludeReason.TEST_OF)
+            },
             scopes = excludedScopes.map {
                 ScopeExclude(it, ScopeExcludeReason.TEST_DEPENDENCY_OF)
             }

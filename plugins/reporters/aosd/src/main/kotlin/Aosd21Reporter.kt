@@ -34,12 +34,12 @@ import org.ossreviewtoolkit.plugins.reporters.aosd.AOSD21.Component
 import org.ossreviewtoolkit.reporter.Reporter
 import org.ossreviewtoolkit.reporter.ReporterFactory
 import org.ossreviewtoolkit.reporter.ReporterInput
-import org.ossreviewtoolkit.utils.spdx.nullOrBlankToSpdxNoassertionOrNone
+import org.ossreviewtoolkit.utils.spdxexpression.nullOrBlankToSpdxNoassertionOrNone
 
 @OrtPlugin(
     id = "AOSD2.1",
     displayName = "Audi Open Source Diagnostics 2.1",
-    description = "A reporter for the Audi Open Source Diagnostics (AOSD) 2.1 format.",
+    summary = "A reporter for the Audi Open Source Diagnostics (AOSD) 2.1 format.",
     factory = ReporterFactory::class
 )
 class Aosd21Reporter(override val descriptor: PluginDescriptor = Aosd21ReporterFactory.descriptor) : Reporter {

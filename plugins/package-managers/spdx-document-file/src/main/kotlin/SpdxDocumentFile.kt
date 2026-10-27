@@ -17,7 +17,7 @@
  * License-Filename: LICENSE
  */
 
-package org.ossreviewtoolkit.plugins.packagemanagers.spdx
+package org.ossreviewtoolkit.plugins.packagemanagers.spdxdocumentfile
 
 import java.io.File
 
@@ -38,6 +38,7 @@ import org.ossreviewtoolkit.model.PackageReference
 import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.Scope
+import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.Excludes
@@ -49,17 +50,16 @@ import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.OrtPluginOption
 import org.ossreviewtoolkit.plugins.api.PluginConfig
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
-import org.ossreviewtoolkit.plugins.packagemanagers.spdx.utils.SpdxDocumentCache
-import org.ossreviewtoolkit.plugins.packagemanagers.spdx.utils.SpdxResolvedDocument
-import org.ossreviewtoolkit.plugins.packagemanagers.spdx.utils.extractScopeFromExternalReferences
-import org.ossreviewtoolkit.plugins.packagemanagers.spdx.utils.isExternalDocumentReferenceId
-import org.ossreviewtoolkit.plugins.packagemanagers.spdx.utils.locateCpe
-import org.ossreviewtoolkit.plugins.packagemanagers.spdx.utils.locateExternalReference
-import org.ossreviewtoolkit.plugins.packagemanagers.spdx.utils.mapNotPresentToEmpty
-import org.ossreviewtoolkit.plugins.packagemanagers.spdx.utils.projectPackage
-import org.ossreviewtoolkit.plugins.packagemanagers.spdx.utils.toIdentifier
-import org.ossreviewtoolkit.plugins.packagemanagers.spdx.utils.toPackage
-import org.ossreviewtoolkit.plugins.packagemanagers.spdx.utils.wrapPresentInSet
+import org.ossreviewtoolkit.plugins.packagemanagers.spdxdocumentfile.utils.SpdxDocumentCache
+import org.ossreviewtoolkit.plugins.packagemanagers.spdxdocumentfile.utils.SpdxResolvedDocument
+import org.ossreviewtoolkit.plugins.packagemanagers.spdxdocumentfile.utils.extractScopeFromExternalReferences
+import org.ossreviewtoolkit.plugins.packagemanagers.spdxdocumentfile.utils.locateCpe
+import org.ossreviewtoolkit.plugins.packagemanagers.spdxdocumentfile.utils.locateExternalReference
+import org.ossreviewtoolkit.plugins.packagemanagers.spdxdocumentfile.utils.mapNotPresentToEmpty
+import org.ossreviewtoolkit.plugins.packagemanagers.spdxdocumentfile.utils.projectPackage
+import org.ossreviewtoolkit.plugins.packagemanagers.spdxdocumentfile.utils.toIdentifier
+import org.ossreviewtoolkit.plugins.packagemanagers.spdxdocumentfile.utils.toPackage
+import org.ossreviewtoolkit.plugins.packagemanagers.spdxdocumentfile.utils.wrapPresentInSet
 import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxExternalReference
 import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxPackage
 import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxRelationship
@@ -70,6 +70,7 @@ internal const val PACKAGE_TYPE_SPDX = "SpdxDocumentFile"
 private const val DEFAULT_SCOPE_NAME = "default"
 
 private val SPDX_LINKAGE_RELATIONSHIPS = mapOf(
+    SpdxRelationship.Type.CONTAINS to PackageLinkage.STATIC,
     SpdxRelationship.Type.DYNAMIC_LINK to PackageLinkage.DYNAMIC,
     SpdxRelationship.Type.STATIC_LINK to PackageLinkage.STATIC
 )
@@ -82,7 +83,13 @@ data class SpdxDocumentFileConfig(
      * [Identifier] is deduced from that PURL instead of from the [SpdxPackage]'s [ID][SpdxPackage.spdxId].
      */
     @OrtPluginOption(defaultValue = "false")
-    val deduceOrtIdFromPurl: Boolean
+    val deduceOrtIdFromPurl: Boolean,
+
+    /**
+     * If this option is enabled, issues will be created for relationships with unspecified or ambiguous linkage types.
+     */
+    @OrtPluginOption(defaultValue = "false")
+    val warnAboutUnclearLinkage: Boolean
 )
 
 /**
@@ -91,7 +98,7 @@ data class SpdxDocumentFileConfig(
  */
 @OrtPlugin(
     displayName = "SPDX Document File",
-    description = "A package manager that uses SPDX documents as definition files.",
+    summary = "A package manager that uses SPDX documents as definition files.",
     factory = PackageManagerFactory::class
 )
 class SpdxDocumentFile(
@@ -141,7 +148,7 @@ class SpdxDocumentFile(
                     PackageReference(
                         id = ortPackage.id,
                         dependencies = getDependencies(target, doc, packages, ancestorIds, analyzerConfig),
-                        linkage = getLinkageForDependency(dependency, pkgId, doc.relationships),
+                        linkage = getLinkageForDependency(dependency, pkgId, doc, issues),
                         issues = issues
                     )
                 }
@@ -187,7 +194,7 @@ class SpdxDocumentFile(
                                 id = ortPackage.id,
                                 dependencies = getDependencies(source, doc, packages, ancestorIds, analyzerConfig),
                                 issues = issues,
-                                linkage = getLinkageForDependency(dependency, target, doc.relationships)
+                                linkage = getLinkageForDependency(dependency, target, doc, issues)
                             )
                         }
                 }
@@ -205,6 +212,40 @@ class SpdxDocumentFile(
                 else -> null
             }
         }
+
+    /**
+     * Return the [PackageLinkage] between [dependency] and [dependant] as specified in
+     * [SpdxResolvedDocument.relationships]. If no relationship is found, return [PackageLinkage.DYNAMIC].
+     */
+    private fun getLinkageForDependency(
+        dependency: SpdxPackage,
+        dependant: String,
+        doc: SpdxResolvedDocument,
+        issues: MutableCollection<Issue>
+    ): PackageLinkage {
+        val packageLinkages = doc.getRelationships(dependant, dependency.spdxId)
+            .mapNotNullTo(mutableSetOf()) { SPDX_LINKAGE_RELATIONSHIPS[it.relationshipType] }
+
+        if (config.warnAboutUnclearLinkage) {
+            when {
+                packageLinkages.isEmpty() -> issues += Issue(
+                    message = "The linkage type for the relationship from '$dependant' to '${dependency.spdxId}' is " +
+                        "missing.",
+                    severity = Severity.WARNING,
+                    source = descriptor.displayName
+                )
+
+                packageLinkages.size > 1 -> issues += Issue(
+                    message = "The linkage type for the relationship from '$dependant' to '${dependency.spdxId}' is " +
+                        "ambiguous: ${packageLinkages.joinToString()}.",
+                    severity = Severity.WARNING,
+                    source = descriptor.displayName
+                )
+            }
+        }
+
+        return packageLinkages.singleOrNull() ?: PackageLinkage.DYNAMIC
+    }
 
     /**
      * Return a [Scope] created from the given type of [relation] for the [projectPackage][projectPackageId] in
@@ -356,27 +397,6 @@ internal fun getPackageManagerDependency(
 
     return null
 }
-
-/**
- * Return the [PackageLinkage] between [dependency] and [dependant] as specified in [relationships]. If no
- * relationship is found, return [PackageLinkage.DYNAMIC].
- */
-private fun getLinkageForDependency(
-    dependency: SpdxPackage,
-    dependant: String,
-    relationships: List<SpdxRelationship>
-): PackageLinkage =
-    relationships.mapNotNull { relation ->
-        SPDX_LINKAGE_RELATIONSHIPS[relation.relationshipType]?.takeIf {
-            val relationId = if (relation.relatedSpdxElement.isExternalDocumentReferenceId()) {
-                relation.relatedSpdxElement.substringAfter(":")
-            } else {
-                relation.relatedSpdxElement
-            }
-
-            relationId == dependency.spdxId && relation.spdxElementId == dependant
-        }
-    }.singleOrNull() ?: PackageLinkage.DYNAMIC
 
 /**
  * Return true if the [relation] as defined in [relationships] describes an [SPDX_LINKAGE_RELATIONSHIPS] in the

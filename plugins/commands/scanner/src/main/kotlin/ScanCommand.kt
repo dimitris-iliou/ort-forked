@@ -77,7 +77,7 @@ import org.ossreviewtoolkit.utils.ort.ortConfigDirectory
 
 @OrtPlugin(
     displayName = "Scan",
-    description = "Run external license / copyright scanners.",
+    summary = "Run external license / copyright scanners.",
     factory = OrtCommandFactory::class
 )
 class ScanCommand(descriptor: PluginDescriptor = ScanCommandFactory.descriptor) : OrtCommand(descriptor) {
@@ -146,7 +146,7 @@ class ScanCommand(descriptor: PluginDescriptor = ScanCommandFactory.descriptor) 
             outputDir / "scan-result.${format.fileExtension}"
         }
 
-        validateOutputFiles(outputFiles)
+        checkOutputFiles(outputFiles)
 
         val ortResult = runCatching {
             runScanners(scanners, projectScanners ?: scanners, ortConfig).mergeLabels(labels)
@@ -157,7 +157,7 @@ class ScanCommand(descriptor: PluginDescriptor = ScanCommandFactory.descriptor) 
         val scannerRun = ortResult?.scanner
         if (scannerRun == null) {
             echo(Theme.Default.danger("No scanner run was created."))
-            throw ProgramResult(1)
+            throw ProgramResult(STATUS_CODE_FATAL_ERROR)
         }
 
         outputDir.safeMkdirs()

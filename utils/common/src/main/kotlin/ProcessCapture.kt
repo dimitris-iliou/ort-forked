@@ -62,25 +62,38 @@ class ProcessCapture(
         }
     }
 
-    // Note that the `tempDir` must be empty for `deleteOnExit()` to succeed, but that should be the case as the below
-    // `stdoutFile` and `stderrFile` are deleted earlier because files / directories are deleted in the reverse order
-    // that they are registered via `deleteOnExit()`.
-    private val tempDir = createTempDirectory(javaClass.simpleName).toFile().apply { deleteOnExit() }
+    private val tempDir = createTempDirectory(javaClass.simpleName).toFile()
+        .also { DeleteOnExitHook.scheduleDeletion(it) }
+
     private val commandName = command.first().toString().substringAfterLast(File.separatorChar)
-    private val stdoutFile = tempDir.resolve("$commandName.stdout").apply { deleteOnExit() }
-    private val stderrFile = tempDir.resolve("$commandName.stderr").apply { deleteOnExit() }
+    private val stdoutFile = tempDir / "$commandName.stdout"
+    private val stderrFile = tempDir / "$commandName.stderr"
 
     /**
-     * Get the standard output stream of the terminated process as a string.
+     * Get the standard output of the terminated process as a string.
      */
     val stdout
         get() = stdoutFile.readText()
 
     /**
-     * Get the standard error stream of the terminated process as a string.
+     * Get the standard output of the terminated process as a stream. The caller is responsible for closing the
+     * stream.
+     */
+    val stdoutStream
+        get() = stdoutFile.inputStream()
+
+    /**
+     * Get the standard error output of the terminated process as a string.
      */
     val stderr
         get() = stderrFile.readText()
+
+    /**
+     * Get the standard error output of the terminated process as a stream. The caller is responsible for closing the
+     * stream.
+     */
+    val stderrStream
+        get() = stderrFile.inputStream()
 
     private val builder = ProcessBuilder(*unmaskedStrings(*command))
         .directory(workingDir)
@@ -118,8 +131,8 @@ class ProcessCapture(
     /**
      * A generic error message, can be used when [exitValue] is not 0.
      */
-    val errorMessage
-        get(): String {
+    val errorMessage: String
+        get() {
             // Fall back to stdout for the error message if stderr does not provide meaningful information.
             val message = stderr.takeUnless {
                 val notContainsErrorButStdoutDoes =

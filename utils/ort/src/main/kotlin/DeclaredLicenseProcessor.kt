@@ -19,18 +19,17 @@
 
 package org.ossreviewtoolkit.utils.ort
 
-import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonPropertyOrder
 import com.fasterxml.jackson.databind.annotation.JsonSerialize
 
 import org.ossreviewtoolkit.utils.common.unquote
-import org.ossreviewtoolkit.utils.spdx.SpdxCompoundExpression
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
-import org.ossreviewtoolkit.utils.spdx.SpdxDeclaredLicenseMapping
-import org.ossreviewtoolkit.utils.spdx.SpdxExpression
-import org.ossreviewtoolkit.utils.spdx.SpdxOperator
-import org.ossreviewtoolkit.utils.spdx.toSpdxOrNull
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxCompoundExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxDeclaredLicenseMapper
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxOperator
+import org.ossreviewtoolkit.utils.spdxexpression.toSpdxOrNull
 
 object DeclaredLicenseProcessor {
     private val urlPrefixesToRemove = listOf(
@@ -82,12 +81,12 @@ object DeclaredLicenseProcessor {
         customLicenseMapping: Map<String, SpdxExpression> = emptyMap()
     ): SpdxExpression? {
         val strippedLicense = stripUrlSurroundings(declaredLicense)
-
+        val declaredLicenseMapper = SpdxDeclaredLicenseMapper.getInstance()
         val mappedLicense = customLicenseMapping[strippedLicense]
             // When looking up built-in mappings, try some variations of the license name.
-            ?: SpdxDeclaredLicenseMapping.map(strippedLicense)
-            ?: SpdxDeclaredLicenseMapping.map(strippedLicense.unquote())
-            ?: SpdxDeclaredLicenseMapping.map(strippedLicense.removePrefix(SpdxConstants.TAG).trim())
+            ?: declaredLicenseMapper.map(strippedLicense)
+            ?: declaredLicenseMapper.map(strippedLicense.unquote())
+            ?: declaredLicenseMapper.map(strippedLicense.removePrefix(SpdxConstants.TAG).trim())
 
         val processedLicense = mappedLicense ?: strippedLicense.toSpdxOrNull()
         return processedLicense?.normalize()?.takeIf {
@@ -164,12 +163,6 @@ data class ProcessedDeclaredLicense(
             unmapped = emptySet()
         )
     }
-
-    /**
-     * The list of all mapped and unmapped licenses.
-     */
-    @JsonIgnore
-    val allLicenses = decompose().map { it.toString() } + unmapped
 
     /**
      * [Decompose][SpdxExpression.decompose] the [spdxExpression] or return an empty string if it is null.

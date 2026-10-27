@@ -55,16 +55,16 @@ import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.OrtPluginOption
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
+import org.ossreviewtoolkit.utils.authentication.requestPasswordAuthentication
 import org.ossreviewtoolkit.utils.common.CommandLineTool
 import org.ossreviewtoolkit.utils.common.alsoIfNull
 import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.masked
 import org.ossreviewtoolkit.utils.common.safeDeleteRecursively
-import org.ossreviewtoolkit.utils.common.stashDirectories
+import org.ossreviewtoolkit.utils.common.stashFiles
 import org.ossreviewtoolkit.utils.common.toUri
 import org.ossreviewtoolkit.utils.ort.ORT_CONFIG_FILENAME
 import org.ossreviewtoolkit.utils.ort.createOrtTempDir
-import org.ossreviewtoolkit.utils.ort.requestPasswordAuthentication
 
 import org.semver4j.range.RangeList
 import org.semver4j.range.RangeListFactory
@@ -115,7 +115,7 @@ data class ConanConfig(
  */
 @OrtPlugin(
     displayName = "Conan",
-    description = "The Conan package manager for C / C++.",
+    summary = "The Conan package manager for C / C++.",
     factory = PackageManagerFactory::class
 )
 @Suppress("TooManyFunctions")
@@ -146,15 +146,6 @@ class Conan(
             ConanV2Handler(this)
         }
     }
-
-    // This is where Conan caches downloaded packages [1]. Note that the package cache is not concurrent, and its
-    // layout does not support packages from different remotes that are named (and versioned) the same.
-    //
-    // TODO: Consider using the experimental (and by default disabled) download cache [2] to lift these limitations.
-    //
-    // [1]: https://docs.conan.io/en/latest/reference/config_files/conan.conf.html#storage
-    // [2]: https://docs.conan.io/en/latest/configuration/download_cache.html#download-cache
-    internal val conanStoragePath by lazy { handler.getConanStoragePath() }
 
     private val pkgInspectResults = mutableMapOf<String, JsonObject>()
 
@@ -215,13 +206,13 @@ class Conan(
         val conanConfig = sequenceOf(workingDir, analysisRoot).map { it / "conan_config" }
             .find { it.isDirectory }
 
-        val directoryToStash = conanConfig?.let { handler.getConanHome() } ?: conanStoragePath
+        val directoryToStash = conanConfig?.let { handler.getConanHome() } ?: handler.getConanPackageStoragePath()
 
-        stashDirectories(directoryToStash).use {
+        stashFiles(directoryToStash, handler.getConanCacheDatabasePath()).use {
             configureRemoteAuthentication(conanConfig)
 
             // TODO: Support lockfiles which are located in a different directory than the definition file.
-            requireLockfile(analysisRoot, workingDir, allowDynamicVersions) {
+            requireLockfileForStableVersions(analysisRoot, definitionFile, allowDynamicVersions) {
                 config.lockfileName?.let { hasLockfile(workingDir.resolve(it).path) } == true
             }
 
@@ -360,8 +351,11 @@ class Conan(
 internal fun parseConanDataYaml(yaml: String, version: String): ConanData {
     val root = Yaml.default.parseToYamlNode(yaml).yamlMap
 
-    val patchesForVersion = root.get<YamlMap>("patches")?.get<YamlList>(version)
-    val hasPatches = !patchesForVersion?.items.isNullOrEmpty()
+    val hasPatches = when (val patchesNode = root.get<YamlNode>("patches")) {
+        is YamlMap -> !patchesNode.get<YamlList>(version)?.items.isNullOrEmpty()
+        is YamlList -> patchesNode.items.isNotEmpty()
+        else -> false
+    }
 
     val sources = when (val sourcesForVersion = root.get<YamlMap>("sources")?.get<YamlNode>(version)) {
         is YamlMap -> listOf(sourcesForVersion.toConanSourceEntry())

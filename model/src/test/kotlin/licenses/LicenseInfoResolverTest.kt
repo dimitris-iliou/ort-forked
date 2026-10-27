@@ -19,8 +19,10 @@
 
 package org.ossreviewtoolkit.model.licenses
 
+import io.kotest.core.TestConfiguration
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.engine.spec.tempdir
+import io.kotest.engine.spec.tempfile
 import io.kotest.matchers.Matcher
 import io.kotest.matchers.be
 import io.kotest.matchers.collections.beEmpty
@@ -28,15 +30,20 @@ import io.kotest.matchers.collections.contain
 import io.kotest.matchers.collections.containExactly
 import io.kotest.matchers.collections.containExactlyInAnyOrder
 import io.kotest.matchers.collections.haveSize
+import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.neverNullMatcher
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 
+import java.io.File
+
 import org.ossreviewtoolkit.model.ArtifactProvenance
 import org.ossreviewtoolkit.model.CopyrightFinding
 import org.ossreviewtoolkit.model.Hash
+import org.ossreviewtoolkit.model.HashAlgorithm
 import org.ossreviewtoolkit.model.Identifier
+import org.ossreviewtoolkit.model.KnownProvenance
 import org.ossreviewtoolkit.model.LicenseFinding
 import org.ossreviewtoolkit.model.LicenseSource
 import org.ossreviewtoolkit.model.Provenance
@@ -56,42 +63,50 @@ import org.ossreviewtoolkit.model.config.PathExcludeReason
 import org.ossreviewtoolkit.model.declaredLicenses
 import org.ossreviewtoolkit.model.utils.FileArchiver
 import org.ossreviewtoolkit.model.utils.FileProvenanceFileStorage
+import org.ossreviewtoolkit.model.utils.clearVcsPath
 import org.ossreviewtoolkit.utils.common.div
-import org.ossreviewtoolkit.utils.common.extractResource
+import org.ossreviewtoolkit.utils.common.packZip
+import org.ossreviewtoolkit.utils.common.safeMkdirs
 import org.ossreviewtoolkit.utils.ort.DeclaredLicenseProcessor
 import org.ossreviewtoolkit.utils.ort.storage.LocalFileStorage
-import org.ossreviewtoolkit.utils.spdx.SpdxExpression
-import org.ossreviewtoolkit.utils.spdx.SpdxLicense
-import org.ossreviewtoolkit.utils.spdx.SpdxSingleLicenseExpression
-import org.ossreviewtoolkit.utils.spdx.toSpdx
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxSingleLicenseExpression
+import org.ossreviewtoolkit.utils.spdxexpression.toSpdx
 import org.ossreviewtoolkit.utils.test.transformingCollectionEmptyMatcher
 import org.ossreviewtoolkit.utils.test.transformingCollectionMatcher
 
-class LicenseInfoResolverTest : WordSpec({
-    val pkgId = Identifier("Gradle:org.ossreviewtoolkit:ort:1.0.0")
-    val vcsInfo = VcsInfo(
+private val ID = Identifier("Gradle:org.ossreviewtoolkit:ort:1.0.0")
+private val REPOSITORY_PROVENANCE = RepositoryProvenance(
+    vcsInfo = VcsInfo(
         type = VcsType.GIT,
         url = "https://github.com/oss-review-toolkit/ort.git",
         revision = "master"
-    )
-    val provenance = RepositoryProvenance(
-        vcsInfo = vcsInfo,
-        resolvedRevision = "0000000000000000000000000000000000000000"
-    )
+    ),
+    resolvedRevision = "0000000000000000000000000000000000000000"
+)
 
+private val ARTIFACT_PROVENANCE = ArtifactProvenance(
+    sourceArtifact = RemoteArtifact(
+        url = "http://example.com/pkg-1.0.0-sources.zip",
+        hash = Hash("0000000000000000000000000000000000000000", HashAlgorithm.UNKNOWN)
+    )
+)
+
+@Suppress("LargeClass")
+class LicenseInfoResolverTest : WordSpec({
     "resolveLicenseInfo()" should {
         "resolve declared licenses" {
             val licenseInfos = listOf(
                 createLicenseInfo(
-                    id = pkgId,
+                    id = ID,
                     declaredLicenses = setOf("Apache-2.0 WITH LLVM-exception", "MIT")
                 )
             )
             val resolver = createResolver(licenseInfos)
 
-            val result = resolver.resolveLicenseInfo(pkgId)
+            val result = resolver.resolveLicenseInfo(ID)
 
-            result.id shouldBe pkgId
+            result.id shouldBe ID
             result should containOnlyLicenseSources(LicenseSource.DECLARED)
             result should containLicensesExactly("Apache-2.0 WITH LLVM-exception", "MIT")
             result should containNoLicenseLocations()
@@ -101,10 +116,10 @@ class LicenseInfoResolverTest : WordSpec({
         "resolve detected licenses" {
             val licenseInfos = listOf(
                 createLicenseInfo(
-                    id = pkgId,
+                    id = ID,
                     detectedLicenses = listOf(
                         Findings(
-                            provenance = provenance,
+                            provenance = REPOSITORY_PROVENANCE,
                             licenses = mapOf(
                                 "Apache-2.0 WITH LLVM-exception" to listOf(
                                     TextLocation("LICENSE", 1),
@@ -129,15 +144,15 @@ class LicenseInfoResolverTest : WordSpec({
 
             val resolver = createResolver(licenseInfos)
 
-            val result = resolver.resolveLicenseInfo(pkgId)
+            val result = resolver.resolveLicenseInfo(ID)
 
-            result.id shouldBe pkgId
+            result.id shouldBe ID
             result should containOnlyLicenseSources(LicenseSource.DETECTED)
             result should containLicensesExactly("Apache-2.0 WITH LLVM-exception", "MIT")
             result should containNumberOfLocationsForLicense("Apache-2.0 WITH LLVM-exception", 2)
             result should containLocationForLicense(
                 license = "Apache-2.0 WITH LLVM-exception",
-                provenance = provenance,
+                provenance = REPOSITORY_PROVENANCE,
                 location = TextLocation("LICENSE", 1),
                 copyrights = setOf(
                     ResolvedCopyrightFinding(
@@ -149,13 +164,13 @@ class LicenseInfoResolverTest : WordSpec({
             )
             result should containLocationForLicense(
                 license = "Apache-2.0 WITH LLVM-exception",
-                provenance = provenance,
+                provenance = REPOSITORY_PROVENANCE,
                 location = TextLocation("LICENSE", 21)
             )
             result should containNumberOfLocationsForLicense("MIT", 2)
             result should containLocationForLicense(
                 license = "MIT",
-                provenance = provenance,
+                provenance = REPOSITORY_PROVENANCE,
                 location = TextLocation("LICENSE", 31),
                 copyrights = setOf(
                     ResolvedCopyrightFinding(
@@ -167,7 +182,7 @@ class LicenseInfoResolverTest : WordSpec({
             )
             result should containLocationForLicense(
                 license = "MIT",
-                provenance = provenance,
+                provenance = REPOSITORY_PROVENANCE,
                 location = TextLocation("LICENSE", 41)
             )
 
@@ -183,15 +198,15 @@ class LicenseInfoResolverTest : WordSpec({
         "resolve concluded licenses" {
             val licenseInfos = listOf(
                 createLicenseInfo(
-                    id = pkgId,
+                    id = ID,
                     concludedLicense = SpdxExpression.parse("Apache-2.0 WITH LLVM-exception AND MIT")
                 )
             )
             val resolver = createResolver(licenseInfos)
 
-            val result = resolver.resolveLicenseInfo(pkgId)
+            val result = resolver.resolveLicenseInfo(ID)
 
-            result.id shouldBe pkgId
+            result.id shouldBe ID
             result should containOnlyLicenseSources(LicenseSource.CONCLUDED)
             result should containLicensesExactly("Apache-2.0 WITH LLVM-exception", "MIT")
             result should containNoLicenseLocations()
@@ -201,10 +216,10 @@ class LicenseInfoResolverTest : WordSpec({
         "resolve copyright statements" {
             val licenseInfos = listOf(
                 createLicenseInfo(
-                    id = pkgId,
+                    id = ID,
                     detectedLicenses = listOf(
                         Findings(
-                            provenance = provenance,
+                            provenance = REPOSITORY_PROVENANCE,
                             licenses = mapOf(
                                 "Apache-2.0" to listOf(
                                     TextLocation("LICENSE", 1)
@@ -225,7 +240,7 @@ class LicenseInfoResolverTest : WordSpec({
 
             val resolver = createResolver(licenseInfos)
 
-            val result = resolver.resolveLicenseInfo(pkgId)
+            val result = resolver.resolveLicenseInfo(ID)
 
             result should containCopyrightsExactly("(c) 2009 Holder 1", "(c) 2010 Holder 1", "(c) 2010 Holder 2")
             result should containFindingsForCopyrightExactly("(c) 2009 Holder 1", TextLocation("LICENSE", 1))
@@ -236,10 +251,10 @@ class LicenseInfoResolverTest : WordSpec({
         "process copyrights by license" {
             val licenseInfos = listOf(
                 createLicenseInfo(
-                    id = pkgId,
+                    id = ID,
                     detectedLicenses = listOf(
                         Findings(
-                            provenance = provenance,
+                            provenance = REPOSITORY_PROVENANCE,
                             licenses = mapOf(
                                 "Apache-2.0" to listOf(
                                     TextLocation("LICENSE", 1)
@@ -264,7 +279,7 @@ class LicenseInfoResolverTest : WordSpec({
 
             val resolver = createResolver(licenseInfos)
 
-            val result = resolver.resolveLicenseInfo(pkgId)
+            val result = resolver.resolveLicenseInfo(ID)
 
             result should containCopyrightStatementsForLicenseExactly(
                 "Apache-2.0",
@@ -292,10 +307,10 @@ class LicenseInfoResolverTest : WordSpec({
         "mark copyright garbage as garbage" {
             val licenseInfos = listOf(
                 createLicenseInfo(
-                    id = pkgId,
+                    id = ID,
                     detectedLicenses = listOf(
                         Findings(
-                            provenance = provenance,
+                            provenance = REPOSITORY_PROVENANCE,
                             licenses = mapOf(
                                 "Apache-2.0" to listOf(
                                     TextLocation("LICENSE", 1)
@@ -321,12 +336,12 @@ class LicenseInfoResolverTest : WordSpec({
                 copyrightGarbage = setOf("(c) 2009 Holder 1", "(c) 2010 Holder 1", "(c) 2009 Holder 2")
             )
 
-            val result = resolver.resolveLicenseInfo(pkgId)
+            val result = resolver.resolveLicenseInfo(ID)
 
             result should containCopyrightsExactly("(c) 2010 Holder 2", "(c) 2010 Holder 3")
             result should containFindingsForCopyrightExactly("(c) 2010 Holder 2", TextLocation("LICENSE", 4))
             result should containCopyrightGarbageForProvenanceExactly(
-                provenance,
+                REPOSITORY_PROVENANCE,
                 "(c) 2009 Holder 1" to TextLocation("LICENSE", 1),
                 "(c) 2010 Holder 1" to TextLocation("LICENSE", 2),
                 "(c) 2009 Holder 2" to TextLocation("LICENSE", 3)
@@ -352,10 +367,10 @@ class LicenseInfoResolverTest : WordSpec({
 
             val licenseInfos = listOf(
                 createLicenseInfo(
-                    id = pkgId,
+                    id = ID,
                     detectedLicenses = listOf(
                         Findings(
-                            provenance = provenance,
+                            provenance = REPOSITORY_PROVENANCE,
                             licenses = mapOf(
                                 "Apache-2.0" to listOf(
                                     TextLocation("LICENSE", 1),
@@ -395,13 +410,13 @@ class LicenseInfoResolverTest : WordSpec({
 
             val resolver = createResolver(licenseInfos)
 
-            val result = resolver.resolveLicenseInfo(pkgId)
+            val result = resolver.resolveLicenseInfo(ID)
 
             result.pathExcludesForLicense(
-                "Apache-2.0", provenance, TextLocation("LICENSE", 1)
+                "Apache-2.0", REPOSITORY_PROVENANCE, TextLocation("LICENSE", 1)
             ) should beEmpty()
             result.pathExcludesForLicense(
-                "Apache-2.0", provenance, TextLocation("a/b", 1)
+                "Apache-2.0", REPOSITORY_PROVENANCE, TextLocation("a/b", 1)
             ) should containExactly(vcsPathExclude)
             result.pathExcludesForLicense(
                 "Apache-2.0", sourceArtifactProvenance, TextLocation("LICENSE", 1)
@@ -411,10 +426,10 @@ class LicenseInfoResolverTest : WordSpec({
             ) should beEmpty()
 
             result.pathExcludesForCopyright(
-                "(c) 2010 Holder", provenance, TextLocation("LICENSE", 1)
+                "(c) 2010 Holder", REPOSITORY_PROVENANCE, TextLocation("LICENSE", 1)
             ) should beEmpty()
             result.pathExcludesForCopyright(
-                "(c) 2010 Holder", provenance, TextLocation("a/b", 1)
+                "(c) 2010 Holder", REPOSITORY_PROVENANCE, TextLocation("a/b", 1)
             ) should containExactly(vcsPathExclude)
             result.pathExcludesForCopyright(
                 "(c) 2010 Holder", sourceArtifactProvenance, TextLocation("LICENSE", 1)
@@ -441,10 +456,10 @@ class LicenseInfoResolverTest : WordSpec({
 
             val licenseInfos = listOf(
                 createLicenseInfo(
-                    id = pkgId,
+                    id = ID,
                     detectedLicenses = listOf(
                         Findings(
-                            provenance = provenance,
+                            provenance = REPOSITORY_PROVENANCE,
                             licenses = mapOf(
                                 "Apache-2.0" to listOf(
                                     TextLocation("LICENSE", 1)
@@ -463,12 +478,12 @@ class LicenseInfoResolverTest : WordSpec({
 
             val resolver = createResolver(licenseInfos)
 
-            val result = resolver.resolveLicenseInfo(pkgId)
+            val result = resolver.resolveLicenseInfo(ID)
 
             result should containLicensesExactly("MIT")
             result should containLocationForLicense(
                 license = "MIT",
-                provenance = provenance,
+                provenance = REPOSITORY_PROVENANCE,
                 location = TextLocation("LICENSE", 1),
                 appliedCuration = curation,
                 copyrights = setOf(
@@ -492,11 +507,11 @@ class LicenseInfoResolverTest : WordSpec({
 
             val licenseInfos = listOf(
                 createLicenseInfo(
-                    id = pkgId,
+                    id = ID,
                     declaredLicenses = setOf("$apacheLicense or $gplLicense", mitLicense),
                     detectedLicenses = listOf(
                         Findings(
-                            provenance = provenance,
+                            provenance = REPOSITORY_PROVENANCE,
                             licenses = mapOf(
                                 "$gplLicense OR $bsdLicense" to listOf(
                                     TextLocation("LICENSE", 1),
@@ -530,7 +545,7 @@ class LicenseInfoResolverTest : WordSpec({
                 arrayOf("$gplLicense OR $bsdLicense".toSpdx(), bsdLicense.toSpdx())
             val expectedConcludedSpdxExpression = "$apacheLicense OR $gplLicense".toSpdx()
 
-            val result: ResolvedLicenseInfo = resolver.resolveLicenseInfo(pkgId)
+            val result: ResolvedLicenseInfo = resolver.resolveLicenseInfo(ID)
             result should containOnlyLicenseSources(
                 LicenseSource.DECLARED,
                 LicenseSource.DETECTED,
@@ -556,14 +571,14 @@ class LicenseInfoResolverTest : WordSpec({
         "resolve copyrights from authors if enabled" {
             val licenseInfos = listOf(
                 createLicenseInfo(
-                    id = pkgId,
+                    id = ID,
                     authors = authors,
                     declaredLicenses = declaredLicenses
                 )
             )
             val resolver = createResolver(licenseInfos, addAuthorsToCopyrights = true)
 
-            val result = resolver.resolveLicenseInfo(pkgId)
+            val result = resolver.resolveLicenseInfo(ID)
             result should containCopyrightStatementsForLicenseExactly(
                 "LicenseRef-a",
                 "Copyright (C) The Author", "Copyright (C) The Other Author"
@@ -577,14 +592,14 @@ class LicenseInfoResolverTest : WordSpec({
         "not resolve copyrights from authors if disabled" {
             val licenseInfos = listOf(
                 createLicenseInfo(
-                    id = pkgId,
+                    id = ID,
                     authors = authors,
                     declaredLicenses = declaredLicenses
                 )
             )
             val resolver = createResolver(licenseInfos, addAuthorsToCopyrights = false)
 
-            val result = resolver.resolveLicenseInfo(pkgId)
+            val result = resolver.resolveLicenseInfo(ID)
             result should containCopyrightStatementsForLicenseExactly("LicenseRef-a")
             result should containCopyrightStatementsForLicenseExactly("LicenseRef-b")
         }
@@ -594,7 +609,7 @@ class LicenseInfoResolverTest : WordSpec({
             // in the package curation are added as copyright statement under the concluded license.
             val licenseInfos = listOf(
                 createLicenseInfo(
-                    id = pkgId,
+                    id = ID,
                     // In the curation file, authors might or might not have a "Copyright" prefix.
                     authors = setOf("Copyright (C) 2024 The Author", "The Other Author"),
                     declaredLicenses = setOf("MIT"),
@@ -604,7 +619,7 @@ class LicenseInfoResolverTest : WordSpec({
 
             val resolver = createResolver(licenseInfos, addAuthorsToCopyrights = true)
 
-            val result = resolver.resolveLicenseInfo(pkgId)
+            val result = resolver.resolveLicenseInfo(ID)
             result should containCopyrightStatementsForLicenseExactly(
                 "BSD-2-Clause",
                 // A "Copyright" prefix is added to the author (if it did not already exist).
@@ -615,7 +630,7 @@ class LicenseInfoResolverTest : WordSpec({
         "not resolve copyrights from authors in concluded license if disabled" {
             val licenseInfos = listOf(
                 createLicenseInfo(
-                    id = pkgId,
+                    id = ID,
                     authors = authors,
                     declaredLicenses = setOf("MIT"),
                     concludedLicense = SpdxExpression.parse("BSD-2-Clause")
@@ -624,8 +639,91 @@ class LicenseInfoResolverTest : WordSpec({
 
             val resolver = createResolver(licenseInfos, addAuthorsToCopyrights = false)
 
-            val result = resolver.resolveLicenseInfo(pkgId)
+            val result = resolver.resolveLicenseInfo(ID)
             result should containCopyrightStatementsForLicenseExactly("BSD-2-Clause")
+        }
+    }
+
+    "resolveLicenseFiles() for VCS provenance" should {
+        "include both license files, even if one of them does not have any findings" {
+            val archiver = createArchiver(REPOSITORY_PROVENANCE, "LICENSE", "LICENSE_WITHOUT_FINDINGS")
+            val licenseInfo = createLicenseInfo(ID, REPOSITORY_PROVENANCE, "LICENSE" to "MIT")
+
+            val result = createResolver(data = listOf(licenseInfo), archiver = archiver).resolveLicenseFiles(ID)
+
+            result.files.map { it.path }.shouldContainExactlyInAnyOrder(
+                "LICENSE",
+                "LICENSE_WITHOUT_FINDINGS"
+            )
+        }
+
+        "include a single license file, even if there a no findings at all" {
+            val archiver = createArchiver(REPOSITORY_PROVENANCE, "LICENSE")
+            val licenseInfo = createLicenseInfo(ID, REPOSITORY_PROVENANCE)
+
+            val result = createResolver(data = listOf(licenseInfo), archiver = archiver).resolveLicenseFiles(ID)
+
+            result.files.map { it.path }.shouldContainExactlyInAnyOrder("LICENSE")
+        }
+
+        "prefer the LICENSE file in the VCS path over the ones in the root and in subdir" {
+            val provenance = REPOSITORY_PROVENANCE.setVcsPath("path1")
+            val archiver = createArchiver(provenance, "LICENSE", "path1/LICENSE", "path1/subdir/LICENSE")
+            val licenseInfo = createLicenseInfo(
+                ID,
+                provenance,
+                "LICENSE" to "MIT",
+                "path1/LICENSE" to "Apache-2.0",
+                "path1/subdir/LICENSE" to "BSD-3-Clause"
+            )
+
+            val result = createResolver(data = listOf(licenseInfo), archiver = archiver).resolveLicenseFiles(ID)
+
+            result.files.map { it.path }.shouldContainExactlyInAnyOrder("path1/LICENSE")
+        }
+
+        "return only non-excluded license files" {
+            val archiver = createArchiver(REPOSITORY_PROVENANCE, "LICENSE", "LICENSE2")
+            val licenseInfo = createLicenseInfo(ID, REPOSITORY_PROVENANCE, pathExcludes = listOf("LICENSE"))
+
+            val result = createResolver(data = listOf(licenseInfo), archiver = archiver).resolveLicenseFiles(ID)
+
+            result.files.map { it.path }.shouldContainExactlyInAnyOrder("LICENSE2")
+        }
+    }
+
+    "resolveLicenseFiles() for artifact provenance" should {
+        "prefer the license files in the root directory over the one in subdir" {
+            val archiver = createArchiver(ARTIFACT_PROVENANCE, "LICENSE", "LICENSE_2", "subdir/LICENSE")
+            val licenseInfo = createLicenseInfo(ID, ARTIFACT_PROVENANCE)
+
+            val result = createResolver(data = listOf(licenseInfo), archiver = archiver).resolveLicenseFiles(ID)
+
+            result.files.map { it.path }.shouldContainExactlyInAnyOrder(
+                "LICENSE",
+                "LICENSE_2"
+            )
+        }
+
+        "prefer the license files with path depth 1, if there is no license file in the root directory" {
+            val archiver = createArchiver(ARTIFACT_PROVENANCE, "path1/LICENSE", "path1/subdir/LICENSE", "path2/LICENSE")
+            val licenseInfo = createLicenseInfo(ID, ARTIFACT_PROVENANCE)
+
+            val result = createResolver(data = listOf(licenseInfo), archiver = archiver).resolveLicenseFiles(ID)
+
+            result.files.map { it.path }.shouldContainExactlyInAnyOrder(
+                "path1/LICENSE",
+                "path2/LICENSE"
+            )
+        }
+
+        "return only non-excluded license files" {
+            val archiver = createArchiver(ARTIFACT_PROVENANCE, "LICENSE", "LICENSE2")
+            val licenseInfo = createLicenseInfo(ID, ARTIFACT_PROVENANCE, pathExcludes = listOf("LICENSE"))
+
+            val result = createResolver(data = listOf(licenseInfo), archiver = archiver).resolveLicenseFiles(ID)
+
+            result.files.map { it.path }.shouldContainExactlyInAnyOrder("LICENSE2")
         }
     }
 
@@ -633,10 +731,10 @@ class LicenseInfoResolverTest : WordSpec({
         "create the expected result" {
             val licenseInfos = listOf(
                 createLicenseInfo(
-                    id = pkgId,
+                    id = ID,
                     detectedLicenses = listOf(
                         Findings(
-                            provenance = provenance,
+                            provenance = REPOSITORY_PROVENANCE,
                             licenses = mapOf(
                                 "Apache-2.0" to listOf(
                                     TextLocation("other", 1)
@@ -656,30 +754,22 @@ class LicenseInfoResolverTest : WordSpec({
                 )
             )
 
-            val archiveDir = tempdir() / "archive"
-            extractResource("/archive.zip", archiveDir / "88dce74b694866af2a5e380206b119f5e38aad5f" / "archive.zip")
-            val archiver = FileArchiver(
-                patterns = LicenseFilePatterns.DEFAULT.licenseFilenames,
-                storage = FileProvenanceFileStorage(
-                    LocalFileStorage(archiveDir),
-                    FileArchiverConfiguration.ARCHIVE_FILENAME
-                )
-            )
+            val archiver = createArchiver(REPOSITORY_PROVENANCE, "LICENSE")
             val resolver = createResolver(licenseInfos, archiver = archiver)
 
-            val result = resolver.resolveLicenseFiles(pkgId)
+            val result = resolver.resolveLicenseFiles(ID)
 
-            result.id shouldBe pkgId
+            result.id shouldBe ID
             result.files should haveSize(1)
 
             val file = result.files.first()
-            file.provenance shouldBe provenance
+            file.provenance shouldBe REPOSITORY_PROVENANCE
             file.path shouldBe "LICENSE"
-            file.file.readText() shouldBe "Copyright 2020 Holder\n\n${SpdxLicense.MIT.text}"
+            file.file.readText() shouldBe "content of: LICENSE"
             file.licenses should containLicensesExactly("MIT")
             file.licenses should containLocationForLicense(
                 license = "MIT",
-                provenance = provenance,
+                provenance = REPOSITORY_PROVENANCE,
                 location = TextLocation("LICENSE", 3, 20),
                 copyrights = setOf(
                     ResolvedCopyrightFinding(
@@ -693,6 +783,42 @@ class LicenseInfoResolverTest : WordSpec({
     }
 })
 
+private suspend fun TestConfiguration.createArchiver(
+    provenance: KnownProvenance,
+    vararg relativeFilePaths: String
+): FileArchiver {
+    val storage = FileProvenanceFileStorage(
+        LocalFileStorage(tempdir("storage") / "archive"),
+        FileArchiverConfiguration.ARCHIVE_FILENAME
+    )
+
+    createArchive(*relativeFilePaths).also { archiveFile ->
+        storage.putData(
+            provenance = (provenance as? RepositoryProvenance)?.clearVcsPath() ?: provenance,
+            data = archiveFile.inputStream(),
+            size = archiveFile.length()
+        )
+    }
+
+    return FileArchiver(LicenseFilePatterns.DEFAULT.licenseFilenames, storage)
+}
+
+private fun TestConfiguration.createArchive(vararg relativeFilePaths: String): File {
+    val tempDir = tempdir("archive")
+
+    relativeFilePaths.forEach { path ->
+        val file = tempDir / path
+        file.parentFile.safeMkdirs()
+        file.writeText("content of: $path")
+    }
+
+    return tempfile("archive", suffix = ".zip").also {
+        // tempfile() guarantees to return a newly create file which did not exist before. Therefore, using
+        // 'overwrite = true' is required to overwrite the empty file.
+        tempDir.packZip(it, overwrite = true)
+    }
+}
+
 private fun createResolver(
     data: List<LicenseInfo>,
     copyrightGarbage: Set<String> = emptySet(),
@@ -703,6 +829,27 @@ private fun createResolver(
     copyrightGarbage = CopyrightGarbage(copyrightGarbage),
     addAuthorsToCopyrights = addAuthorsToCopyrights,
     archiver = archiver
+)
+
+private fun createLicenseInfo(
+    id: Identifier,
+    provenance: KnownProvenance,
+    vararg pathAndLicense: Pair<String, String>,
+    pathExcludes: Collection<String> = emptyList()
+) = createLicenseInfo(
+    id = id,
+    detectedLicenses = listOf(
+        Findings(
+            provenance = provenance,
+            licenses = pathAndLicense.associate { (path, license) ->
+                license to listOf(TextLocation(path, 1))
+            }.toFindingsSet(),
+            copyrights = emptySet(),
+            pathExcludes = pathExcludes.map { PathExclude(pattern = it, reason = PathExcludeReason.OTHER) },
+            licenseFindingCurations = emptyList(),
+            relativeFindingsPath = ""
+        )
+    )
 )
 
 private fun createLicenseInfo(
@@ -860,3 +1007,5 @@ private fun ResolvedLicenseInfo.pathExcludesForCopyright(
     .find { it.statement == copyright && it.location == location }
     ?.matchingPathExcludes
     ?.toSet().orEmpty()
+
+private fun RepositoryProvenance.setVcsPath(path: String) = copy(vcsInfo = vcsInfo.copy(path = path))

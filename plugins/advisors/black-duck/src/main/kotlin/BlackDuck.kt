@@ -52,12 +52,12 @@ import org.ossreviewtoolkit.utils.common.collectMessages
 
 /**
  * This advice provider by default retrieves vulnerabilities by the purl corresponding to the package. If a package has
- * the label [BlackDuck.PACKAGE_LABEL_BLACK_DUCK_ORIGIN_ID] set, then the vulnerabilities are retrieved by that
- * origin-id instead of by the purl.
+ * the label ["black-duck:origin-id"][BlackDuck.PACKAGE_LABEL_BLACK_DUCK_ORIGIN_ID] set, then the vulnerabilities are
+ * retrieved by that origin-id instead of by the purl.
  */
 @OrtPlugin(
     displayName = "Black Duck",
-    description = "An advisor that retrieves vulnerability information from a Black Duck instance.",
+    summary = "An advisor that retrieves vulnerability information from a Black Duck instance.",
     factory = AdviceProviderFactory::class
 )
 class BlackDuck(

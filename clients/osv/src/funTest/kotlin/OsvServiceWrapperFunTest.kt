@@ -20,12 +20,14 @@
 package org.ossreviewtoolkit.clients.osv
 
 import io.kotest.core.spec.style.WordSpec
-import io.kotest.matchers.collections.beEmpty
 import io.kotest.matchers.collections.containAll
+import io.kotest.matchers.collections.shouldBeSingle
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.result.shouldBeFailure
 import io.kotest.matchers.result.shouldBeSuccess
 import io.kotest.matchers.should
+import io.kotest.matchers.string.shouldContain
 
 private val VULNERABILITY_FOR_PACKAGE_BY_COMMIT_REQUEST = VulnerabilitiesForPackageRequest(
     commit = "6879efc2c1596d11a6a6ad296f80063b558d5e0f"
@@ -38,7 +40,7 @@ private val VULNERABILITY_FOR_PACKAGE_BY_NAME_AND_VERSION = VulnerabilitiesForPa
     version = "2.2.0"
 )
 private val VULNERABILITY_FOR_PACKAGE_BY_INVALID_COMMIT_REQUEST = VulnerabilitiesForPackageRequest(
-    commit = "6879efc2c1596d11a6a6ad296f80063b558d5e0c"
+    commit = "invalid"
 )
 
 class OsvServiceWrapperFunTest : WordSpec({
@@ -50,24 +52,46 @@ class OsvServiceWrapperFunTest : WordSpec({
                 VULNERABILITY_FOR_PACKAGE_BY_NAME_AND_VERSION
             )
 
-            val result = OsvServiceWrapper().getVulnerabilityIdsForPackages(requests)
+            val results = OsvServiceWrapper().getVulnerabilityIdsForPackages(requests)
 
-            result shouldBeSuccess {
-                it shouldHaveSize 3
+            results shouldHaveSize 3
 
-                it[0] should containAll(
+            results[0] shouldBeSuccess {
+                it should containAll(
                     "CVE-2023-25193",
                     "OSV-2020-484"
                 )
+            }
 
-                it[1] should beEmpty()
+            results[1] shouldBeFailure {
+                it.message shouldContain "invalid hash"
+            }
 
-                it[2] should containAll(
+            results[2] shouldBeSuccess {
+                it should containAll(
                     "OSV-2018-115",
                     "OSV-2018-143",
                     "OSV-2018-97",
                     "OSV-2020-484"
                 )
+            }
+        }
+
+        "return a failure if the request is invalid" {
+            val requests = listOf(
+                VulnerabilitiesForPackageRequest(
+                    pkg = Package(
+                        name = "dummy",
+                        ecosystem = "dummy"
+                    ),
+                    version = "dummy"
+                )
+            )
+
+            val results = OsvServiceWrapper().getVulnerabilityIdsForPackages(requests)
+
+            results.shouldBeSingle() shouldBeFailure {
+                it.message shouldContain "invalid ecosystem"
             }
         }
     }
@@ -80,6 +104,16 @@ class OsvServiceWrapperFunTest : WordSpec({
 
             result shouldBeSuccess {
                 it.map { vulnerability -> vulnerability.id } shouldContainExactlyInAnyOrder ids
+            }
+        }
+
+        "return a failure if the request is invalid" {
+            val ids = setOf("dummy")
+
+            val result = OsvServiceWrapper().getVulnerabilitiesForIds(ids)
+
+            result shouldBeFailure {
+                it.message shouldContain "Vulnerability not found"
             }
         }
     }

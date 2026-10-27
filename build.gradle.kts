@@ -25,10 +25,90 @@ import org.jetbrains.gradle.ext.Gradle
 import org.jetbrains.gradle.ext.runConfigurations
 import org.jetbrains.gradle.ext.settings
 
+val javaLanguageVersion = project.property("javaLanguageVersion") as String
+
 plugins {
     // Apply third-party plugins.
     alias(libs.plugins.gitSemver)
     alias(libs.plugins.ideaExt)
+}
+
+dependencyAnalysis {
+    issues {
+        all {
+            onUnusedDependencies {
+                severity("fail")
+
+                // Exclude modules which are automatically added by the "ort-kotlin-conventions".
+                exclude("org.junit.jupiter:junit-jupiter")
+                exclude(libs.kotest.runner.junit5)
+                exclude(libs.kotest.assertions.core)
+                exclude(libs.kotest.property)
+                exclude(libs.log4j.api.kotlin)
+            }
+
+            onUsedTransitiveDependencies {
+                // Ignore this rule for now as it creates a massive amount of findings.
+                severity("ignore")
+            }
+
+            onIncorrectConfiguration { severity("fail") }
+            onCompileOnly { severity("fail") }
+            onRuntimeOnly { severity("fail") }
+            onUnusedAnnotationProcessors { severity("fail") }
+            onRedundantPlugins { severity("fail") }
+        }
+
+        val cliCommandRegex = Regex("^cli.*|.*-command$")
+        subprojects.forEach { subproject ->
+            if (subproject.name.matches(cliCommandRegex)) {
+                project(subproject.path) {
+                    onUnusedDependencies {
+                        exclude(libs.clikt)
+                        exclude(libs.mordant)
+                    }
+                }
+            }
+        }
+
+        project(projects.cliHelper) {
+            onUnusedDependencies {
+                // XZOutputStream is a supertype of XZCompressorOutputStream.
+                exclude(libs.xz)
+            }
+        }
+
+        project(projects.cliTestLauncher) {
+            onUnusedDependencies {
+                severity("ignore")
+            }
+        }
+
+        project(projects.notifier) {
+            onUnusedDependencies {
+                exclude(libs.jiraRestClient.app)
+            }
+        }
+
+        project(projects.plugins.packageManagers.bundlerPackageManager) {
+            onUnusedDependencies {
+                exclude(libs.jruby)
+            }
+        }
+
+        project(projects.utils.ortUtils) {
+            onUnusedDependencies {
+                // XZOutputStream is a supertype of XZCompressorOutputStream.
+                exclude(libs.xz)
+            }
+        }
+    }
+
+    reporting {
+        printBuildHealth(true)
+    }
+
+    useTypesafeProjectAccessors(true)
 }
 
 semver {
@@ -75,32 +155,7 @@ if (System.getenv("CI") == "true") {
     }
 }
 
-// Gradle's "dependencies" task selector only executes on a single / the current project [1]. However, sometimes viewing
-// all dependencies at once is beneficial, e.g. for debugging version conflict resolution.
-// [1]: https://docs.gradle.org/current/userguide/viewing_debugging_dependencies.html#sec:listing_dependencies
-tasks.register("allDependencies") {
-    group = "Help"
-    description = "Displays all dependencies declared in all projects."
-
-    val dependenciesTasks = getTasksByName("dependencies", /* recursive = */ true)
-    dependsOn(dependenciesTasks)
-
-    // Ensure deterministic output by requiring to run tasks after each other in always the same order.
-    dependenciesTasks.sorted().zipWithNext().forEach { (a, b) ->
-        b.mustRunAfter(a)
-    }
-}
-
-open class OrtPrintTask : PrintTask({ "" }, "Prints the current project version", "") {
-    private val projectVersion = project.version.toString()
-
-    @TaskAction
-    fun printVersion() = println(projectVersion)
-}
-
-tasks.replace("printVersion", OrtPrintTask::class.java)
-
-val checkCopyrightsInNoticeFile by tasks.registering {
+val checkCopyrightsInNoticeFile = tasks.register("checkCopyrightsInNoticeFile") {
     val gitFilesProvider = providers.of(GitFilesValueSource::class) { parameters { workingDir = rootDir } }
     val files = CopyrightableFiles.filter(gitFilesProvider)
     val noticeFile = rootDir.resolve("NOTICE")
@@ -134,7 +189,7 @@ val checkCopyrightsInNoticeFile by tasks.registering {
     }
 }
 
-val checkLicenseHeaders by tasks.registering {
+val checkLicenseHeaders = tasks.register("checkLicenseHeaders") {
     val gitFilesProvider = providers.of(GitFilesValueSource::class) { parameters { workingDir = rootDir } }
     val files = CopyrightableFiles.filter(gitFilesProvider)
 
@@ -165,7 +220,7 @@ val checkLicenseHeaders by tasks.registering {
     }
 }
 
-val checkGitAttributes by tasks.registering {
+val checkGitAttributes = tasks.register("checkGitAttributes") {
     val gitFilesProvider = providers.of(GitFilesValueSource::class) { parameters { workingDir = rootDir } }
 
     inputs.files(gitFilesProvider)
@@ -216,6 +271,27 @@ val checkGitAttributes by tasks.registering {
     }
 }
 
+tasks.named<UpdateDaemonJvm>("updateDaemonJvm") {
+    languageVersion = JavaLanguageVersion.of(javaLanguageVersion)
+    vendor = JvmVendorSpec.ADOPTIUM
+}
+
+// Gradle's "dependencies" task selector only executes on a single / the current project [1]. However, sometimes viewing
+// all dependencies at once is beneficial, e.g. for debugging version conflict resolution.
+// [1]: https://docs.gradle.org/current/userguide/viewing_debugging_dependencies.html#sec:listing_dependencies
+tasks.register("allDependencies") {
+    group = "Help"
+    description = "Displays all dependencies declared in all projects."
+
+    val dependenciesTasks = getTasksByName("dependencies", /* recursive = */ true)
+    dependsOn(dependenciesTasks)
+
+    // Ensure deterministic output by requiring to run tasks after each other in always the same order.
+    dependenciesTasks.sorted().zipWithNext().forEach { (a, b) ->
+        b.mustRunAfter(a)
+    }
+}
+
 tasks.register<GeneratePluginDocsTask>("generatePluginDocs") {
     val kspKotlinTasks = getTasksByName("kspKotlin", /* recursive = */ true)
     val outputFiles = kspKotlinTasks.flatMap { it.outputs.files }
@@ -226,3 +302,12 @@ tasks.register<GeneratePluginDocsTask>("generatePluginDocs") {
     //       larger refactorings.
     dependsOn(kspKotlinTasks)
 }
+
+open class OrtPrintTask : PrintTask({ "" }, "Prints the current project version", "") {
+    private val projectVersion = project.version.toString()
+
+    @TaskAction
+    fun printVersion() = println(projectVersion)
+}
+
+tasks.replace("printVersion", OrtPrintTask::class.java)

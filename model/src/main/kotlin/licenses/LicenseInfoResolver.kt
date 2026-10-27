@@ -21,11 +21,13 @@ package org.ossreviewtoolkit.model.licenses
 
 import java.util.concurrent.ConcurrentHashMap
 
+import org.ossreviewtoolkit.model.ArtifactProvenance
 import org.ossreviewtoolkit.model.CopyrightFinding
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.KnownProvenance
 import org.ossreviewtoolkit.model.LicenseSource
 import org.ossreviewtoolkit.model.Provenance
+import org.ossreviewtoolkit.model.RepositoryProvenance
 import org.ossreviewtoolkit.model.TextLocation
 import org.ossreviewtoolkit.model.UnknownProvenance
 import org.ossreviewtoolkit.model.config.CopyrightGarbage
@@ -35,11 +37,14 @@ import org.ossreviewtoolkit.model.utils.FileArchiver
 import org.ossreviewtoolkit.model.utils.FindingCurationMatcher
 import org.ossreviewtoolkit.model.utils.FindingsMatcher
 import org.ossreviewtoolkit.model.utils.PathLicenseMatcher
-import org.ossreviewtoolkit.model.utils.getSubdirectoryForProvenance
 import org.ossreviewtoolkit.model.utils.prependedPath
+import org.ossreviewtoolkit.utils.common.DeleteOnExitHook
+import org.ossreviewtoolkit.utils.common.FileMatcher
+import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.safeDeleteRecursively
 import org.ossreviewtoolkit.utils.ort.createOrtTempDir
-import org.ossreviewtoolkit.utils.spdx.SpdxSingleLicenseExpression
+import org.ossreviewtoolkit.utils.ort.runBlocking
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxSingleLicenseExpression
 
 class LicenseInfoResolver(
     private val provider: LicenseInfoProvider,
@@ -50,10 +55,21 @@ class LicenseInfoResolver(
 ) {
     private val resolvedLicenseInfo = ConcurrentHashMap<Identifier, ResolvedLicenseInfo>()
     private val resolvedLicenseFiles = ConcurrentHashMap<Identifier, ResolvedLicenseFileInfo>()
-    private val pathLicenseMatcher = PathLicenseMatcher(
-        licenseFilePatterns = licenseFilePatterns.copy(otherLicenseFilenames = emptySet())
-    )
     private val findingsMatcher = FindingsMatcher(PathLicenseMatcher(licenseFilePatterns))
+    private val pathLicenseMatcher: PathLicenseMatcher
+    private val licenseFileMatcher: FileMatcher
+
+    init {
+        val patterns = LicenseFilePatterns(
+            licenseFilenames = licenseFilePatterns.licenseFilenames,
+            noticeFilenames = emptySet(),
+            patentFilenames = licenseFilePatterns.patentFilenames,
+            otherLicenseFilenames = emptySet()
+        )
+
+        pathLicenseMatcher = PathLicenseMatcher(licenseFilePatterns = patterns)
+        licenseFileMatcher = FileMatcher(patterns.allLicenseFilenames.map { "**/$it" }, ignoreCase = true)
+    }
 
     /**
      * Get the [ResolvedLicenseInfo] for the project or package identified by [id].
@@ -63,7 +79,15 @@ class LicenseInfoResolver(
 
     /**
      * Get the [ResolvedLicenseFileInfo] for the project or package identified by [id]. Requires an [archiver] to be
-     * configured, otherwise always returns empty results.
+     * configured, otherwise always returns empty results. To determine the applicable license files the files in
+     * the archive are matched against path excludes and the configured license and patent file patterns (see
+     * [LicenseFilePatterns]) as follows:
+     *
+     * 1. For a repository provenance, all filenames in the VCS path are matched. If there are matches, then these are
+     *    used as the result, otherwise that search is repeated recursively in the parent directory.
+     * 2. For an artifact provenance, all filenames in the root directory are matched. If there are matches, then these
+     *    are used as the result, otherwise that search is repeated in all child directories of the root directory, and
+     *    the matching files in all these child directories are the result.
      */
     fun resolveLicenseFiles(id: Identifier): ResolvedLicenseFileInfo =
         resolvedLicenseFiles.getOrPut(id) { createLicenseFileInfo(id) }
@@ -239,49 +263,64 @@ class LicenseInfoResolver(
         }
 
     private fun createLicenseFileInfo(id: Identifier): ResolvedLicenseFileInfo {
-        if (archiver == null) {
-            return ResolvedLicenseFileInfo(id, emptyList())
-        }
-
-        val licenseInfo = resolveLicenseInfo(id)
-        val licenseFiles = mutableListOf<ResolvedLicenseFile>()
-
-        licenseInfo.flatMapTo(mutableSetOf()) { resolvedLicense ->
-            resolvedLicense.locations.map { it.provenance }
-        }.filterIsInstance<KnownProvenance>().forEach { provenance ->
-            val archiveDir = createOrtTempDir("archive")
-
-            if (!archiver.unarchive(archiveDir, provenance)) {
-                archiveDir.safeDeleteRecursively()
-                return@forEach
-            }
-
-            // Register the (empty) `archiveDir` for deletion on JVM exit.
-            archiveDir.deleteOnExit()
-
-            val directory = getSubdirectoryForProvenance(provenance, id)
-            val rootLicenseFiles = pathLicenseMatcher.getApplicableLicenseFilesForDirectories(
-                relativeFilePaths = archiveDir.walk().filter { it.isFile }.mapTo(mutableSetOf()) {
-                    it.relativeTo(archiveDir).invariantSeparatorsPath
-                },
-                directories = listOf(directory)
-            ).getValue(directory)
-
-            licenseFiles += rootLicenseFiles.map { relativePath ->
-                // Register files in `archiveDir` for deletion. Because files are deleted in reverse order than
-                // registered, this will leave `archiveDir` empty to get properly deleted by the registration above.
-                val file = archiveDir.resolve(relativePath).apply { deleteOnExit() }
-
-                ResolvedLicenseFile(
-                    provenance = provenance,
-                    licenseInfo.filter(provenance, relativePath),
-                    relativePath,
-                    file
-                )
-            }
+        val licenseFiles = provider.get(id).detectedLicenseInfo.findings.flatMap { findings ->
+            val provenance = findings.provenance as? KnownProvenance ?: return@flatMap emptySet()
+            resolveLicenseFiles(id, provenance, findings.pathExcludes)
         }
 
         return ResolvedLicenseFileInfo(id, licenseFiles)
+    }
+
+    private fun resolveLicenseFiles(
+        id: Identifier,
+        provenance: KnownProvenance,
+        pathExcludes: Collection<PathExclude>
+    ): List<ResolvedLicenseFile> {
+        if (archiver == null) return emptyList()
+        val archiveDir = createOrtTempDir("archive")
+
+        val licenseInfo = resolveLicenseInfo(id)
+
+        if (!runBlocking { archiver.unarchive(archiveDir, provenance) }) {
+            archiveDir.safeDeleteRecursively()
+            return emptyList()
+        }
+
+        DeleteOnExitHook.scheduleDeletion(archiveDir)
+
+        val relativeFilePaths = archiveDir.walk().filter { it.isFile }.mapTo(mutableSetOf()) {
+            it.relativeTo(archiveDir).invariantSeparatorsPath
+        }.filterNot { path ->
+            pathExcludes.any { it.matches(path) }
+        }
+
+        val rootLicenseFiles = when (provenance) {
+            is RepositoryProvenance -> pathLicenseMatcher.getApplicableLicenseFilesForDirectories(
+                relativeFilePaths = relativeFilePaths,
+                directories = listOf(provenance.vcsInfo.path)
+            ).values.single()
+
+            is ArtifactProvenance ->
+                // Limit the search to the root directory and one level below, to not deviate too far from the previous
+                // behavior (root level only), but still being able to match license files in artifacts which have
+                // all their files in a single top level directory, or in the META-INF directory in case of Maven.
+                relativeFilePaths.filter { licenseFileMatcher.matches(it) }
+                    .groupBy { path -> path.count { char -> char == '/' } }
+                    .filter { it.key < 2 }
+                    .minByOrNull { it.key }
+                    ?.value.orEmpty()
+        }
+
+        return rootLicenseFiles.map { relativePath ->
+            val file = archiveDir / relativePath
+
+            ResolvedLicenseFile(
+                provenance = provenance,
+                licenseInfo.filter(provenance, relativePath),
+                relativePath,
+                file
+            )
+        }
     }
 
     private fun resolveCopyrightFromAuthors(authors: Set<String>): ResolvedLicenseLocation =

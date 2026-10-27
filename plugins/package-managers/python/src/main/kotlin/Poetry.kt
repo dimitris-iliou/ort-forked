@@ -62,11 +62,11 @@ internal object PoetryCommand : CommandLineTool {
 }
 
 /**
- * [Poetry](https://python-poetry.org/) package manager for Python.
+ * The [Poetry](https://python-poetry.org/) package manager for Python.
  */
 @OrtPlugin(
     displayName = "Poetry",
-    description = "The Poetry package manager for Python.",
+    summary = "The Poetry package manager for Python.",
     factory = PackageManagerFactory::class
 )
 class Poetry(

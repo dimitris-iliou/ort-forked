@@ -17,7 +17,7 @@
  * License-Filename: LICENSE
  */
 
-package org.ossreviewtoolkit.plugins.packagemanagers.spdx
+package org.ossreviewtoolkit.plugins.packagemanagers.spdxdocumentfile
 
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.matchers.nulls.beNull
@@ -32,10 +32,10 @@ import java.io.File
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
-import org.ossreviewtoolkit.plugins.packagemanagers.spdx.utils.SpdxResolvedDocument
-import org.ossreviewtoolkit.plugins.packagemanagers.spdx.utils.extractScopeFromExternalReferences
-import org.ossreviewtoolkit.plugins.packagemanagers.spdx.utils.getVcsInfo
-import org.ossreviewtoolkit.plugins.packagemanagers.spdx.utils.projectPackage
+import org.ossreviewtoolkit.plugins.packagemanagers.spdxdocumentfile.utils.SpdxResolvedDocument
+import org.ossreviewtoolkit.plugins.packagemanagers.spdxdocumentfile.utils.extractScopeFromExternalReferences
+import org.ossreviewtoolkit.plugins.packagemanagers.spdxdocumentfile.utils.getVcsInfo
+import org.ossreviewtoolkit.plugins.packagemanagers.spdxdocumentfile.utils.projectPackage
 import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
 import org.ossreviewtoolkit.utils.spdxdocument.SpdxModelMapper
@@ -135,7 +135,7 @@ class SpdxDocumentFileTest : WordSpec({
             doc.mockPackage(pkg)
             doc.mockDefinitionFile(null)
 
-            getPackageManagerDependency(pkgForVcs.spdxId, doc, AnalyzerConfiguration()) shouldBe null
+            getPackageManagerDependency(pkgForVcs.spdxId, doc, AnalyzerConfiguration()) should beNull()
         }
 
         "return null for an undefined package file name" {
@@ -143,7 +143,7 @@ class SpdxDocumentFileTest : WordSpec({
             doc.mockPackage(pkgForVcs)
             doc.mockDefinitionFile(File("definition.spdx"))
 
-            getPackageManagerDependency(pkgForVcs.spdxId, doc, AnalyzerConfiguration()) shouldBe null
+            getPackageManagerDependency(pkgForVcs.spdxId, doc, AnalyzerConfiguration()) should beNull()
         }
 
         "return null if no external reference with a scope is defined" {
@@ -160,7 +160,7 @@ class SpdxDocumentFileTest : WordSpec({
             doc.mockPackage(pkg)
             doc.mockDefinitionFile(File("wrongReferences.spdx"))
 
-            getPackageManagerDependency(pkgForVcs.spdxId, doc, AnalyzerConfiguration()) shouldBe null
+            getPackageManagerDependency(pkgForVcs.spdxId, doc, AnalyzerConfiguration()) should beNull()
         }
     }
 

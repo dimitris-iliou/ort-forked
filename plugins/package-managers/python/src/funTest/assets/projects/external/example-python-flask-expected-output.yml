@@ -20,31 +20,33 @@ project:
     dependencies:
     - id: "PyPI::flask:0.12"
       dependencies:
-      - id: "PyPI::click:8.3.3"
+      - id: "PyPI::click:8.5.0"
       - id: "PyPI::itsdangerous:2.2.0"
       - id: "PyPI::jinja2:2.8.1"
         dependencies:
-        - id: "PyPI::markupsafe:3.0.3"
-      - id: "PyPI::werkzeug:3.1.8"
+        - id: "PyPI::markupsafe:3.0.4"
+      - id: "PyPI::werkzeug:3.1.9"
         dependencies:
-        - id: "PyPI::markupsafe:3.0.3"
+        - id: "PyPI::markupsafe:3.0.4"
     - id: "PyPI::gunicorn:19.6.0"
 packages:
-- id: "PyPI::click:8.3.3"
-  purl: "pkg:pypi/click@8.3.3"
-  declared_licenses: []
-  declared_licenses_processed: {}
+- id: "PyPI::click:8.5.0"
+  purl: "pkg:pypi/click@8.5.0"
+  declared_licenses:
+  - "BSD-3-Clause"
+  declared_licenses_processed:
+    spdx_expression: "BSD-3-Clause"
   description: "Composable command line interface toolkit"
   homepage_url: ""
   binary_artifact:
-    url: "https://files.pythonhosted.org/packages/ae/44/c1221527f6a71a01ec6fbad7fa78f1d50dfa02217385cf0fa3eec7087d59/click-8.3.3-py3-none-any.whl"
+    url: "https://files.pythonhosted.org/packages/58/50/6c0d534c5f134586a8e1ba4e330569e32f057e33372ae556463212fb4cd3/click-8.5.0-py3-none-any.whl"
     hash:
-      value: "a2bf429bb3033c89fa4936ffb35d5cb471e3719e1f3c8a7c3fff0b8314305613"
+      value: "255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360"
       algorithm: "SHA-256"
   source_artifact:
-    url: "https://files.pythonhosted.org/packages/bb/63/f9e1ea081ce35720d8b92acde70daaedace594dc93b693c869e0d5910718/click-8.3.3.tar.gz"
+    url: "https://files.pythonhosted.org/packages/c7/0e/7fa0ef50764b67090eca4114772a2abf8b6148198475e54c660b97caeee6/click-8.5.0.tar.gz"
     hash:
-      value: "398329ad4837b2ff7cbe1dd166a4c0f8900c3ca3a218de04466f38f6497f18a2"
+      value: "ba0d2089de75ea0310e2dde03160e6ca10009947fb95a182f9b54021bb272e34"
       algorithm: "SHA-256"
   vcs:
     type: ""
@@ -187,21 +189,23 @@ packages:
     url: ""
     revision: ""
     path: ""
-- id: "PyPI::markupsafe:3.0.3"
-  purl: "pkg:pypi/markupsafe@3.0.3"
-  declared_licenses: []
-  declared_licenses_processed: {}
+- id: "PyPI::markupsafe:3.0.4"
+  purl: "pkg:pypi/markupsafe@3.0.4"
+  declared_licenses:
+  - "BSD-3-Clause"
+  declared_licenses_processed:
+    spdx_expression: "BSD-3-Clause"
   description: "Safely add untrusted strings to HTML/XML markup."
   homepage_url: ""
   binary_artifact:
-    url: "https://files.pythonhosted.org/packages/af/cd/ce6e848bbf2c32314c9b237839119c5a564a59725b53157c856e90937b7a/markupsafe-3.0.3-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl"
+    url: "https://files.pythonhosted.org/packages/35/7c/9cd8081dae70e17fdab3558121fa618d459c7950c8abd8fc10fc024486d7/markupsafe-3.0.4-cp310-cp310-musllinux_1_2_x86_64.whl"
     hash:
-      value: "f42d0984e947b8adf7dd6dde396e720934d12c506ce84eea8476409563607591"
+      value: "88d59b473bfb03259722600839af9bbd7fa13a2eb514beefeedb95997882f69a"
       algorithm: "SHA-256"
   source_artifact:
-    url: "https://files.pythonhosted.org/packages/7e/99/7690b6d4034fffd95959cbe0c02de8deb3098cc577c67bb6a24fe5d7caa7/markupsafe-3.0.3.tar.gz"
+    url: "https://files.pythonhosted.org/packages/38/9b/e422a865e1d5d57d0e509b4e0bf1c1a70a7f6382c29a5aa428df994c8bc8/markupsafe-3.0.4.tar.gz"
     hash:
-      value: "722695808f4b6457b320fdc131280796bdceb04ab50fe1795cd540799ebe1698"
+      value: "2e9ad7dd851bf45fab9f75cbff4cb493fee9979e8d8c7c9c3ee119022518edd6"
       algorithm: "SHA-256"
   vcs:
     type: ""
@@ -213,21 +217,23 @@ packages:
     url: "https://github.com/pallets/markupsafe.git"
     revision: ""
     path: ""
-- id: "PyPI::werkzeug:3.1.8"
-  purl: "pkg:pypi/werkzeug@3.1.8"
-  declared_licenses: []
-  declared_licenses_processed: {}
+- id: "PyPI::werkzeug:3.1.9"
+  purl: "pkg:pypi/werkzeug@3.1.9"
+  declared_licenses:
+  - "BSD-3-Clause"
+  declared_licenses_processed:
+    spdx_expression: "BSD-3-Clause"
   description: "The comprehensive WSGI web application library."
   homepage_url: ""
   binary_artifact:
-    url: "https://files.pythonhosted.org/packages/93/8c/2e650f2afeb7ee576912636c23ddb621c91ac6a98e66dc8d29c3c69446e1/werkzeug-3.1.8-py3-none-any.whl"
+    url: "https://files.pythonhosted.org/packages/a1/38/df03f564f43cec2684823f3cccae1a652ee7face1cbaa76fb223096e64d7/werkzeug-3.1.9-py3-none-any.whl"
     hash:
-      value: "63a77fb8892bf28ebc3178683445222aa500e48ebad5ec77b0ad80f8726b1f50"
+      value: "6392e50c78460ba618e5b21f08a71f59c99ce99cdc6cf6e3dd7e6ccca8754fab"
       algorithm: "SHA-256"
   source_artifact:
-    url: "https://files.pythonhosted.org/packages/dd/b2/381be8cfdee792dd117872481b6e378f85c957dd7c5bca38897b08f765fd/werkzeug-3.1.8.tar.gz"
+    url: "https://files.pythonhosted.org/packages/a4/34/4dd12fc8bb7d61c91467ec3efe415ffa7d5456f799954b40c5bbaeae470e/werkzeug-3.1.9.tar.gz"
     hash:
-      value: "9bad61a4268dac112f1c5cd4630a56ede601b6ed420300677a869083d70a4c44"
+      value: "55ca7c70a75689be937aa27f8ff4b018f06ff4838fc73045560bf0f5a1291060"
       algorithm: "SHA-256"
   vcs:
     type: ""

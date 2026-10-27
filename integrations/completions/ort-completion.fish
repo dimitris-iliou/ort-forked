@@ -17,7 +17,7 @@ complete -c ort -n "not __fish_seen_subcommand_from $ort_subcommands" -s h -l he
 
 
 ### Setup for advise
-complete -c ort -f -n __fish_use_subcommand -a advise -d 'Check dependencies for security vulnerabilities.'
+complete -c ort -f -n __fish_use_subcommand -a advise -d 'Check dependencies for security vulnerabilities and project health metrics.'
 
 ## Options for advise
 complete -c ort -n "__fish_seen_subcommand_from advise" -l ort-file -s i -r -F -d 'An ORT result file with an analyzer result to use.'
@@ -25,7 +25,7 @@ complete -c ort -n "__fish_seen_subcommand_from advise" -l output-dir -s o -r -F
 complete -c ort -n "__fish_seen_subcommand_from advise" -l output-formats -s f -r -fa "JSON YAML" -d 'The list of output formats to be used for the ORT result file(s).'
 complete -c ort -n "__fish_seen_subcommand_from advise" -l label -s l -r -d 'Set a label in the ORT result, overwriting any existing label of the same name. Can be used multiple times. For example: --label distribution=external'
 complete -c ort -n "__fish_seen_subcommand_from advise" -l resolutions-file -r -F -d 'A file containing issue and rule violation resolutions.'
-complete -c ort -n "__fish_seen_subcommand_from advise" -l advisors -s a -r -d 'The comma-separated advisors to use, any of [BlackDuck, OSSIndex, OSV, ScanOss, VulnerableCode].'
+complete -c ort -n "__fish_seen_subcommand_from advise" -l advisors -s a -r -d 'The comma-separated advisors to use, any of [BlackDuck, Crossd, OSSIndex, OSV, ScanOss, Scorecard, VulnerableCode].'
 complete -c ort -n "__fish_seen_subcommand_from advise" -l skip-excluded -d 'Do not check excluded projects or packages.'
 complete -c ort -n "__fish_seen_subcommand_from advise" -s h -l help -d 'Show this message and exit'
 
@@ -35,7 +35,7 @@ complete -c ort -f -n __fish_use_subcommand -a analyze -d 'Determine dependencie
 
 ## Options for analyze
 complete -c ort -n "__fish_seen_subcommand_from analyze" -l input-dir -s i -r -F -d 'The project directory to analyze. May point to a definition file, but only if just a single packagemanager is enabled, and the definition file does not depend on any further definition files.'
-complete -c ort -n "__fish_seen_subcommand_from analyze" -l output-dir -s o -r -F -d 'The directory to write the ORT result file with analyzer results to.'
+complete -c ort -n "__fish_seen_subcommand_from analyze" -l output-dir -s o -r -F -d 'The directory to write the ORT result file with analyzer results to. Required unless \'--dry-run\' is specified.'
 complete -c ort -n "__fish_seen_subcommand_from analyze" -l output-formats -s f -r -fa "JSON YAML" -d 'The list of output formats to be used for the ORT result file(s).'
 complete -c ort -n "__fish_seen_subcommand_from analyze" -l repository-configuration-file -r -F -d 'A file containing the repository configuration. If set, overrides any repository configuration contained in a \'.ort.yml\' file in the repository.'
 complete -c ort -n "__fish_seen_subcommand_from analyze" -l resolutions-file -r -F -d 'A file containing issue and rule violation resolutions.'
@@ -104,6 +104,7 @@ complete -c ort -n "__fish_seen_subcommand_from evaluate" -l output-formats -s f
 complete -c ort -n "__fish_seen_subcommand_from evaluate" -l rules-file -s r -r -F -d 'The name of a script file containing rules.'
 complete -c ort -n "__fish_seen_subcommand_from evaluate" -l rules-resource -r -d 'The name of a script resource on the classpath that contains rules.'
 complete -c ort -n "__fish_seen_subcommand_from evaluate" -l copyright-garbage-file -r -F -d 'A file containing copyright statements which are marked as garbage.'
+complete -c ort -n "__fish_seen_subcommand_from evaluate" -l license-choices-file -r -F -d 'A file containing license choices.'
 complete -c ort -n "__fish_seen_subcommand_from evaluate" -l license-classifications-file -r -F -d 'A file containing the license classifications which are passed as parameter to the rules script.'
 complete -c ort -n "__fish_seen_subcommand_from evaluate" -l package-configurations-dir -r -F -d 'A directory that is searched recursively for package configuration files. Each file must only contain a single package configuration.'
 complete -c ort -n "__fish_seen_subcommand_from evaluate" -l package-curations-file -r -F -d 'A file containing package curations. This replaces all package curations contained in the given ORT result file with the ones present in the given file and, if enabled, those from the repository configuration.'
@@ -140,7 +141,7 @@ complete -c ort -n "__fish_seen_subcommand_from notify" -s h -l help -d 'Show th
 complete -c ort -f -n __fish_use_subcommand -a plugins -d 'Print information about the installed ORT plugins.'
 
 ## Options for plugins
-complete -c ort -n "__fish_seen_subcommand_from plugins" -l types -r -d 'A comma-separated list of plugin types to show.'
+complete -c ort -n "__fish_seen_subcommand_from plugins" -l types -r -fa "advice-providers commands license-fact-providers package-configuration-providers package-curation-providers package-managers reporters scanners version-control-systems" -d 'A comma-separated list of plugin types to show.'
 complete -c ort -n "__fish_seen_subcommand_from plugins" -s h -l help -d 'Show this message and exit'
 
 
@@ -154,6 +155,7 @@ complete -c ort -n "__fish_seen_subcommand_from report" -l report-formats -s f -
 complete -c ort -n "__fish_seen_subcommand_from report" -l copyright-garbage-file -r -F -d 'A file containing copyright statements which are marked as garbage. This can make the output inconsistent with the evaluator output but is useful when testing copyright garbage.'
 complete -c ort -n "__fish_seen_subcommand_from report" -l custom-license-texts-dir -r -F -d 'A directory which contains custom license texts. It must contain one text file per license with the license ID as the filename. The license texts from this directory will take priority over the license texts provided by the license fact providers configured in the config.yml.'
 complete -c ort -n "__fish_seen_subcommand_from report" -l how-to-fix-text-provider-script -r -F -d 'The path to a Kotlin script which returns an instance of a \'HowToFixTextProvider\'. That provider injects how-to-fix texts in Markdown format for ORT issues.'
+complete -c ort -n "__fish_seen_subcommand_from report" -l license-choices-file -r -F -d 'A file containing license choices.'
 complete -c ort -n "__fish_seen_subcommand_from report" -l license-classifications-file -r -F -d 'A file containing the license classifications. This can make the output inconsistent with the evaluator output but is useful when testing license classifications.'
 complete -c ort -n "__fish_seen_subcommand_from report" -l package-configurations-dir -r -F -d 'A directory that is searched recursively for package configuration files. Each file must only contain a single package configuration. This can make the output inconsistent with the evaluator output but is useful when testing package configurations.'
 complete -c ort -n "__fish_seen_subcommand_from report" -l refresh-resolutions -d 'Use the resolutions from the global and repository configuration instead of the resolved configuration. This can make the output inconsistent with the evaluator output but is useful when testing resolutions.'

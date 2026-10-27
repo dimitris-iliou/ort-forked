@@ -29,17 +29,18 @@ import io.kotest.matchers.shouldBe
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.LicenseSource
 import org.ossreviewtoolkit.model.Severity
-import org.ossreviewtoolkit.utils.spdx.toSpdx
+import org.ossreviewtoolkit.utils.spdxexpression.toSpdx
 import org.ossreviewtoolkit.utils.test.getResource
 import org.ossreviewtoolkit.utils.test.ortResult
-import org.ossreviewtoolkit.utils.test.readResource
 
 class EvaluatorTest : WordSpec({
     "checkSyntax" should {
         "succeed if the script can be compiled" {
-            val script = getResource("/rules/osadl.rules.kts")
-
-            val result = Evaluator(ortResult).checkSyntax(script)
+            val result = Evaluator(ortResult).checkSyntax(
+                """
+                require(ortResult.labels["label"] == "value") { "Failed to verify the ORT result." }
+                """.trimIndent()
+            )
 
             result shouldBe true
         }
@@ -58,16 +59,6 @@ class EvaluatorTest : WordSpec({
     "evaluate" should {
         "return no rule violations for an empty script" {
             val result = Evaluator(ortResult).runScript("")
-
-            result.violations should beEmpty()
-        }
-
-        "be able to access the ORT result" {
-            val result = Evaluator(ortResult).runScript(
-                """
-                require(ortResult.labels["label"] == "value") { "Failed to verify the ORT result." }
-                """.trimIndent()
-            )
 
             result.violations should beEmpty()
         }
@@ -122,6 +113,8 @@ class EvaluatorTest : WordSpec({
     }
 
     "OSADL compliance rules" should {
+        val script = getResource("/rules/osadl.rules.kts")
+
         "return no violation for compatible licenses" {
             val compatibleOrtResult = ortResult {
                 project("Maven:group:project-foo:1") {
@@ -148,8 +141,6 @@ class EvaluatorTest : WordSpec({
                     }
                 }
             }
-
-            val script = readResource("/rules/osadl.rules.kts")
 
             val result = Evaluator(compatibleOrtResult).runScript(script)
 
@@ -183,8 +174,6 @@ class EvaluatorTest : WordSpec({
                 }
             }
 
-            val script = readResource("/rules/osadl.rules.kts")
-
             val result = Evaluator(incompatibleOrtResult).runScript(script)
 
             result.violations.map { it.message } should containExactlyInAnyOrder(
@@ -216,8 +205,6 @@ class EvaluatorTest : WordSpec({
                     }
                 }
             }
-
-            val script = readResource("/rules/osadl.rules.kts")
 
             val result = Evaluator(incompatibleOrtResult).runScript(script)
 

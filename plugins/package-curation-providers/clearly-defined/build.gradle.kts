@@ -23,10 +23,13 @@ plugins {
 }
 
 dependencies {
-    api(projects.clients.clearlyDefinedClient)
     api(projects.plugins.packageCurationProviders.packageCurationProviderApi)
 
-    ksp(projects.plugins.packageCurationProviders.packageCurationProviderApi)
+    implementation(projects.clients.clearlyDefinedClient)
+    implementation(projects.utils.ortUtils)
+    implementation(projects.utils.spdxExpressionUtils)
 
     testImplementation(libs.wiremock)
+
+    ksp(projects.plugins.packageCurationProviders.packageCurationProviderApi)
 }

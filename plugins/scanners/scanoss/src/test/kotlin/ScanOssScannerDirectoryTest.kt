@@ -48,7 +48,7 @@ import org.ossreviewtoolkit.model.config.PathExcludeReason
 import org.ossreviewtoolkit.plugins.api.Secret
 import org.ossreviewtoolkit.scanner.ScanContext
 import org.ossreviewtoolkit.utils.common.extractResource
-import org.ossreviewtoolkit.utils.spdx.SpdxExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxExpression
 
 /**
  * A test for scanning a directory with the [ScanOss] scanner.
@@ -115,8 +115,15 @@ class ScanOssScannerDirectoryTest : StringSpec({
                             "pkg:github/scanoss/ort",
                             SpdxExpression.parse("Apache-2.0"),
                             mapOf(
+                                "component" to "ort",
+                                "vendor" to "scanoss",
+                                "version" to "e654028",
+                                "latest" to "b12f8ee",
+                                "status" to "pending",
                                 "file_hash" to "871fb0c5188c2f620d9b997e225b0095",
                                 "file_url" to "https://osskb.org/api/file_contents/871fb0c5188c2f620d9b997e225b0095",
+                                "url_hash" to "37faa38a820322fa93bf7a8fa8290bb8",
+                                "release_date" to "2021-03-18",
                                 "source_hash" to "2e91edbe430c4eb195a977d326d6d6c0"
                             )
                         )
@@ -146,7 +153,7 @@ class ScanOssScannerDirectoryTest : StringSpec({
             pathToDir,
             ScanContext(
                 labels = emptyMap(),
-                packageType = PackageType.PACKAGE,
+                packageType = PackageType.PROJECT,
                 excludes = Excludes(paths = pathExcludes)
             )
         )

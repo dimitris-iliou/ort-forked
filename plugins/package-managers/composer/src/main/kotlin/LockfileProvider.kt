@@ -50,18 +50,18 @@ class LockfileProvider(private val definitionFile: File) {
 
     private fun enableLockfileCreation(): File? {
         var definitionFileBackup: File? = null
-        val lockConfig = ComposerCommand.run(workingDir, "--no-interaction", "config", "lock")
+        val lockConfig = ComposerCommand.run(workingDir, "config", "lock")
 
         if (lockConfig.isSuccess && lockConfig.stdout.trim() == "false") {
-            File.createTempFile("composer", "json", workingDir).also {
+            definitionFileBackup = File.createTempFile("composer", "json", workingDir).also {
                 // The above call already creates an empty file, so the copy call needs to overwrite it.
-                definitionFileBackup = definitionFile.copyTo(it, overwrite = true)
+                definitionFile.copyTo(it, overwrite = true)
             }
 
             // Ensure that the build is not configured to disallow the creation of lockfiles.
-            val unsetLock = ComposerCommand.run(workingDir, "--no-interaction", "config", "--unset", "lock")
+            val unsetLock = ComposerCommand.run(workingDir, "config", "--unset", "lock")
             if (unsetLock.isError) {
-                definitionFileBackup?.delete()
+                definitionFileBackup.delete()
                 return null
             }
         }
@@ -71,14 +71,12 @@ class LockfileProvider(private val definitionFile: File) {
 
     private fun createLockFile() {
         val args = buildList {
-            add("--no-interaction")
             add("update")
             add("--ignore-platform-reqs")
 
             val composerVersion = Semver(ComposerCommand.getVersion(workingDir))
             if (composerVersion.major >= 2) {
                 add("--no-install")
-                add("--no-audit")
             }
         }
 

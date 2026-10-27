@@ -36,15 +36,9 @@ import retrofit2.http.POST
 /**
  * Interface for a REST service that allows interaction with the VulnerableCode API to query information about
  * vulnerabilities detected for specific packages.
- * The list of data sources is documented at https://github.com/aboutcode-org/vulnerablecode/blob/main/SOURCES.rst.
  */
 interface VulnerableCodeService {
     companion object {
-        /**
-         * The URL to version 1 of the API. Version 2 is currently in the works.
-         */
-        const val PUBLIC_SERVER_URL = "https://public.vulnerablecode.io/api/"
-
         /**
          * The JSON (de-)serialization object used by this service.
          */
@@ -58,21 +52,20 @@ interface VulnerableCodeService {
          */
         fun create(url: String? = null, apiKey: String? = null, client: OkHttpClient? = null): VulnerableCodeService {
             val vulnerableCodeClient = (client ?: OkHttpClient()).run {
-                takeIf { apiKey == null } ?: run {
-                    newBuilder().addInterceptor { chain ->
-                        val requestBuilder = chain.request().newBuilder().apply {
-                            header("Authorization", "Token $apiKey")
-                        }
+                newBuilder().addInterceptor { chain ->
+                    val request = chain.request().newBuilder()
+                        .apply { if (apiKey != null) header("Authorization", "Token $apiKey") }
+                        .header("User-Agent", VULNERABLE_CODE_USER_AGENT)
+                        .build()
 
-                        chain.proceed(requestBuilder.build())
-                    }.build()
-                }
+                    chain.proceed(request)
+                }.build()
             }
 
             val contentType = "application/json".toMediaType()
             val retrofit = Retrofit.Builder()
                 .client(vulnerableCodeClient)
-                .baseUrl(url ?: PUBLIC_SERVER_URL)
+                .baseUrl(url ?: VULNERABLE_CODE_BASE_URL)
                 .addConverterFactory(JSON.asConverterFactory(contentType))
                 .build()
 
@@ -122,6 +115,15 @@ interface VulnerableCodeService {
     )
 
     /**
+     * Data class describing a package version that fixes a vulnerability.
+     */
+    @Serializable
+    data class FixedPackage(
+        /** The purl identifying this package. */
+        val purl: String
+    )
+
+    /**
      * Data class representing a single vulnerability with its references to detailed information.
      *
      * See https://github.com/aboutcode-org/vulnerablecode/blob/v36.1.3/vulnerabilities/api.py#L176-L188.
@@ -144,7 +146,10 @@ interface VulnerableCodeService {
          * currently only possible to determine the source of a specific identifier from its structure, e.g. if it has
          * a well-known prefix like CVE or GHSA.
          */
-        val aliases: List<String> = emptyList()
+        val aliases: List<String> = emptyList(),
+
+        /** A list with packages that fix this vulnerability. */
+        val fixedPackages: List<FixedPackage> = emptyList()
     )
 
     /**

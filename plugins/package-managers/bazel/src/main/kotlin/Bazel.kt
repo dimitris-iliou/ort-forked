@@ -82,7 +82,7 @@ import org.semver4j.range.RangeListFactory
 private const val PROJECT_TYPE = "Bazel"
 private const val PACKAGE_TYPE = "Bazel"
 
-private const val BAZEL_FALLBACK_VERSION = "7.0.1"
+private const val BAZEL_FALLBACK_VERSION = "8.7.0"
 private const val BAZEL_RC_FILE = ".bazelrc"
 private const val BAZEL_RC_REGISTRY_PATTERN = "common --registry="
 private const val LOCKFILE_NAME = "MODULE.bazel.lock"
@@ -91,6 +91,12 @@ private const val CONAN_REQUIRES_SCOPE_NAME = "conan_requires"
 private const val CONAN_BUILD_TEST_SCOPE_NAME = "conan_test_requires"
 
 data class BazelConfig(
+    /**
+     * The optional Bazel version to use. If unset, Bazelisk tries to auto-detect the version, and eventually falls back
+     * to [BAZEL_FALLBACK_VERSION].
+     */
+    val bazelVersion: String?,
+
     /**
      * The default name of the lockfile for the Conan package manager.
      */
@@ -117,10 +123,11 @@ internal object BazelCommand : CommandLineTool {
         super.run(
             args = args,
             workingDir,
-            // Disable the optional wrapper script under `tools/bazel` only for the "--version" call.
             environment + mapOf(
+                // Disable the optional wrapper script under `tools/bazel` only for the "--version" call.
                 "BAZELISK_SKIP_WRAPPER" to "${args[0] == getVersionArguments()}",
-                "USE_BAZEL_FALLBACK_VERSION" to BAZEL_FALLBACK_VERSION
+                // See https://github.com/bazelbuild/bazelisk#how-does-bazelisk-know-which-bazel-version-to-run.
+                "USE_BAZEL_FALLBACK_VERSION" to "warn:$BAZEL_FALLBACK_VERSION"
             )
         )
 
@@ -150,7 +157,7 @@ internal object BuildozerCommand : CommandLineTool {
  */
 @OrtPlugin(
     displayName = "Bazel",
-    description = "The Bazel package manager.",
+    summary = "The Bazel package manager.",
     factory = PackageManagerFactory::class
 )
 class Bazel(
@@ -509,7 +516,8 @@ class Bazel(
             "--disk_cache=",
             "--lockfile_mode=update",
             "--extension_info=all",
-            workingDir = projectDir
+            workingDir = projectDir,
+            environment = config.bazelVersion?.let { mapOf("USE_BAZEL_VERSION" to it) }.orEmpty()
         ).requireSuccess()
 
         if (process.stderr.isNotEmpty()) {
@@ -710,11 +718,13 @@ class Bazel(
 private fun String.expandRepositoryUrl(): String = withoutPrefix("github:")?.let { "https://github.com/$it" } ?: this
 
 private fun ModuleMetadata.toVcsInfo() =
-    VcsInfo(
-        type = VcsType.GIT,
-        url = repository?.firstOrNull().orEmpty().expandRepositoryUrl(),
-        revision = ""
-    )
+    repository?.firstOrNull()?.let { url ->
+        VcsInfo(
+            type = VcsType.GIT,
+            url = url.expandRepositoryUrl(),
+            revision = ""
+        )
+    }.orEmpty()
 
 private fun ModuleSourceInfo.toRemoteArtifact(): RemoteArtifact? =
     when (this) {

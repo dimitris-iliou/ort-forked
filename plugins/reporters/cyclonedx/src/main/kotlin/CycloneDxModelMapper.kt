@@ -41,6 +41,7 @@ import org.cyclonedx.model.ExternalReference
 import org.cyclonedx.model.Hash
 import org.cyclonedx.model.License
 import org.cyclonedx.model.LicenseChoice
+import org.cyclonedx.model.LicenseItem
 import org.cyclonedx.model.Metadata
 import org.cyclonedx.model.OrganizationalContact
 import org.cyclonedx.model.OrganizationalEntity
@@ -66,10 +67,10 @@ import org.ossreviewtoolkit.reporter.ReporterInput
 import org.ossreviewtoolkit.utils.ort.ORT_FULL_NAME
 import org.ossreviewtoolkit.utils.ort.ORT_NAME
 import org.ossreviewtoolkit.utils.ort.ORT_VERSION
-import org.ossreviewtoolkit.utils.spdx.SpdxExpression
 import org.ossreviewtoolkit.utils.spdx.SpdxLicense
 import org.ossreviewtoolkit.utils.spdx.nullOrBlankToSpdxNone
-import org.ossreviewtoolkit.utils.spdx.toExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxExpression
+import org.ossreviewtoolkit.utils.spdxexpression.toExpression
 
 internal class CycloneDxModelMapper(
     private val input: ReporterInput,
@@ -126,7 +127,15 @@ internal class CycloneDxModelMapper(
             )
 
             val allDirectDependencies = projects.flatMapTo(mutableSetOf()) { project ->
-                input.ortResult.dependencyNavigator.projectDependencies(project, maxDepth = 1)
+                input.ortResult.dependencyNavigator.projectDependencies(project, maxDepth = 1) {
+                    !input.ortResult.isExcluded(it.id)
+                }
+            }
+
+            projects.forEach { project ->
+                val dependencyType = DependencyType.DIRECT.takeIf { project.id in allDirectDependencies }
+                    ?: DependencyType.TRANSITIVE
+                addComponent(project.toPackage().copy(purl = project.id.toPurl()), dependencyType)
             }
 
             input.ortResult.getPackages(omitExcluded = true)
@@ -228,7 +237,19 @@ internal class CycloneDxModelMapper(
                 )
             }
 
-            licenses = LicenseChoice().apply { expression = Expression(config.dataLicense) }
+            if (config.metadataSupplierName.isNotBlank() || config.metadataSupplierName.isNotBlank()) {
+                supplier = OrganizationalEntity().apply {
+                    name = config.metadataSupplierName.takeIf { it.isNotBlank() }
+                    if (config.metadataSupplierUrl.isNotBlank()) {
+                        urls = listOf(config.metadataSupplierUrl)
+                    }
+                }
+            }
+
+            licenses = LicenseChoice().apply {
+                val expression = Expression(config.dataLicense)
+                items = listOf(LicenseItem.ofExpression(expression))
+            }
         }
 
     /**
@@ -281,7 +302,9 @@ internal class CycloneDxModelMapper(
             detectedLicenseNames.mapNamesToLicenses("detected license", input)
 
         if (licenseObjects.isNotEmpty()) {
-            licenses = LicenseChoice().apply { licenses = licenseObjects }
+            licenses = LicenseChoice().apply {
+                items = licenseObjects.map { LicenseItem.ofLicense(it) }
+            }
         }
 
         addProperty(
@@ -536,8 +559,12 @@ private fun Component.setCopyright(copyrights: Set<String>) {
     // TODO: Find a way to associate copyrights to the license they belong to, see
     //       https://github.com/CycloneDX/cyclonedx-core-java/issues/58
     copyright = copyrights.joinToString {
-        it.filterNot { character ->
-            character.isIdentifierIgnorable()
+        buildString(it.length) {
+            it.forEach { character ->
+                if (!character.isIdentifierIgnorable()) {
+                    append(if (character.isWhitespace()) ' ' else character)
+                }
+            }
         }
     }.takeUnless { it.isEmpty() }
 }

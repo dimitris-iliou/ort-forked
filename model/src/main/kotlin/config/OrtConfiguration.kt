@@ -34,9 +34,7 @@ import java.io.File
 import org.apache.logging.log4j.kotlin.logger
 
 import org.ossreviewtoolkit.model.Severity
-import org.ossreviewtoolkit.plugins.api.PluginConfig
 import org.ossreviewtoolkit.utils.common.EnvironmentVariableFilter
-import org.ossreviewtoolkit.utils.ort.ORT_CUSTOM_LICENSE_TEXTS_DIRNAME
 import org.ossreviewtoolkit.utils.ort.ORT_FAILURE_STATUS_CODE
 import org.ossreviewtoolkit.utils.ort.ORT_PACKAGE_CONFIGURATIONS_DIRNAME
 import org.ossreviewtoolkit.utils.ort.ORT_PACKAGE_CURATIONS_DIRNAME
@@ -79,20 +77,38 @@ data class OrtConfiguration(
     val enableRepositoryPackageCurations: Boolean = false,
 
     /**
+     * Enable the usage of risky license mappings. If set to false, risky declared and simple license mappings won't be
+     * applied.
+     */
+    val enableRiskyLicenseMappings: Boolean = true,
+
+    /**
      * Force overwriting of any existing output files.
      */
     val forceOverwrite: Boolean = false,
 
     /**
-     * The license fact providers, ordered from highest to lowest priority. Defaults to the providers for bundled SPDX
-     * license facts, license facts from a local ScanCode installation, and license facts from the default
-     * [ORT_CUSTOM_LICENSE_TEXTS_DIRNAME].
+     * The license fact providers, ordered from highest to lowest priority. Defaults to the default custom license text
+     * directory, the bundled SPDX license text, and license texts from a local ScanCode installation.
      */
-    val licenseFactProviders: LinkedHashMap<String, PluginConfig> = linkedMapOf(
-        "DefaultDir" to PluginConfig.EMPTY,
-        "SPDX" to PluginConfig.EMPTY,
-        "ScanCode" to PluginConfig.EMPTY
+    val licenseFactProviders: List<ProviderPluginConfiguration> = listOf(
+        ProviderPluginConfiguration(type = "DefaultCustomLicenseTexts"),
+        ProviderPluginConfiguration(type = "DefaultLicenseTextCuration"),
+        ProviderPluginConfiguration(type = "SPDX"),
+        ProviderPluginConfiguration(type = "ScanCode")
     ),
+
+    /**
+     * A file containing an additional declared license mapping, which is applied in addition to the built-in one. This
+     * mapping can override entries of the built-in mapping.
+     */
+    val declaredLicenseMappingFile: String? = null,
+
+    /**
+     * A file containing an additional simple license mapping, which is applied in addition to the built-in one. This
+     * mapping can override entries of the built-in mapping.
+     */
+    val simpleLicenseMappingFile: String? = null,
 
     /**
      * The license file patterns.
@@ -188,7 +204,7 @@ data class OrtConfiguration(
                 }
             )
 
-            val loader = ConfigLoaderBuilder.default()
+            val loader = ConfigLoaderBuilder.defaultWithoutPropertySources()
                 .addEnvironmentSource()
                 .addPropertySources(sources)
                 .withContextResolverMode(ContextResolverMode.SkipUnresolved)

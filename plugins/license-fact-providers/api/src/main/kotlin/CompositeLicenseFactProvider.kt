@@ -19,6 +19,7 @@
 
 package org.ossreviewtoolkit.plugins.licensefactproviders.api
 
+import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 
 /**
@@ -34,10 +35,20 @@ class CompositeLicenseFactProvider(
     override val descriptor = PluginDescriptor(
         id = "Composite",
         displayName = "Composite License Fact Provider",
-        description = "A license fact provider that aggregates multiple license fact providers."
+        summary = "A license fact provider that aggregates multiple license fact providers."
     )
 
-    override fun getLicenseText(licenseId: String) = providers.firstNotNullOfOrNull { it.getLicenseText(licenseId) }
+    override fun hasLicenseText(licenseOrExceptionId: String) =
+        providers.any { it.hasLicenseText(licenseOrExceptionId) }
 
-    override fun hasLicenseText(licenseId: String) = providers.any { it.hasLicenseText(licenseId) }
+    override fun getLicenseText(licenseOrExceptionId: String) =
+        providers.firstNotNullOfOrNull { it.getLicenseText(licenseOrExceptionId) }
+
+    override fun hasLicenseTextsForId(singleLicenseExpression: String, id: Identifier): Boolean =
+        providers.any { it.hasLicenseTextsForId(singleLicenseExpression, id) }
+
+    override fun getLicenseTextsForId(singleLicenseExpression: String, id: Identifier): Set<LicenseText> =
+        providers.firstNotNullOfOrNull { provider ->
+            provider.getLicenseTextsForId(singleLicenseExpression, id).takeUnless { it.isEmpty() }
+        }.orEmpty()
 }

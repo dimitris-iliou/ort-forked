@@ -24,23 +24,20 @@ import com.scanoss.filters.FilterConfig
 import com.scanoss.settings.Bom
 import com.scanoss.settings.FileSnippet
 import com.scanoss.settings.RemoveRule
-import com.scanoss.settings.ReplaceRule
 import com.scanoss.settings.Rule
 import com.scanoss.settings.ScanossSettings
 import com.scanoss.utils.JsonUtils
-import com.scanoss.utils.PackageDetails
 
 import java.io.File
+import java.net.Proxy
 import java.time.Instant
 
 import org.apache.logging.log4j.kotlin.logger
 
 import org.ossreviewtoolkit.model.ScanSummary
-import org.ossreviewtoolkit.model.config.orEmpty
 import org.ossreviewtoolkit.model.config.snippet.SnippetChoice
 import org.ossreviewtoolkit.model.config.snippet.SnippetChoiceReason
 import org.ossreviewtoolkit.model.config.snippet.SnippetChoices
-import org.ossreviewtoolkit.model.utils.isPathIncluded
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.scanner.PathScannerWrapper
@@ -51,22 +48,33 @@ import org.ossreviewtoolkit.scanner.ScannerWrapperFactory
 @OrtPlugin(
     id = "SCANOSS",
     displayName = "SCANOSS",
-    description = "A wrapper for the SCANOSS snippet scanner.",
+    summary = "A wrapper for the SCANOSS snippet scanner.",
     factory = ScannerWrapperFactory::class
 )
 class ScanOss(
     override val descriptor: PluginDescriptor = ScanOssFactory.descriptor,
     private val config: ScanOssConfig
 ) : PathScannerWrapper {
+    private val flags = config.flags.fold(0) { acc, flag -> acc or flag.bitMask }
     private val scanossBuilder = Scanner.builder()
         // As there is only a single endpoint, the SCANOSS API client expects the path to be part of the API URL.
         .url(config.apiUrl.removeSuffix("/") + "/scan/direct")
         .apiKey(config.apiKey.value)
+        .scanFlags(flags.toString())
+        .apply { if (config.noProxy) proxy(Proxy.NO_PROXY) }
         .obfuscate(config.enablePathObfuscation)
 
     override val version: String by lazy {
-        // TODO: Find out the best / cheapest way to query the SCANOSS server for its version.
-        PackageDetails.getVersion()
+        val dummyWfp = """
+            file=232512a681d2488f61ade07516f899b5,155473,sigmod03.pdf
+            fh2=ce5e3f3670aafa0f84aa7168290c9fcf
+
+        """.trimIndent()
+
+        val dummyScan = scanossBuilder.build().scanApi.scan(dummyWfp, "", 1)
+        val serverDetails = JsonUtils.toScanFileResults(listOf(dummyScan)).first().fileDetails.first().serverDetails
+
+        with(serverDetails) { "$version (KB: ${kbVersion.monthly}-${kbVersion.daily})" }
     }
 
     override val configuration = ""
@@ -87,11 +95,7 @@ class ScanOss(
                 // This is provided by the Scanner and represents individual files/directories during traversal.
                 try {
                     val relativePath = currentPath.toFile().toRelativeString(path)
-                    val isExcluded = !isPathIncluded(
-                        relativePath,
-                        context.excludes.orEmpty(),
-                        context.includes.orEmpty()
-                    )
+                    val isExcluded = context.isPathExcluded(relativePath)
 
                     logger.debug { "Path: $currentPath, relative: $relativePath, isExcluded: $isExcluded" }
                     isExcluded
@@ -104,7 +108,7 @@ class ScanOss(
 
         // Build the scanner at function level in case any path-specific settings or filters are needed later.
         val scanoss = scanossBuilder
-            .settings(buildSettingsFromORTContext(context))
+            .settings(buildSettings(context))
             .filterConfig(filterConfig)
             .build()
 
@@ -115,23 +119,17 @@ class ScanOss(
 
         val results = JsonUtils.toScanFileResults(rawResults)
         val endTime = Instant.now()
-        return generateSummary(startTime, endTime, results)
+        return generateSummary(startTime, endTime, results, config.chosenSnippetModel.toSet())
     }
 
-    data class ProcessedRules(
-        val includeRules: List<Rule>,
-        val ignoreRules: List<Rule>,
-        val replaceRules: List<ReplaceRule>,
-        val removeRules: List<RemoveRule>
-    )
-
-    internal fun buildSettingsFromORTContext(context: ScanContext): ScanossSettings {
+    internal fun buildSettings(context: ScanContext): ScanossSettings {
+        // See https://docs.scanoss.com/en/latest/poc/evaluation/improving-scan-accuracy#providing-context-for-a-component.
+        val includedPurls = context.coveredPackages.map { Rule.builder().purl(it.purl).build() }
         val rules = processSnippetChoices(context.snippetChoices)
         val bom = Bom.builder()
-            .ignore(rules.ignoreRules)
-            .include(rules.includeRules)
-            .replace(rules.replaceRules)
+            .include(includedPurls + rules.includeRules)
             .remove(rules.removeRules)
+            .ignore(config.ignorePurls.map { Rule.builder().purl(it).build() })
             .build()
         val fileSnippet = FileSnippet.builder()
             .minSnippetHits(config.minSnippetHits)
@@ -146,33 +144,30 @@ class ScanOss(
         return ScanossSettings.builder().bom(bom).settings(settings).build()
     }
 
-    fun processSnippetChoices(snippetChoices: List<SnippetChoices>): ProcessedRules {
+    internal data class ProcessedRules(
+        val includeRules: List<Rule>,
+        val removeRules: List<RemoveRule>
+    )
+
+    internal fun processSnippetChoices(snippetChoices: List<SnippetChoices>): ProcessedRules {
         val includeRules = mutableListOf<Rule>()
-        val ignoreRules = mutableListOf<Rule>()
-        val replaceRules = mutableListOf<ReplaceRule>()
         val removeRules = mutableListOf<RemoveRule>()
 
         snippetChoices.forEach { snippetChoice ->
             snippetChoice.choices.forEach { choice ->
                 when (choice.choice.reason) {
-                    SnippetChoiceReason.ORIGINAL_FINDING -> {
-                        includeRules.includeFinding(choice)
-                    }
+                    SnippetChoiceReason.ORIGINAL_FINDING -> includeRules.includeFinding(choice)
 
-                    SnippetChoiceReason.NO_RELEVANT_FINDING -> {
-                        removeRules.removeFinding(choice)
-                    }
+                    SnippetChoiceReason.NO_RELEVANT_FINDING -> removeRules.removeFinding(choice)
 
-                    SnippetChoiceReason.OTHER -> {
-                        logger.info {
-                            "Encountered OTHER reason for snippet choice in file ${choice.given.sourceLocation.path}"
-                        }
+                    SnippetChoiceReason.OTHER -> logger.info {
+                        "Encountered OTHER reason for snippet choice in file ${choice.given.sourceLocation.path}"
                     }
                 }
             }
         }
 
-        return ProcessedRules(includeRules, ignoreRules, replaceRules, removeRules)
+        return ProcessedRules(includeRules, removeRules)
     }
 
     private fun MutableList<Rule>.includeFinding(choice: SnippetChoice) {

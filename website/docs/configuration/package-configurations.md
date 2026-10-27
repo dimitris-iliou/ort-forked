@@ -14,7 +14,7 @@ Use a package configuration file to:
 ## Package Configuration File Basics
 
 A package configuration applies to the packages it matches with.
-It contains the mandatory `id` matcher, for matching package IDs, which allows for using [Ivy-style version matchers](https://ant.apache.org/ivy/history/2.5.0/settings/version-matchers.html).
+It contains the mandatory `id` matcher, for matching package IDs, which allows for using [Ivy-style version matchers](https://ant.apache.org/ivy/history/2.6.0/settings/version-matchers.html).
 In addition to the `id`, at most one of the matchers `vcs`, `sourceArtifactUrl` or `sourceCodeOrigin` may additionally
 be specified, which targets the repository provenance, the source artifact provenance or just the source code origin of
 the package's scan result(s).
@@ -37,7 +37,7 @@ vcs:
 id: "NPM::ansi-styles:(,4.2.1]"
 source_code_origin: VCS
 
-# Apply to versions all versions greater or equal to 4.0 
+# Apply to versions all versions greater or equal to 4.0
 # and lower or equal to 4.2.1 where a source artifact was scanned.
 id: "NPM::ansi-styles:[4.0,4.2.1]"
 source_code_origin: ARTIFACT

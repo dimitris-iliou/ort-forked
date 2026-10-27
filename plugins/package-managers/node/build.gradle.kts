@@ -28,26 +28,23 @@ plugins {
 dependencies {
     api(projects.analyzer)
     api(projects.model)
+    api(projects.utils.commonUtils)
+    api(libs.kotlinx.serialization.core)
+    api(libs.semver4j)
 
     implementation(projects.downloader)
-    implementation(projects.utils.commonUtils)
     implementation(projects.utils.ortUtils)
     implementation(projects.utils.spdxUtils)
-
     implementation(jacksonLibs.jacksonDatabind)
-
     implementation(libs.kotlinx.coroutines)
-    implementation(libs.kotlinx.serialization.core)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.serialization.yaml)
-    implementation(libs.semver4j)
 
-    ksp(projects.analyzer)
-
-    funTestImplementation(projects.utils.testUtils)
     funTestImplementation(testFixtures(projects.analyzer))
+    funTestImplementation(projects.utils.testUtils)
 
     testImplementation(projects.utils.testUtils)
-
     testImplementation(libs.mockk)
+
+    ksp(projects.analyzer)
 }

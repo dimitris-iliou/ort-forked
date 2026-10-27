@@ -28,14 +28,14 @@ import io.mockk.every
 import io.mockk.spyk
 
 import org.ossreviewtoolkit.model.licenses.LicenseView
-import org.ossreviewtoolkit.utils.spdx.SpdxExpression
-import org.ossreviewtoolkit.utils.spdx.toSpdx
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxExpression
+import org.ossreviewtoolkit.utils.spdxexpression.toSpdx
 
 class RuleSetTest : WordSpec({
     val errorMessage = "error message"
     val howToFix = "how to fix"
 
-    "package rule" should {
+    "packageRule()" should {
         "add errors if it has no requirements" {
             val ruleSet = ruleSet(ortResult) {
                 packageRule("test") {
@@ -81,7 +81,7 @@ class RuleSetTest : WordSpec({
         }
     }
 
-    "dependency rule" should {
+    "dependencyRule()" should {
         "add errors if it has no requirements" {
             val ruleSet = ruleSet(ortResult) {
                 dependencyRule("test") {

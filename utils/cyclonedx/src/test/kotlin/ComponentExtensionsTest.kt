@@ -21,6 +21,7 @@ package org.ossreviewtoolkit.utils.cyclonedx
 
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.matchers.collections.beEmpty
+import io.kotest.matchers.collections.containExactly
 import io.kotest.matchers.collections.containExactlyInAnyOrder
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
@@ -30,6 +31,7 @@ import org.cyclonedx.model.ExternalReference
 import org.cyclonedx.model.Hash
 import org.cyclonedx.model.License
 import org.cyclonedx.model.LicenseChoice
+import org.cyclonedx.model.LicenseItem
 import org.cyclonedx.model.OrganizationalContact
 import org.cyclonedx.model.license.Expression
 
@@ -182,9 +184,10 @@ class ComponentExtensionsTest : WordSpec({
                 purl = "pkg:hex/my_app@1.0.0"
                 authors = listOf(OrganizationalContact().apply { name = "John Doe" })
                 licenses = LicenseChoice().apply {
-                    licenses = listOf(
+                    val licenses = listOf(
                         License().apply { id = "MIT" }
                     )
+                    items = licenses.map { LicenseItem.ofLicense(it) }
                 }
             }
 
@@ -223,7 +226,8 @@ class ComponentExtensionsTest : WordSpec({
                 description = "HTTP server"
                 authors = listOf(OrganizationalContact().apply { name = "Loic Hoguin" })
                 licenses = LicenseChoice().apply {
-                    licenses = listOf(License().apply { id = "ISC" })
+                    val licenses = listOf(License().apply { id = "ISC" })
+                    items = licenses.map { LicenseItem.ofLicense(it) }
                 }
 
                 externalReferences = listOf(
@@ -304,88 +308,81 @@ class ComponentExtensionsTest : WordSpec({
         "extract license by id" {
             val component = Component().apply {
                 licenses = LicenseChoice().apply {
-                    licenses = listOf(License().apply { id = "MIT" })
+                    val licenses = listOf(License().apply { id = "MIT" })
+                    items = licenses.map { LicenseItem.ofLicense(it) }
                 }
             }
 
-            component.extractLicenseInfo().first should containExactlyInAnyOrder("MIT")
+            component.extractLicenseInfo() should containExactlyInAnyOrder("MIT")
         }
 
         "extract license by name when id is missing" {
             val component = Component().apply {
                 licenses = LicenseChoice().apply {
-                    licenses = listOf(License().apply { name = "Custom License" })
+                    val licenses = listOf(License().apply { name = "Custom License" })
+                    items = licenses.map { LicenseItem.ofLicense(it) }
                 }
             }
 
-            component.extractLicenseInfo().first should containExactlyInAnyOrder("Custom License")
+            component.extractLicenseInfo() should containExactlyInAnyOrder("Custom License")
         }
 
         "prefer id over name" {
             val component = Component().apply {
                 licenses = LicenseChoice().apply {
-                    licenses = listOf(
+                    val licenses = listOf(
                         License().apply {
                             id = "MIT"
                             name = "MIT License"
                         }
                     )
+                    items = licenses.map { LicenseItem.ofLicense(it) }
                 }
             }
 
-            component.extractLicenseInfo().first should containExactlyInAnyOrder("MIT")
+            component.extractLicenseInfo() should containExactlyInAnyOrder("MIT")
         }
 
         "return empty set when no licenses" {
             val component = Component()
 
-            component.extractLicenseInfo().first should beEmpty()
+            component.extractLicenseInfo() should beEmpty()
         }
 
         "extract single license from SPDX expression" {
             val component = Component().apply {
                 licenses = LicenseChoice().apply {
-                    expression = Expression("MIT")
+                    val expression = Expression("MIT")
+                    items = listOf(LicenseItem.ofExpression(expression))
                 }
             }
 
-            component.extractLicenseInfo().first should containExactlyInAnyOrder("MIT")
+            component.extractLicenseInfo() should containExactlyInAnyOrder("MIT")
         }
 
         "preserve SPDX expression in declaredLicensesProcessed" {
             val component = Component().apply {
                 licenses = LicenseChoice().apply {
-                    expression = Expression("Apache-2.0 AND (BSD-3-Clause OR LGPL-2.1-only)")
+                    val expression = Expression("Apache-2.0 AND (BSD-3-Clause OR LGPL-2.1-only)")
+                    items = listOf(LicenseItem.ofExpression(expression))
                 }
             }
 
-            val (declaredLicenses, declaredLicensesProcessed) = component.extractLicenseInfo()
-
-            declaredLicenses should containExactlyInAnyOrder(
-                "Apache-2.0",
-                "BSD-3-Clause",
-                "LGPL-2.1-only"
-            )
-            declaredLicensesProcessed.spdxExpression?.toString() shouldBe
-                "Apache-2.0 AND (BSD-3-Clause OR LGPL-2.1-only)"
+            component.extractLicenseInfo() should containExactly("Apache-2.0 AND (BSD-3-Clause OR LGPL-2.1-only)")
         }
 
         "process individual licenses with DeclaredLicenseProcessor" {
             val component = Component().apply {
                 licenses = LicenseChoice().apply {
-                    licenses = listOf(
+                    val licenses = listOf(
                         License().apply { id = "MIT" },
                         License().apply { id = "Apache-2.0" }
                     )
+                    items = licenses.map { LicenseItem.ofLicense(it) }
                 }
             }
 
-            val (declaredLicenses, declaredLicensesProcessed) = component.extractLicenseInfo()
-
-            declaredLicenses should containExactlyInAnyOrder("MIT", "Apache-2.0")
-            // DeclaredLicenseProcessor combines licenses with AND; order may vary.
-            declaredLicensesProcessed.spdxExpression?.decompose()?.map { it.toString() } should
-                containExactlyInAnyOrder("MIT", "Apache-2.0")
+            component.extractLicenseInfo() should containExactlyInAnyOrder("MIT", "Apache-2.0")
         }
     }
 

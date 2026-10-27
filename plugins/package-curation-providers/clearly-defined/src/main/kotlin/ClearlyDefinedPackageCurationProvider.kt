@@ -20,6 +20,8 @@
 package org.ossreviewtoolkit.plugins.packagecurationproviders.clearlydefined
 
 import java.net.HttpURLConnection
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 import okhttp3.OkHttpClient
 
@@ -28,6 +30,7 @@ import org.apache.logging.log4j.kotlin.logger
 import org.ossreviewtoolkit.clients.clearlydefined.ClearlyDefinedService
 import org.ossreviewtoolkit.clients.clearlydefined.ComponentType
 import org.ossreviewtoolkit.clients.clearlydefined.Coordinates
+import org.ossreviewtoolkit.clients.clearlydefined.Curation
 import org.ossreviewtoolkit.clients.clearlydefined.SourceLocation
 import org.ossreviewtoolkit.clients.clearlydefined.getCurationsChunked
 import org.ossreviewtoolkit.clients.clearlydefined.getDefinitionsChunked
@@ -45,12 +48,10 @@ import org.ossreviewtoolkit.plugins.api.OrtPluginOption
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.packagecurationproviders.api.PackageCurationProvider
 import org.ossreviewtoolkit.plugins.packagecurationproviders.api.PackageCurationProviderFactory
-import org.ossreviewtoolkit.utils.common.collectMessages
 import org.ossreviewtoolkit.utils.ort.okHttpClient
 import org.ossreviewtoolkit.utils.ort.runBlocking
-import org.ossreviewtoolkit.utils.ort.showStackTrace
-import org.ossreviewtoolkit.utils.spdx.SpdxExpression.Strictness
-import org.ossreviewtoolkit.utils.spdx.toSpdxOrNull
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxExpression.Strictness
+import org.ossreviewtoolkit.utils.spdxexpression.toSpdxOrNull
 
 import retrofit2.HttpException
 
@@ -73,7 +74,7 @@ data class ClearlyDefinedPackageCurationProviderConfig(
  */
 @OrtPlugin(
     displayName = "ClearlyDefined",
-    description = "Provides package curation data from the ClearlyDefined service.",
+    summary = "Provides package curation data from the ClearlyDefined service.",
     factory = PackageCurationProviderFactory::class
 )
 class ClearlyDefinedPackageCurationProvider(
@@ -89,7 +90,11 @@ class ClearlyDefinedPackageCurationProvider(
         ClearlyDefinedService.create(config.serverUrl, client ?: okHttpClient)
     }
 
-    override fun getCurationsFor(packages: Collection<Package>): Set<PackageCuration> {
+    override fun getCurationsFor(packages: Collection<Package>): Set<PackageCuration> =
+        getCurationResultsFor(packages).mapNotNullTo(mutableSetOf()) { it.getOrNull() }
+
+    internal fun getCurationResultsFor(packages: Collection<Package>): List<Result<PackageCuration>> {
+        val results = mutableListOf<Result<PackageCuration>>()
         val coordinatesToIds = mutableMapOf<Coordinates, Identifier>()
 
         packages.forEach { pkg ->
@@ -101,35 +106,39 @@ class ClearlyDefinedPackageCurationProvider(
             }
         }
 
-        val curations = runCatching {
-            runBlocking { service.getCurationsChunked(coordinatesToIds.keys) }
-        }.onFailure { e ->
-            when (e) {
-                is HttpException -> {
-                    // An "HTTP_NOT_FOUND" is expected for non-existing curations, so only handle other codes as a
-                    // failure.
-                    if (e.code() != HttpURLConnection.HTTP_NOT_FOUND) {
-                        e.showStackTrace()
-
-                        logger.warn {
-                            val message = e.response()?.errorBody()?.string() ?: e.collectMessages()
-                            "Getting curations failed with code ${e.code()}: $message"
-                        }
-                    }
+        val curations = runBlocking {
+            service.getCurationsChunked(coordinatesToIds.keys)
+        }.mapNotNull { (coordinates, result) ->
+            result.recoverCatching { e ->
+                // An "HTTP_NOT_FOUND" is expected for non-existing curations, so only handle other codes as a failure.
+                if (e is HttpException && e.code() == HttpURLConnection.HTTP_NOT_FOUND) {
+                    Curation()
+                } else {
+                    throw e
                 }
-
-                else -> {
-                    e.showStackTrace()
-                    logger.warn { "Querying curations failed: ${e.collectMessages()}" }
+            }.fold(
+                onSuccess = { curation -> coordinates to curation },
+                onFailure = { e ->
+                    results += Result.failure(e)
+                    null
                 }
-            }
-        }.getOrElse {
-            return emptySet()
-        }
+            )
+        }.toMap()
+
+        val definitions = runBlocking {
+            // Note that curations also contains keys for coordinates for which no curations are available.
+            service.getDefinitionsChunked(curations.keys)
+        }.mapNotNull { (coordinates, result) ->
+            result.fold(
+                onSuccess = { defined -> coordinates to defined },
+                onFailure = { e ->
+                    results += Result.failure(e)
+                    null
+                }
+            )
+        }.toMap()
 
         val filteredCurations = if (config.minTotalLicenseScore > 0) {
-            val definitions = runBlocking { service.getDefinitionsChunked(curations.keys) }
-
             curations.filterKeys { coordinates ->
                 val score = definitions[coordinates]?.licensed?.score?.total
                 score == null || score >= config.minTotalLicenseScore
@@ -138,10 +147,8 @@ class ClearlyDefinedPackageCurationProvider(
             curations
         }
 
-        val pkgCurations = mutableSetOf<PackageCuration>()
-
-        filteredCurations.forEach inner@{ (coordinates, curation) ->
-            val pkgId = coordinatesToIds[coordinates] ?: return@inner
+        filteredCurations.forEach { (coordinates, curation) ->
+            val pkgId = coordinatesToIds[coordinates] ?: return@forEach
 
             // Only take curations of good quality (i.e. those not using deprecated identifiers) and in particular none
             // that contain "OTHER" as a license, also see https://github.com/clearlydefined/curated-data/issues/7836.
@@ -153,14 +160,19 @@ class ClearlyDefinedPackageCurationProvider(
                 concludedLicense = declaredLicenseParsed,
                 homepageUrl = curation.described?.projectWebsite?.toString(),
                 sourceArtifact = sourceLocation as? RemoteArtifact,
+                publishedAt = definitions[coordinates]?.described?.releaseDate?.let {
+                    // The release date is formatted as a YYYY-MM-DD instead of being a full timestamp.
+                    val date = LocalDate.parse(it)
+                    date.atStartOfDay(ZoneOffset.UTC).toInstant()
+                },
                 vcs = sourceLocation as? VcsInfoCurationData
             )
 
             // Add the curation if it is non-empty.
-            if (data != PackageCurationData()) pkgCurations += PackageCuration(pkgId, data)
+            if (data != PackageCurationData()) results += Result.success(PackageCuration(pkgId, data))
         }
 
-        return pkgCurations
+        return results
     }
 }
 

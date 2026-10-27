@@ -44,7 +44,7 @@ import org.ossreviewtoolkit.model.utils.isPathIncluded
 import org.ossreviewtoolkit.model.utils.isScopeIncluded
 import org.ossreviewtoolkit.model.vulnerabilities.Vulnerability
 import org.ossreviewtoolkit.utils.common.zipWithSets
-import org.ossreviewtoolkit.utils.spdx.SpdxLicenseChoice
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxLicenseChoice
 
 /**
  * The common output format for the analyzer and scanner. It contains information about the scanned repository, and the
@@ -243,7 +243,7 @@ data class OrtResult(
         val dependencies = mutableSetOf<Identifier>()
         val matcher = DependencyNavigator.MATCH_ALL.takeUnless { omitExcluded } ?: { !isExcluded(it.id) }
 
-        getProjects().forEach { project ->
+        getProjects(omitExcluded).forEach { project ->
             if (project.id == id) {
                 dependencies += dependencyNavigator.projectDependencies(project, maxLevel, matcher)
             }
@@ -253,6 +253,12 @@ data class OrtResult(
 
         return dependencies
     }
+
+    /**
+     * Return the identifiers of all projects and packages contained in this [OrtResult].
+     */
+    @JsonIgnore
+    fun getIdentifiers(): Set<Identifier> = projects.keys + packages.keys
 
     @JsonIgnore
     fun getIncludes(): Includes = repository.config.includes
@@ -435,7 +441,9 @@ data class OrtResult(
      * Return all [SpdxLicenseChoice]s for the [Package] with [id].
      */
     fun getPackageLicenseChoices(id: Identifier): List<SpdxLicenseChoice> =
-        repository.config.licenseChoices.packageLicenseChoices.find { it.packageId == id }?.licenseChoices.orEmpty()
+        resolvedConfiguration.licenseChoices.packageLicenseChoices
+            .filter { it.packageId == id }
+            .flatMap { it.licenseChoices }
 
     /**
      * Return a [CuratedPackage] which represents either a [Package] if the given [id] corresponds to a [Package],
@@ -496,7 +504,7 @@ data class OrtResult(
      */
     @JsonIgnore
     fun getRepositoryLicenseChoices(): List<SpdxLicenseChoice> =
-        repository.config.licenseChoices.repositoryLicenseChoices
+        resolvedConfiguration.licenseChoices.repositoryLicenseChoices
 
     /**
      * Return the [Resolutions] contained in the repository configuration of this [OrtResult].

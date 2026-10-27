@@ -20,22 +20,21 @@
 package org.ossreviewtoolkit.plugins.reporters.cyclonedx
 
 import io.kotest.assertions.json.shouldEqualJson
+import io.kotest.core.TestConfiguration
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.engine.spec.tempdir
 import io.kotest.inspectors.forAll
-import io.kotest.matchers.collections.beEmpty
-import io.kotest.matchers.collections.shouldBeSingleton
+import io.kotest.matchers.Matcher
+import io.kotest.matchers.MatcherResult
 import io.kotest.matchers.collections.shouldHaveSize
-import io.kotest.matchers.file.aFile
-import io.kotest.matchers.file.emptyFile
 import io.kotest.matchers.result.shouldBeSuccess
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.string.shouldContain
 
 import org.cyclonedx.Format
+import org.cyclonedx.Version
 import org.cyclonedx.model.Component
-import org.cyclonedx.parsers.JsonParser
 import org.cyclonedx.parsers.XmlParser
 
 import org.ossreviewtoolkit.model.Identifier
@@ -43,124 +42,52 @@ import org.ossreviewtoolkit.model.OrtResult
 import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
+import org.ossreviewtoolkit.plugins.licensefactproviders.api.CompositeLicenseFactProvider
+import org.ossreviewtoolkit.plugins.licensefactproviders.api.LicenseFactProvider
 import org.ossreviewtoolkit.plugins.licensefactproviders.spdx.SpdxLicenseFactProviderFactory
 import org.ossreviewtoolkit.plugins.reporters.cyclonedx.CycloneDxReporter.Companion.REPORT_BASE_FILENAME
-import org.ossreviewtoolkit.reporter.ORT_RESULT
-import org.ossreviewtoolkit.reporter.ORT_RESULT_WITH_ILLEGAL_COPYRIGHTS
-import org.ossreviewtoolkit.reporter.ORT_RESULT_WITH_VULNERABILITIES
 import org.ossreviewtoolkit.reporter.ReporterInput
-import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.normalizeLineBreaks
+import org.ossreviewtoolkit.utils.test.matchJsonSchema
 import org.ossreviewtoolkit.utils.test.readResource
 
 class CycloneDxReporterFunTest : WordSpec({
-    val defaultSchemaVersion = DEFAULT_SCHEMA_VERSION.versionString
-    val outputDir = tempdir()
+    val schemaJson by lazy { readResource("/bom-$DEFAULT_SCHEMA_VERSION_NAME.schema.json") }
 
-    "Generating a single BOM for all projects" should {
-        "create just one file" {
-            val bomFileResults = CycloneDxReporterFactory.create(
-                singleBom = true,
-                outputFileFormats = listOf(Format.JSON)
-            ).generateReport(ReporterInput(ORT_RESULT), outputDir)
-
-            bomFileResults.shouldBeSingleton {
-                it shouldBeSuccess outputDir / "$REPORT_BASE_FILENAME.json"
-            }
-        }
-
-        "be valid XML according to schema version $defaultSchemaVersion" {
-            val bomFileResults = CycloneDxReporterFactory.create(
-                singleBom = true,
-                outputFileFormats = listOf(Format.XML)
-            ).generateReport(ReporterInput(ORT_RESULT), outputDir)
-
-            bomFileResults.shouldBeSingleton {
-                it shouldBeSuccess { bomFile ->
-                    bomFile shouldBe aFile()
-                    bomFile shouldNotBe emptyFile()
-                    XmlParser().validate(bomFile, DEFAULT_SCHEMA_VERSION) should beEmpty()
-                }
-            }
-        }
-
-        "create the expected XML file" {
+    "Requesting a single BOM for all projects" should {
+        "create the expected XML file according to schema version $DEFAULT_SCHEMA_VERSION_NAME" {
             val expectedBom = readResource("/cyclonedx-reporter-expected-result.xml")
 
-            val bomFileResults = CycloneDxReporterFactory.create(
-                singleBom = true,
-                outputFileFormats = listOf(Format.XML)
-            ).generateReport(
-                ReporterInput(
-                    ORT_RESULT_WITH_VULNERABILITIES,
-                    licenseFactProvider = SpdxLicenseFactProviderFactory.create()
-                ),
-                outputDir
+            val bom = generateSingleBomReport(
+                ortResult = ORT_RESULT_WITH_VULNERABILITIES,
+                format = Format.XML,
+                licenseFactProvider = SpdxLicenseFactProviderFactory.create()
             )
 
-            bomFileResults.shouldBeSingleton {
-                it shouldBeSuccess { bomFile ->
-                    bomFile shouldBe aFile()
-                    bomFile shouldNotBe emptyFile()
-
-                    val actualBom = bomFile.readText().patchCycloneDxResult().normalizeLineBreaks()
-                    actualBom shouldBe expectedBom
-                }
-            }
+            bom should matchCycloneDxXmlSchema(DEFAULT_SCHEMA_VERSION_NAME)
+            bom.patchCycloneDxResult() shouldBe expectedBom
         }
 
-        "the expected XML file even if some copyrights contain non printable characters" {
-            val bomFileResults = CycloneDxReporterFactory.create(
-                singleBom = true,
-                outputFileFormats = listOf(Format.XML)
-            ).generateReport(ReporterInput(ORT_RESULT_WITH_ILLEGAL_COPYRIGHTS), outputDir)
+        "create the expected XML file even if some copyrights contain non-printable characters" {
+            val bom = generateSingleBomReport(
+                ortResult = ORT_RESULT_WITH_ILLEGAL_COPYRIGHTS,
+                format = Format.XML
+            )
 
-            bomFileResults.shouldBeSingleton {
-                it shouldBeSuccess { bomFile ->
-                    bomFile shouldBe aFile()
-                    bomFile shouldNotBe emptyFile()
-                }
-            }
+            bom should matchCycloneDxXmlSchema(DEFAULT_SCHEMA_VERSION_NAME)
         }
 
-        "be valid JSON according to schema version $defaultSchemaVersion" {
-            val bomFileResults = CycloneDxReporterFactory.create(
-                singleBom = true,
-                outputFileFormats = listOf(Format.JSON)
-            ).generateReport(ReporterInput(ORT_RESULT_WITH_VULNERABILITIES), outputDir)
-
-            bomFileResults.shouldBeSingleton {
-                it shouldBeSuccess { bomFile ->
-                    bomFile shouldBe aFile()
-                    bomFile shouldNotBe emptyFile()
-                    JsonParser().validate(bomFile, DEFAULT_SCHEMA_VERSION) should beEmpty()
-                }
-            }
-        }
-
-        "create the expected JSON file" {
+        "create the expected JSON file according to schema version $DEFAULT_SCHEMA_VERSION_NAME" {
             val expectedBom = readResource("/cyclonedx-reporter-expected-result.json")
 
-            val bomFileResults = CycloneDxReporterFactory.create(
-                singleBom = true,
-                outputFileFormats = listOf(Format.JSON)
-            ).generateReport(
-                ReporterInput(
-                    ORT_RESULT_WITH_VULNERABILITIES,
-                    licenseFactProvider = SpdxLicenseFactProviderFactory.create()
-                ),
-                outputDir
+            val bom = generateSingleBomReport(
+                ortResult = ORT_RESULT_WITH_VULNERABILITIES,
+                format = Format.JSON,
+                licenseFactProvider = SpdxLicenseFactProviderFactory.create()
             )
 
-            bomFileResults.shouldBeSingleton {
-                it shouldBeSuccess { bomFile ->
-                    bomFile shouldBe aFile()
-                    bomFile shouldNotBe emptyFile()
-
-                    val actualBom = bomFile.readText().patchCycloneDxResult()
-                    actualBom shouldEqualJson expectedBom
-                }
-            }
+            bom should matchJsonSchema(schemaJson)
+            bom.patchCycloneDxResult() shouldEqualJson expectedBom
         }
 
         "create the expected JSON file if there are projects with different namespace and version" {
@@ -179,28 +106,14 @@ class CycloneDxReporterFunTest : WordSpec({
                     revision = "main"
                 )
             )
-            val ortResult = createResultWithAdditionalProject(otherProject)
 
-            val bomFileResults = CycloneDxReporterFactory.create(
-                singleBom = true,
-                outputFileFormats = listOf(Format.JSON)
-            ).generateReport(
-                ReporterInput(
-                    ortResult,
-                    licenseFactProvider = SpdxLicenseFactProviderFactory.create()
-                ),
-                outputDir
+            val bom = generateSingleBomReport(
+                ortResult = createResultWithAdditionalProject(otherProject),
+                format = Format.JSON,
+                licenseFactProvider = SpdxLicenseFactProviderFactory.create()
             )
 
-            bomFileResults.shouldBeSingleton {
-                it shouldBeSuccess { bomFile ->
-                    bomFile shouldBe aFile()
-                    bomFile shouldNotBe emptyFile()
-
-                    val actualBom = bomFile.readText().patchCycloneDxResult()
-                    actualBom shouldEqualJson expectedBom
-                }
-            }
+            bom.patchCycloneDxResult() shouldEqualJson expectedBom
         }
 
         "create the expected JSON file if there is a single top-level project" {
@@ -219,54 +132,27 @@ class CycloneDxReporterFunTest : WordSpec({
                     revision = "main"
                 )
             )
-            val ortResult = createResultWithAdditionalProject(otherProject)
 
-            val bomFileResults = CycloneDxReporterFactory.create(
-                singleBom = true,
-                outputFileFormats = listOf(Format.JSON)
-            ).generateReport(
-                ReporterInput(
-                    ortResult,
-                    licenseFactProvider = SpdxLicenseFactProviderFactory.create()
-                ),
-                outputDir
+            val bom = generateSingleBomReport(
+                ortResult = createResultWithAdditionalProject(otherProject),
+                format = Format.JSON,
+                licenseFactProvider = SpdxLicenseFactProviderFactory.create()
             )
 
-            bomFileResults.shouldBeSingleton {
-                it shouldBeSuccess { bomFile ->
-                    bomFile shouldBe aFile()
-                    bomFile shouldNotBe emptyFile()
-
-                    val actualBom = bomFile.readText().patchCycloneDxResult()
-                    actualBom shouldEqualJson expectedBom
-                }
-            }
+            bom.patchCycloneDxResult() shouldEqualJson expectedBom
         }
 
         "support configuring the type of the main component" {
             val expectedBom = readResource("/cyclonedx-reporter-expected-result-type-override.json")
 
-            val bomFileResults = CycloneDxReporterFactory.create(
-                singleBom = true,
-                outputFileFormats = listOf(Format.JSON),
-                singleBomComponentType = Component.Type.LIBRARY
-            ).generateReport(
-                ReporterInput(
-                    ORT_RESULT_WITH_VULNERABILITIES,
-                    licenseFactProvider = SpdxLicenseFactProviderFactory.create()
-                ),
-                outputDir
+            val bom = generateSingleBomReport(
+                ortResult = ORT_RESULT_WITH_VULNERABILITIES,
+                format = Format.JSON,
+                singleBomComponentType = Component.Type.LIBRARY,
+                licenseFactProvider = SpdxLicenseFactProviderFactory.create()
             )
 
-            bomFileResults.shouldBeSingleton {
-                it shouldBeSuccess { bomFile ->
-                    bomFile shouldBe aFile()
-                    bomFile shouldNotBe emptyFile()
-
-                    val actualBom = bomFile.readText().patchCycloneDxResult()
-                    actualBom shouldEqualJson expectedBom
-                }
-            }
+            bom.patchCycloneDxResult() shouldEqualJson expectedBom
         }
 
         "support configuring the name of the main component" {
@@ -285,112 +171,92 @@ class CycloneDxReporterFunTest : WordSpec({
                     revision = "main"
                 )
             )
-            val ortResult = createResultWithAdditionalProject(topLevelProject)
 
-            val bomFileResults = CycloneDxReporterFactory.create(
-                singleBom = true,
-                outputFileFormats = listOf(Format.JSON),
-                singleBomComponentName = "eric"
-            ).generateReport(
-                ReporterInput(
-                    ortResult,
-                    licenseFactProvider = SpdxLicenseFactProviderFactory.create()
-                ),
-                outputDir
+            val bom = generateSingleBomReport(
+                ortResult = createResultWithAdditionalProject(topLevelProject),
+                format = Format.JSON,
+                singleBomComponentName = "eric",
+                licenseFactProvider = SpdxLicenseFactProviderFactory.create()
             )
 
-            bomFileResults.shouldBeSingleton {
-                it shouldBeSuccess { bomFile ->
-                    bomFile shouldBe aFile()
-                    bomFile shouldNotBe emptyFile()
+            bom.patchCycloneDxResult() shouldEqualJson expectedBom
+        }
 
-                    val actualBom = bomFile.readText().patchCycloneDxResult()
-                    actualBom shouldEqualJson expectedBom
-                }
-            }
+        "not include excluded dependencies on the top level" {
+            val expectedBom = readResource("/cyclonedx-reporter-expected-result-top-level-excludes.json")
+
+            val bom = generateSingleBomReport(
+                ortResult = ORT_RESULT,
+                format = Format.JSON,
+                licenseFactProvider = SpdxLicenseFactProviderFactory.create()
+            )
+
+            bom should matchJsonSchema(schemaJson)
+            bom.patchCycloneDxResult() shouldEqualJson expectedBom
+        }
+
+        "support specifying information about the supplier in metadata" {
+            val expectedBom = readResource("/cyclonedx-reporter-expected-result-supplier.json")
+
+            val bom = generateSingleBomReport(
+                ortResult = ORT_RESULT_WITH_VULNERABILITIES,
+                format = Format.JSON,
+                licenseFactProvider = SpdxLicenseFactProviderFactory.create(),
+                supplierName = "Test Supplier",
+                supplierUrl = "https://example.com/supplier"
+            )
+
+            bom.patchCycloneDxResult() shouldEqualJson expectedBom
         }
     }
 
-    "Generating a separate BOM for each project" should {
-        "create one file per project" {
-            val bomFileResults = CycloneDxReporterFactory.create(
-                singleBom = false,
-                outputFileFormats = listOf(Format.JSON)
-            ).generateReport(ReporterInput(ORT_RESULT_WITH_VULNERABILITIES), outputDir)
+    "Requesting separate BOMs per project" should {
+        "create valid XML files according to schema version $DEFAULT_SCHEMA_VERSION_NAME" {
+            val boms = generateMultiBomReport(
+                ortResult = ORT_RESULT_WITH_VULNERABILITIES,
+                format = Format.XML
+            )
 
-            bomFileResults shouldHaveSize 2
-            bomFileResults.forAll { it.shouldBeSuccess() }
+            boms shouldHaveSize 2
+            boms.forAll { bom ->
+                bom should matchCycloneDxXmlSchema(DEFAULT_SCHEMA_VERSION_NAME)
+            }
         }
 
-        "generate valid XML files according to schema version $defaultSchemaVersion" {
-            val (bomFileResultWithFindings, bomFileResultWithoutFindings) =
-                CycloneDxReporterFactory.create(
-                    singleBom = false,
-                    outputFileFormats = listOf(Format.XML)
-                ).generateReport(ReporterInput(ORT_RESULT_WITH_VULNERABILITIES), outputDir).also {
-                    it shouldHaveSize 2
+        "create expected JSON files according to schema version $DEFAULT_SCHEMA_VERSION_NAME" {
+            val (bomWithFindings, bomWithoutFindings) = generateMultiBomReport(
+                ortResult = ORT_RESULT_WITH_VULNERABILITIES,
+                format = Format.JSON,
+                licenseFactProvider = SpdxLicenseFactProviderFactory.create()
+            ).also {
+                it shouldHaveSize 2
+                it.forAll { bom ->
+                    bom should matchJsonSchema(schemaJson)
                 }
-
-            bomFileResultWithFindings shouldBeSuccess { bomFile ->
-                bomFile shouldBe aFile()
-                bomFile shouldNotBe emptyFile()
-                XmlParser().validate(bomFile, DEFAULT_SCHEMA_VERSION) should beEmpty()
             }
 
-            bomFileResultWithoutFindings shouldBeSuccess { bomFile ->
-                bomFile shouldBe aFile()
-                bomFile shouldNotBe emptyFile()
-                XmlParser().validate(bomFile, DEFAULT_SCHEMA_VERSION) should beEmpty()
-            }
+            bomWithFindings.patchCycloneDxResult() shouldBe readResource(
+                "/cyclonedx-reporter-expected-result-with-findings.json"
+            )
+
+            bomWithoutFindings.patchCycloneDxResult() shouldBe readResource(
+                "/cyclonedx-reporter-expected-result-without-findings.json"
+            )
         }
 
-        "generate valid JSON files according to schema version $defaultSchemaVersion" {
-            val (bomFileResultWithFindings, bomFileResultWithoutFindings) =
-                CycloneDxReporterFactory.create(
-                    singleBom = false,
-                    outputFileFormats = listOf(Format.JSON)
-                ).generateReport(ReporterInput(ORT_RESULT_WITH_VULNERABILITIES), outputDir).also {
-                    it shouldHaveSize 2
-                }
+        "support specifying information about the supplier in metadata" {
+            val boms = generateMultiBomReport(
+                ortResult = ORT_RESULT_WITH_VULNERABILITIES,
+                format = Format.JSON,
+                licenseFactProvider = SpdxLicenseFactProviderFactory.create(),
+                supplierName = "Test Supplier",
+                supplierUrl = "https://example.com/supplier"
+            )
 
-            bomFileResultWithFindings shouldBeSuccess { bomFile ->
-                bomFile shouldBe aFile()
-                bomFile shouldNotBe emptyFile()
-                JsonParser().validate(bomFile, DEFAULT_SCHEMA_VERSION) should beEmpty()
-            }
-
-            bomFileResultWithoutFindings shouldBeSuccess { bomFile ->
-                bomFile shouldBe aFile()
-                bomFile shouldNotBe emptyFile()
-                JsonParser().validate(bomFile, DEFAULT_SCHEMA_VERSION) should beEmpty()
-            }
-        }
-
-        "generate expected JSON files" {
-            val (bomFileResultWithFindings, bomFileResultWithoutFindings) =
-                CycloneDxReporterFactory.create(
-                    singleBom = false,
-                    outputFileFormats = listOf(Format.JSON)
-                ).generateReport(
-                    ReporterInput(
-                        ORT_RESULT,
-                        licenseFactProvider = SpdxLicenseFactProviderFactory.create()
-                    ),
-                    outputDir
-                ).also { it shouldHaveSize 2 }
-
-            bomFileResultWithFindings shouldBeSuccess { bomFile ->
-                val expectedBom = readResource("/cyclonedx-reporter-expected-result-with-findings.json")
-                val actualBom = bomFile.readText().patchCycloneDxResult()
-
-                actualBom shouldEqualJson expectedBom
-            }
-
-            bomFileResultWithoutFindings shouldBeSuccess { bomFile ->
-                val expectedBom = readResource("/cyclonedx-reporter-expected-result-without-findings.json")
-                val actualBom = bomFile.readText().patchCycloneDxResult()
-
-                actualBom shouldEqualJson expectedBom
+            boms shouldHaveSize 2
+            boms.forAll { bom ->
+                bom shouldContain "\"Test Supplier\""
+                bom shouldContain "\"https://example.com/supplier\""
             }
         }
     }
@@ -419,3 +285,62 @@ private fun createResultWithAdditionalProject(project: Project): OrtResult =
             )
         )
     )
+
+private fun matchCycloneDxXmlSchema(schemaVersion: String): Matcher<String> =
+    Matcher { actual ->
+        val version = Version.entries.single { it.versionString == schemaVersion }
+        val parseExceptions = XmlParser().validate(actual.byteInputStream(), version)
+
+        MatcherResult(
+            parseExceptions.isEmpty(),
+            { parseExceptions.joinToString(separator = "\n") { it.message.orEmpty() } },
+            { "Expected some parse exception against XML schema, but everything matched" }
+        )
+    }
+
+private fun TestConfiguration.generateSingleBomReport(
+    ortResult: OrtResult,
+    format: Format,
+    singleBomComponentName: String = "",
+    singleBomComponentType: Component.Type = Component.Type.APPLICATION,
+    supplierName: String = "",
+    supplierUrl: String = "",
+    licenseFactProvider: LicenseFactProvider = CompositeLicenseFactProvider(emptyList())
+): String {
+    val reporter = CycloneDxReporterFactory.create(
+        schemaVersion = SchemaVersion.entries.single { it.version.versionString == DEFAULT_SCHEMA_VERSION_NAME },
+        singleBomComponentName = singleBomComponentName,
+        singleBomComponentType = singleBomComponentType,
+        metadataSupplierName = supplierName,
+        metadataSupplierUrl = supplierUrl,
+        outputFileFormats = listOf(format)
+    )
+
+    return reporter.generateReport(
+        input = ReporterInput(ortResult, licenseFactProvider = licenseFactProvider),
+        outputDir = tempdir()
+    ).single().shouldBeSuccess().apply {
+        name shouldBe "$REPORT_BASE_FILENAME.${format.extension}"
+    }.readText().normalizeLineBreaks()
+}
+
+private fun TestConfiguration.generateMultiBomReport(
+    ortResult: OrtResult,
+    format: Format,
+    supplierName: String = "",
+    supplierUrl: String = "",
+    licenseFactProvider: LicenseFactProvider = CompositeLicenseFactProvider(emptyList())
+): List<String> {
+    val reporter = CycloneDxReporterFactory.create(
+        schemaVersion = SchemaVersion.entries.single { it.version.versionString == DEFAULT_SCHEMA_VERSION_NAME },
+        singleBom = false,
+        metadataSupplierName = supplierName,
+        metadataSupplierUrl = supplierUrl,
+        outputFileFormats = listOf(format)
+    )
+
+    return reporter.generateReport(
+        input = ReporterInput(ortResult, licenseFactProvider = licenseFactProvider),
+        outputDir = tempdir()
+    ).map { it.shouldBeSuccess().readText().normalizeLineBreaks() }
+}

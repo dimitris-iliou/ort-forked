@@ -12,7 +12,7 @@ on:
         type: string
 
 env:
-  GRADLE_OPTS: -Dorg.gradle.daemon=false
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.logging.stacktrace=all
 
 jobs:
   publish:
@@ -22,28 +22,17 @@ jobs:
       attestations: write
       contents: write
       id-token: write
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.ORT_VERSION }}
           fetch-depth: 0
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e # v6.1.0
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
         with:
           dependency-graph: generate-and-submit
-      - name: Publish to Maven Central
-        env:
-          GITHUB_DEPENDENCY_GRAPH_REF: refs/heads/main
-          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
-          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
-          ORG_GRADLE_PROJECT_signAllPublications: true
-          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
-          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
-          ORG_GRADLE_PROJECT_SONATYPE_CONNECT_TIMEOUT_SECONDS: 300
-          ORG_GRADLE_PROJECT_SONATYPE_CLOSE_TIMEOUT_SECONDS: 3600
-        run: ./gradlew publishAndReleaseToMavenCentral
       - name: Build ORT Distributions
         env:
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
@@ -59,10 +48,21 @@ jobs:
               ./cli/build/distributions/ort-$ORT_VERSION.{tgz,zip}* \
               ./cli-helper/build/distributions/orth-$ORT_VERSION.{tgz,zip}*
       - name: Attest Build Provenance
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: |
             ./cli/build/distributions/ort-${{ env.ORT_VERSION }}.tgz
             ./cli/build/distributions/ort-${{ env.ORT_VERSION }}.zip
             ./cli-helper/build/distributions/orth-${{ env.ORT_VERSION }}.tgz
             ./cli-helper/build/distributions/orth-${{ env.ORT_VERSION }}.zip
+      - name: Publish to Maven Central
+        env:
+          GITHUB_DEPENDENCY_GRAPH_REF: refs/heads/main
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signAllPublications: true
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+          ORG_GRADLE_PROJECT_SONATYPE_CONNECT_TIMEOUT_SECONDS: 300
+          ORG_GRADLE_PROJECT_SONATYPE_CLOSE_TIMEOUT_SECONDS: 3600
+        run: ./gradlew publishAndReleaseToMavenCentral

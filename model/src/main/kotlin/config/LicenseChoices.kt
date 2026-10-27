@@ -24,7 +24,7 @@ import com.fasterxml.jackson.annotation.JsonInclude
 
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.utils.ort.ORT_REPO_CONFIG_FILENAME
-import org.ossreviewtoolkit.utils.spdx.SpdxLicenseChoice
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxLicenseChoice
 
 /**
  * The license choices configured for a repository.
@@ -45,6 +45,16 @@ data class LicenseChoices(
     @JsonIgnore
     fun isEmpty() = packageLicenseChoices.isEmpty() && repositoryLicenseChoices.isEmpty()
 
+    /**
+     * Return the result of merging [other] into this [LicenseChoices].
+     * Entries of this [LicenseChoices] take precedence.
+     */
+    fun merge(other: LicenseChoices): LicenseChoices =
+        LicenseChoices(
+            repositoryLicenseChoices = (repositoryLicenseChoices + other.repositoryLicenseChoices).distinct(),
+            packageLicenseChoices = (packageLicenseChoices + other.packageLicenseChoices).distinct()
+        )
+
     init {
         val choicesWithoutGiven = repositoryLicenseChoices.filter { it.given == null }
         require(choicesWithoutGiven.isEmpty()) {
@@ -62,3 +72,7 @@ data class PackageLicenseChoice(
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     val licenseChoices: List<SpdxLicenseChoice> = emptyList()
 )
+
+fun LicenseChoices?.orEmpty() = this ?: LicenseChoices()
+
+operator fun LicenseChoices.plus(other: LicenseChoices): LicenseChoices = merge(other)

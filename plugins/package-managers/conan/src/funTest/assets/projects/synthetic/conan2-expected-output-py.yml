@@ -22,17 +22,17 @@ project:
     dependencies: []
   - name: "requires"
     dependencies:
-    - id: "Conan::expat:2.8.0"
+    - id: "Conan::expat:2.9.0"
     - id: "Conan::libmysqlclient:8.1.0"
       dependencies:
       - id: "Conan::lz4:1.9.4"
-      - id: "Conan::openssl:3.6.2"
+      - id: "Conan::openssl:3.6.5"
         dependencies:
         - id: "Conan::zlib:1.3.2"
       - id: "Conan::zlib:1.3.2"
       - id: "Conan::zstd:1.5.7"
     - id: "Conan::libpq:15.4"
-    - id: "Conan::openssl:3.6.2"
+    - id: "Conan::openssl:3.6.5"
       dependencies:
       - id: "Conan::zlib:1.3.2"
     - id: "Conan::pcre2:10.42"
@@ -71,8 +71,8 @@ packages:
     url: ""
     revision: ""
     path: ""
-- id: "Conan::expat:2.8.0"
-  purl: "pkg:conan/expat@2.8.0"
+- id: "Conan::expat:2.9.0"
+  purl: "pkg:conan/expat@2.9.0"
   declared_licenses:
   - "MIT"
   declared_licenses_processed:
@@ -85,9 +85,9 @@ packages:
       value: ""
       algorithm: ""
   source_artifact:
-    url: "https://github.com/libexpat/libexpat/releases/download/R_2_8_0/expat-2.8.0.tar.xz"
+    url: "https://github.com/libexpat/libexpat/releases/download/R_2_9_0/expat-2.9.0.tar.xz"
     hash:
-      value: "a37bfae0aa9775bd8521ebd85dc456d486f0ff31138f6c91fd902ea732624542"
+      value: "1e6371862cc31999b368c3b89b49994f0677e1bab5f1b2b85ae3741f5d803051"
       algorithm: "SHA-256"
   vcs:
     type: "Git"
@@ -188,8 +188,8 @@ packages:
     revision: ""
     path: ""
   is_modified: true
-- id: "Conan::openssl:3.6.2"
-  purl: "pkg:conan/openssl@3.6.2"
+- id: "Conan::openssl:3.6.5"
+  purl: "pkg:conan/openssl@3.6.5"
   declared_licenses:
   - "Apache-2.0"
   declared_licenses_processed:
@@ -203,9 +203,9 @@ packages:
       value: ""
       algorithm: ""
   source_artifact:
-    url: "https://github.com/openssl/openssl/releases/download/openssl-3.6.2/openssl-3.6.2.tar.gz"
+    url: "https://github.com/openssl/openssl/releases/download/openssl-3.6.5/openssl-3.6.5.tar.gz"
     hash:
-      value: "aaf51a1fe064384f811daeaeb4ec4dce7340ec8bd893027eee676af31e83a04f"
+      value: "a2157c2830efdec3788939b00c9b0638306d3f0bbb76dc4832ee503bb397df98"
       algorithm: "SHA-256"
   vcs:
     type: "Git"

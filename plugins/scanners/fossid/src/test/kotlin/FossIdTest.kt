@@ -21,6 +21,7 @@ package org.ossreviewtoolkit.plugins.scanners.fossid
 
 import io.kotest.assertions.async.shouldTimeout
 import io.kotest.core.spec.style.WordSpec
+import io.kotest.matchers.collections.shouldBeSingleton
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSingleElement
 import io.kotest.matchers.collections.shouldHaveSize
@@ -47,6 +48,9 @@ import org.ossreviewtoolkit.clients.fossid.EntityResponseBody
 import org.ossreviewtoolkit.clients.fossid.FossIdRestService
 import org.ossreviewtoolkit.clients.fossid.MapResponseBody
 import org.ossreviewtoolkit.clients.fossid.PolymorphicData
+import org.ossreviewtoolkit.clients.fossid.SCAN_CODE_KEY
+import org.ossreviewtoolkit.clients.fossid.SCAN_ID_KEY
+import org.ossreviewtoolkit.clients.fossid.SERVER_URL_KEY
 import org.ossreviewtoolkit.clients.fossid.checkDownloadStatus
 import org.ossreviewtoolkit.clients.fossid.createIgnoreRule
 import org.ossreviewtoolkit.clients.fossid.createProject
@@ -73,11 +77,8 @@ import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.Excludes
 import org.ossreviewtoolkit.model.config.PathExclude
 import org.ossreviewtoolkit.model.config.PathExcludeReason
-import org.ossreviewtoolkit.plugins.scanners.fossid.FossId.Companion.SCAN_CODE_KEY
-import org.ossreviewtoolkit.plugins.scanners.fossid.FossId.Companion.SCAN_ID_KEY
-import org.ossreviewtoolkit.plugins.scanners.fossid.FossId.Companion.SERVER_URL_KEY
 import org.ossreviewtoolkit.plugins.scanners.fossid.FossId.Companion.extractRepositoryName
-import org.ossreviewtoolkit.utils.spdx.toSpdx
+import org.ossreviewtoolkit.utils.spdxexpression.toSpdx
 
 import org.semver4j.Semver
 
@@ -146,11 +147,10 @@ class FossIdTest : WordSpec({
 
             val summary = fossId.scan(createPackage(pkgId, vcsInfo)).summary
 
-            summary.issues shouldHaveSize 1
-            with(summary.issues.first()) {
-                message shouldContain pkgId.toCoordinates()
-                message shouldContain "but only Git is supported"
-                severity shouldBe Severity.WARNING
+            summary.issues shouldBeSingleton {
+                it.message shouldContain pkgId.toCoordinates()
+                it.message shouldContain "but only Git is supported"
+                it.severity shouldBe Severity.WARNING
             }
         }
 
@@ -398,7 +398,7 @@ class FossIdTest : WordSpec({
                     source = "FossId",
                     message = "This scan has 2 file(s) pending identification in FossID. " +
                         "Please review and resolve them at: " +
-                        "https://www.example.org/fossid/index.html?action=scanview&sid=1",
+                        "https://www.example.org/fossid/?form=main_interface&action=scanview&sid=1",
                     severity = Severity.HINT
                 )
             )
@@ -449,34 +449,31 @@ class FossIdTest : WordSpec({
             summary.snippetFindings shouldHaveSize 3
             summary.snippetFindings.first().apply {
                 sourceLocation shouldBe TextLocation("/pending/file/1", 1, 3)
-                snippets shouldHaveSize 1
-                snippets.first().apply {
-                    location.startLine shouldBe 11
-                    location.endLine shouldBe 12
-                    additionalData[FossId.SNIPPET_DATA_MATCHED_LINE_SOURCE] shouldBe "1-3, 21-22, 36"
-                    additionalData[FossId.SNIPPET_DATA_MATCHED_LINE_SNIPPET] shouldBe "11-12"
+                snippets shouldBeSingleton {
+                    it.location.startLine shouldBe 11
+                    it.location.endLine shouldBe 12
+                    it.additionalData[FossId.SNIPPET_DATA_MATCHED_LINE_SOURCE] shouldBe "1-3, 21-22, 36"
+                    it.additionalData[FossId.SNIPPET_DATA_MATCHED_LINE_SNIPPET] shouldBe "11-12"
                 }
             }
 
             summary.snippetFindings.elementAt(1).apply {
                 sourceLocation shouldBe TextLocation("/pending/file/1", 21, 22)
-                snippets shouldHaveSize 1
-                snippets.first().apply {
-                    location.startLine shouldBe 11
-                    location.endLine shouldBe 12
-                    additionalData[FossId.SNIPPET_DATA_MATCHED_LINE_SOURCE] shouldBe "1-3, 21-22, 36"
-                    additionalData[FossId.SNIPPET_DATA_MATCHED_LINE_SNIPPET] shouldBe "11-12"
+                snippets shouldBeSingleton {
+                    it.location.startLine shouldBe 11
+                    it.location.endLine shouldBe 12
+                    it.additionalData[FossId.SNIPPET_DATA_MATCHED_LINE_SOURCE] shouldBe "1-3, 21-22, 36"
+                    it.additionalData[FossId.SNIPPET_DATA_MATCHED_LINE_SNIPPET] shouldBe "11-12"
                 }
             }
 
             summary.snippetFindings.last().apply {
                 sourceLocation shouldBe TextLocation("/pending/file/1", 36)
-                snippets shouldHaveSize 1
-                snippets.first().apply {
-                    location.startLine shouldBe 11
-                    location.endLine shouldBe 12
-                    additionalData[FossId.SNIPPET_DATA_MATCHED_LINE_SOURCE] shouldBe "1-3, 21-22, 36"
-                    additionalData[FossId.SNIPPET_DATA_MATCHED_LINE_SNIPPET] shouldBe "11-12"
+                snippets shouldBeSingleton {
+                    it.location.startLine shouldBe 11
+                    it.location.endLine shouldBe 12
+                    it.additionalData[FossId.SNIPPET_DATA_MATCHED_LINE_SOURCE] shouldBe "1-3, 21-22, 36"
+                    it.additionalData[FossId.SNIPPET_DATA_MATCHED_LINE_SNIPPET] shouldBe "11-12"
                 }
             }
         }
@@ -667,11 +664,10 @@ class FossIdTest : WordSpec({
 
             val result = fossId.scan(createPackage(pkgId, vcsInfo))
 
-            result.summary.issues shouldHaveSize 1
-            with(result.summary.issues.first()) {
-                message shouldContain pkgId.toCoordinates()
-                message shouldContain "asynchronous mode"
-                severity shouldBe Severity.HINT
+            result.summary.issues shouldBeSingleton {
+                it.message shouldContain pkgId.toCoordinates()
+                it.message shouldContain "asynchronous mode"
+                it.severity shouldBe Severity.HINT
             }
 
             with(result) {
@@ -1164,10 +1160,9 @@ class FossIdTest : WordSpec({
 
             fossId.scan(pkg3)
 
-            result.summary.issues shouldHaveSize 1
-            with(result.summary.issues.first()) {
-                message shouldContain id2.toCoordinates()
-                severity shouldBe Severity.ERROR
+            result.summary.issues shouldBeSingleton {
+                it.message shouldContain id2.toCoordinates()
+                it.severity shouldBe Severity.ERROR
             }
 
             coVerify {

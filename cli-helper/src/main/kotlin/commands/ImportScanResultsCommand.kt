@@ -17,17 +17,18 @@
  * License-Filename: LICENSE
  */
 
-package org.ossreviewtoolkit.helper.commands
+package org.ossreviewtoolkit.clihelper.commands
 
 import com.github.ajalt.clikt.parameters.options.convert
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.required
 import com.github.ajalt.clikt.parameters.types.file
 
-import org.ossreviewtoolkit.helper.utils.OrtHelperCommand
-import org.ossreviewtoolkit.helper.utils.readOrtResult
+import org.ossreviewtoolkit.clihelper.utils.OrtHelperCommand
+import org.ossreviewtoolkit.clihelper.utils.readOrtResult
 import org.ossreviewtoolkit.scanner.storages.PackageBasedFileStorage
 import org.ossreviewtoolkit.utils.common.expandTilde
+import org.ossreviewtoolkit.utils.ort.runBlocking
 import org.ossreviewtoolkit.utils.ort.storage.LocalFileStorage
 
 internal class ImportScanResultsCommand : OrtHelperCommand(
@@ -52,11 +53,10 @@ internal class ImportScanResultsCommand : OrtHelperCommand(
     override fun run() {
         val ortResult = readOrtResult(ortFile)
         val scanResultsStorage = PackageBasedFileStorage(LocalFileStorage(scanResultsStorageDir))
-        val ids = ortResult.getProjects().map { it.id } + ortResult.getPackages().map { it.metadata.id }
 
-        ids.forEach { id ->
+        ortResult.getIdentifiers().forEach { id ->
             ortResult.getScanResultsForId(id).forEach { scanResult ->
-                scanResultsStorage.add(id, scanResult)
+                runBlocking { scanResultsStorage.add(id, scanResult) }
             }
         }
     }

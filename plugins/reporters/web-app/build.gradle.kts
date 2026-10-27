@@ -22,16 +22,18 @@ plugins {
     id("ort-plugin-conventions")
 }
 
-val webAppTemplateConfiguration by configurations.creating {
+val webAppTemplateConfiguration = configurations.create("webAppTemplateConfiguration") {
     isCanBeConsumed = false
 }
 
 dependencies {
+    implementation(projects.utils.commonUtils)
+
     webAppTemplateConfiguration(project(":plugins:reporters:web-app-template", "webAppTemplateConfiguration"))
 }
 
 val generatedResourcesDir = layout.buildDirectory.dir("generated-resources/main")
-val copyWebAppTemplate by tasks.registering(Copy::class) {
+val copyWebAppTemplate = tasks.register("copyWebAppTemplate", Copy::class) {
     from(webAppTemplateConfiguration) {
         include("scan-report-template.html")
     }
@@ -45,11 +47,10 @@ sourceSets.main.get().output.dir(mapOf("builtBy" to copyWebAppTemplate), generat
 dependencies {
     api(projects.reporter)
 
-    ksp(projects.reporter)
-
     implementation(projects.plugins.reporters.evaluatedModelReporter)
-
     implementation(libs.commonsCompress)
 
     funTestImplementation(projects.utils.testUtils)
+
+    ksp(projects.reporter)
 }

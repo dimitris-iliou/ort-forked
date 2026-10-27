@@ -26,14 +26,14 @@ plugins {
 }
 
 dependencies {
+    api(libs.kotlinx.serialization.core)
     api(libs.okhttp)
     api(libs.retrofit)
 
     implementation(projects.downloader)
-
-    implementation(libs.bundles.ks3)
-    implementation(libs.kotlinx.serialization.core)
+    implementation(projects.utils.commonUtils)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.ks3.jdk)
     implementation(libs.retrofit.converter.kotlinxSerialization)
 }
 

@@ -129,7 +129,7 @@ internal class ScanController(
     }
 
     /**
-     * Return all [FileList] by their corresponding [provenance].
+     * Return all [FileList] by their corresponding [KnownProvenance].
      */
     fun getAllFileLists(): Map<KnownProvenance, FileList> = fileLists
 
@@ -236,7 +236,7 @@ internal class ScanController(
         nestedProvenance.allProvenances.filter { hasScanResult(scanner, it) }
 
     /**
-     * Return the nested provenance resolution issues associated with the given [provenance].
+     * Return the nested provenance resolution issues associated with the given [id].
      */
     fun getNestedProvenanceResolutionIssue(id: Identifier): Issue? = nestedProvenanceResolutionIssues[id]
 
@@ -311,6 +311,8 @@ internal class ScanController(
         packageProvenancesWithoutVcsPath.filter { (_, packageProvenance) -> packageProvenance == provenance }.keys
 
     fun getPackageProvenance(id: Identifier): KnownProvenance? = packageProvenances[id]
+
+    fun getPackageProvenanceWithoutVcsPath(id: Identifier): KnownProvenance? = packageProvenancesWithoutVcsPath[id]
 
     /**
      * Return the package provenanceResolutionIssue associated with the given [id].

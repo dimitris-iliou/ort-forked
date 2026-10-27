@@ -24,22 +24,23 @@ plugins {
 
 dependencies {
     api(projects.model)
-    api(projects.utils.scriptingUtils)
+    api(projects.utils.scriptUtils)
+    api(libs.jiraRestClient.api)
 
-    implementation(projects.utils.ortUtils)
-
-    implementation("org.jetbrains.kotlin:kotlin-scripting-common")
+    implementation(projects.utils.commonUtils)
     implementation("org.jetbrains.kotlin:kotlin-scripting-jvm-host")
-
     implementation(libs.jakartaMail)
-    implementation(libs.jerseyCommon)
-    implementation(libs.jiraRestClient.api)
+
     implementation(libs.jiraRestClient.app) {
         exclude("org.apache.logging.log4j", "log4j-slf4j2-impl")
             .because("the SLF4J implementation from Log4j 2 is used")
     }
 
+    runtimeOnly(libs.jerseyCommon)
+
     testImplementation(libs.greenmail)
     testImplementation(libs.mockk)
     testImplementation(libs.wiremock)
+
+    kotlinScriptDef(projects.utils.scriptUtils)
 }

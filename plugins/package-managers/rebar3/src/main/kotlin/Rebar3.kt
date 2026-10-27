@@ -38,7 +38,7 @@ private const val PROJECT_TYPE = "otp"
 
 @OrtPlugin(
     displayName = "Rebar3",
-    description = "The Rebar3 build tool for Erlang, using bombom for SBOM generation.",
+    summary = "The Rebar3 build tool for Erlang, using bombom for SBOM generation.",
     factory = PackageManagerFactory::class
 )
 class Rebar3(
@@ -56,29 +56,33 @@ class Rebar3(
     ): List<ProjectAnalyzerResult> {
         val workingDir = definitionFile.parentFile
 
-        requireLockfile(analysisRoot, workingDir, analyzerConfig.allowDynamicVersions) {
+        requireLockfileForStableVersions(analysisRoot, definitionFile, analyzerConfig.allowDynamicVersions) {
             (workingDir / "rebar.lock").isFile
         }
 
         // bombom doesn't support stdout output, so use a temp file.
-        val tempFile = createOrtTempFile("bombom", ".json")
+        val bomFile = createOrtTempFile("cyclonedx", ".json")
 
         return try {
-            // Use --force because createTempFile creates an empty file and bombom prompts for overwrite confirmation.
-            BombomCommand.run(workingDir, "--output", tempFile.absolutePath, "--format", "json", "--force")
-                .requireSuccess()
+            BombomCommand.run(
+                workingDir,
+                // Force overwriting the empty file created by "createOrtTempFile()".
+                "--force",
+                "--format", "json",
+                "--output", bomFile.absolutePath
+            ).requireSuccess()
 
             resolveDependencies(
                 analysisRoot,
                 definitionFile,
-                tempFile.readBytes(),
+                bomFile,
                 excludes,
                 includes,
                 analyzerConfig,
                 labels
             )
         } finally {
-            tempFile.delete()
+            bomFile.delete()
         }
     }
 

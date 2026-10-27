@@ -27,7 +27,6 @@ dependencies {
     api(projects.scanner)
 
     implementation(projects.downloader)
-    implementation(projects.utils.commonUtils)
     implementation(projects.utils.spdxUtils)
 
     implementation(libs.scanoss) {
@@ -35,14 +34,12 @@ dependencies {
             .because("the logging provider conflicts with ORT's")
     }
 
-    ksp(projects.scanner)
-
-    funTestApi(testFixtures(projects.scanner))
-
     funTestImplementation(projects.utils.testUtils)
 
+    testImplementation(projects.utils.commonUtils)
     testImplementation(projects.utils.testUtils)
-
     testImplementation(libs.mockk)
     testImplementation(libs.wiremock)
+
+    ksp(projects.scanner)
 }

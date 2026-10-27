@@ -17,7 +17,7 @@
  * License-Filename: LICENSE
  */
 
-package org.ossreviewtoolkit.helper.commands
+package org.ossreviewtoolkit.clihelper.commands
 
 import com.fasterxml.jackson.databind.PropertyNamingStrategies
 import com.fasterxml.jackson.module.kotlin.readValue
@@ -28,8 +28,8 @@ import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.required
 import com.github.ajalt.clikt.parameters.types.file
 
-import org.ossreviewtoolkit.helper.utils.OrtHelperCommand
-import org.ossreviewtoolkit.helper.utils.writeOrtResult
+import org.ossreviewtoolkit.clihelper.utils.OrtHelperCommand
+import org.ossreviewtoolkit.clihelper.utils.writeOrtResult
 import org.ossreviewtoolkit.model.AnalyzerResult
 import org.ossreviewtoolkit.model.AnalyzerRun
 import org.ossreviewtoolkit.model.Hash
@@ -41,25 +41,28 @@ import org.ossreviewtoolkit.model.PackageReference
 import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.RemoteArtifact
 import org.ossreviewtoolkit.model.Repository
+import org.ossreviewtoolkit.model.ResolvedPackageCurations.Companion.REPOSITORY_CONFIGURATION_PROVIDER_ID
 import org.ossreviewtoolkit.model.Scope
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
-import org.ossreviewtoolkit.model.config.Excludes
 import org.ossreviewtoolkit.model.config.OrtConfiguration
 import org.ossreviewtoolkit.model.config.RepositoryConfiguration
 import org.ossreviewtoolkit.model.config.ScopeExclude
 import org.ossreviewtoolkit.model.config.ScopeExcludeReason
+import org.ossreviewtoolkit.model.config.orEmpty
 import org.ossreviewtoolkit.model.mapper
 import org.ossreviewtoolkit.model.orEmpty
 import org.ossreviewtoolkit.model.orNone
+import org.ossreviewtoolkit.model.readValue
 import org.ossreviewtoolkit.model.utils.toPurl
 import org.ossreviewtoolkit.plugins.packagecurationproviders.api.PackageCurationProviderFactory
+import org.ossreviewtoolkit.plugins.packagecurationproviders.api.SimplePackageCurationProvider
 import org.ossreviewtoolkit.utils.common.expandTilde
 import org.ossreviewtoolkit.utils.config.setPackageCurations
 import org.ossreviewtoolkit.utils.ort.Environment
 import org.ossreviewtoolkit.utils.ort.ORT_CONFIG_FILENAME
 import org.ossreviewtoolkit.utils.ort.ortConfigDirectory
-import org.ossreviewtoolkit.utils.spdx.SpdxExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxExpression
 
 internal class CreateAnalyzerResultFromPackageListCommand : OrtHelperCommand(
     help = "A command which turns a package list file into an analyzer result."
@@ -88,6 +91,13 @@ internal class CreateAnalyzerResultFromPackageListCommand : OrtHelperCommand(
         .convert { it.absoluteFile.normalize() }
         .default(ortConfigDirectory.resolve(ORT_CONFIG_FILENAME))
 
+    private val repositoryConfigurationFile by option(
+        "--repository-configuration-file",
+        help = "The path to the repository configuration file to use in the output ORT file."
+    ).convert { it.expandTilde() }
+        .file(mustExist = true, canBeFile = true, canBeDir = false, mustBeWritable = false, mustBeReadable = true)
+        .convert { it.absoluteFile.normalize() }
+
     override fun run() {
         val packageList = packageListFile.mapper().copy().apply {
             // Use camel case already now (even if in all places snake case is used), because there is a plan
@@ -110,7 +120,17 @@ internal class CreateAnalyzerResultFromPackageListCommand : OrtHelperCommand(
         )
 
         val ortConfig = OrtConfiguration.load(emptyMap(), configFile)
-        val packageCurationProviders = PackageCurationProviderFactory.create(ortConfig.packageCurationProviders)
+        val repositoryConfiguration = repositoryConfigurationFile?.readValue<RepositoryConfiguration>().orEmpty()
+            .addScopeExcludeForExcludedScope()
+
+        val packageCurationProviders = buildList {
+            addAll(PackageCurationProviderFactory.create(ortConfig.packageCurationProviders))
+
+            if (ortConfig.enableRepositoryPackageCurations) {
+                val provider = SimplePackageCurationProvider(repositoryConfiguration.curations.packages)
+                add(REPOSITORY_CONFIGURATION_PROVIDER_ID to provider)
+            }
+        }
 
         val ortResult = OrtResult(
             analyzer = AnalyzerRun.EMPTY.copy(
@@ -122,13 +142,7 @@ internal class CreateAnalyzerResultFromPackageListCommand : OrtHelperCommand(
             ),
             repository = Repository(
                 vcs = projectVcs.normalize(),
-                config = RepositoryConfiguration(
-                    excludes = Excludes(
-                        scopes = listOf(
-                            ScopeExclude(EXCLUDED_SCOPE_NAME, ScopeExcludeReason.DEV_DEPENDENCY_OF)
-                        )
-                    )
-                )
+                config = repositoryConfiguration
             )
         ).setPackageCurations(packageCurationProviders)
 
@@ -214,3 +228,14 @@ private fun Dependency.toPackage(): Package {
         labels = labels
     )
 }
+
+private fun RepositoryConfiguration.addScopeExcludeForExcludedScope() =
+    if (excludes.scopes.any { it.pattern == EXCLUDED_SCOPE_NAME }) {
+        this
+    } else {
+        copy(
+            excludes = excludes.copy(
+                scopes = excludes.scopes + ScopeExclude(EXCLUDED_SCOPE_NAME, ScopeExcludeReason.DEV_DEPENDENCY_OF)
+            )
+        )
+    }

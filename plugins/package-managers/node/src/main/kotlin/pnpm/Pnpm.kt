@@ -74,7 +74,7 @@ internal object PnpmCommand : CommandLineTool {
 @OrtPlugin(
     id = "PNPM",
     displayName = "PNPM",
-    description = "The PNPM package manager for Node.js.",
+    summary = "The PNPM package manager for Node.js.",
     factory = PackageManagerFactory::class
 )
 class Pnpm(override val descriptor: PluginDescriptor = PnpmFactory.descriptor) :
@@ -145,6 +145,7 @@ class Pnpm(override val descriptor: PluginDescriptor = PnpmFactory.descriptor) :
         handler.setWorkspaceModuleDirs(workspaceModuleDirs)
 
         val moduleInfosForScope = scopes.associateWith { scope -> listModules(workingDir, scope) }
+        requestAllPackageDetails(moduleInfosForScope) // Warm-up the cache.
 
         return workspaceModuleDirs.map { projectDir ->
             val packageJsonFile = projectDir.resolve(NodePackageManagerType.DEFINITION_FILE)
@@ -152,7 +153,11 @@ class Pnpm(override val descriptor: PluginDescriptor = PnpmFactory.descriptor) :
 
             scopes.forEach { scope ->
                 val moduleInfo = moduleInfosForScope.getValue(scope).single { it.path == projectDir.absolutePath }
-                graphBuilder.addDependencies(project.id, scope.descriptor, moduleInfo.getScopeDependencies(scope))
+                graphBuilder.addDependencies(
+                    projectId = project.id,
+                    scopeName = scope.descriptor,
+                    dependencies = moduleInfo.getRelevantScopeDependencies(scope)
+                )
             }
 
             ProjectAnalyzerResult(
@@ -161,6 +166,17 @@ class Pnpm(override val descriptor: PluginDescriptor = PnpmFactory.descriptor) :
             )
         }
     }
+
+    private fun requestAllPackageDetails(moduleInfosForScope: Map<Scope, List<ModuleInfo>>) {
+        val dependencies = moduleInfosForScope.flatMap { (scope, moduleInfos) ->
+            moduleInfos.flatMap { it.getRelevantScopeDependencies(scope) }
+        }
+
+        moduleInfoResolver.getModuleInfos(handler.getAllPackageModuleIds(dependencies))
+    }
+
+    private fun ModuleInfo.getRelevantScopeDependencies(scope: Scope) =
+        getScopeDependencies(scope).filter { handler.isRelevant(it) }
 
     private fun useIsolatedNodeLinker(workingDir: File) {
         // Always use the 'isolated' (default) node linker, to not have to deal with multiple ways of
@@ -193,9 +209,11 @@ class Pnpm(override val descriptor: PluginDescriptor = PnpmFactory.descriptor) :
     private fun installDependencies(workingDir: File, scopes: Collection<Scope>) {
         val args = listOfNotNull(
             "install",
-            "--ignore-pnpmfile",
-            "--ignore-scripts",
-            "--frozen-lockfile", // Use the existing lockfile instead of updating an outdated one.
+            "--config.ignorePnpmfile=true", // Ignore the "pnpmfile.mjs" to ensure no script gets executed.
+            "--config.trustLockfile=true", // Trust the lockfile and skip verification.
+            "--config.updateNotifier=false", // Disable checking for PNPM updates.
+            "--frozen-lockfile", // Fail to install if the lockfile does not exist or is outdated.
+            "--ignore-scripts", // Do not execute any scripts defined in the project or its dependencies.
             "--prod".takeUnless { Scope.DEV_DEPENDENCIES in scopes }
         )
 

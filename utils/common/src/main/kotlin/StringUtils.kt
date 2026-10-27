@@ -17,6 +17,8 @@
  * License-Filename: LICENSE
  */
 
+@file:Suppress("TooManyFunctions")
+
 package org.ossreviewtoolkit.utils.common
 
 /**
@@ -35,6 +37,16 @@ fun String.encodeOr(emptyValue: String): String {
 
     return ifEmpty { emptyValue }.fileSystemEncode()
 }
+
+/**
+ * Ensure that this non-empty string starts with the specified [prefix].
+ */
+fun String.ensurePrefix(prefix: String) = if (isEmpty() || startsWith(prefix)) this else "$prefix$this"
+
+/**
+ * Ensure that this non-empty string ends with the specified [suffix].
+ */
+fun String.ensureSuffix(suffix: String) = if (isEmpty() || endsWith(suffix)) this else "$this$suffix"
 
 /**
  * Return the string encoded for safe use as a file name or "unknown", if the string is empty.

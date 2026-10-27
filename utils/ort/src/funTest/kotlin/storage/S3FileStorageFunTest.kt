@@ -34,21 +34,16 @@ import io.kotest.matchers.shouldBe
 import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.InetSocketAddress
-
-import kotlin.random.Random
-
-import org.apache.logging.log4j.kotlin.logger
+import java.util.concurrent.ConcurrentHashMap
 
 class S3FileStorageFunTest : WordSpec() {
     private val loopback = InetAddress.getLoopbackAddress()
     private val protocol = "http"
-    private val port = Random.nextInt(1024, 49152) // See https://en.wikipedia.org/wiki/Registered_port.
-        .also { logger.debug { "Using port $it for S3 Mock server." } }
 
     private val bucket = "ort-scan-results"
 
     private val handler = object : HttpHandler {
-        val requests = mutableMapOf<String, String>()
+        val requests = ConcurrentHashMap<String, String>()
 
         override fun handle(exchange: HttpExchange) {
             when (exchange.requestMethod) {
@@ -65,7 +60,7 @@ class S3FileStorageFunTest : WordSpec() {
                 "PUT" -> {
                     val key = exchange.requestURI.toString().removePrefix("/$bucket/")
                     requests[key] = exchange.requestBody.reader().use { it.readText() }.split('\n')[1].trimEnd()
-                    exchange.sendResponseHeaders(HttpURLConnection.HTTP_OK, 0)
+                    exchange.sendResponseHeaders(HttpURLConnection.HTTP_OK, -1)
                 }
 
                 "GET" -> {
@@ -95,7 +90,7 @@ class S3FileStorageFunTest : WordSpec() {
     }
 
     // Start a local HTTP server to mock S3 with the system default value for queued incoming connections.
-    private val server = HttpServer.create(InetSocketAddress(loopback, port), 0).apply {
+    private val server = HttpServer.create(InetSocketAddress(loopback, 0), 0).apply {
         createContext("/", handler)
         start()
     }
@@ -105,7 +100,7 @@ class S3FileStorageFunTest : WordSpec() {
         awsRegion = "us-east-1",
         bucketName = bucket,
         compression = false,
-        customEndpoint = "$protocol://${loopback.hostAddress}:$port",
+        customEndpoint = "$protocol://${loopback.hostAddress}:${server.address.port}",
         secretAccessKey = "secret"
     )
 

@@ -25,6 +25,7 @@ import io.kotest.engine.spec.tempdir
 import io.kotest.inspectors.forAll
 import io.kotest.inspectors.forAtLeastOne
 import io.kotest.matchers.collections.beEmpty
+import io.kotest.matchers.collections.shouldBeSingleton
 import io.kotest.matchers.collections.shouldHaveSingleElement
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.should
@@ -32,12 +33,16 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNot
 import io.kotest.matchers.string.shouldContain
 
+import org.ossreviewtoolkit.analyzer.analyze
+import org.ossreviewtoolkit.analyzer.getAnalyzerResult
 import org.ossreviewtoolkit.analyzer.resolveSingleProject
 import org.ossreviewtoolkit.analyzer.withInvariantIssues
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.fromYaml
 import org.ossreviewtoolkit.model.toYaml
+import org.ossreviewtoolkit.plugins.packagemanagers.node.FnmCommand
+import org.ossreviewtoolkit.plugins.packagemanagers.node.NodeVersionManagerCommand
 import org.ossreviewtoolkit.utils.test.getAssetFile
 import org.ossreviewtoolkit.utils.test.matchExpectedResult
 import org.ossreviewtoolkit.utils.test.patchActualResult
@@ -151,5 +156,110 @@ class NpmFunTest : StringSpec({
             .resolveSingleProject(definitionFile, allowDynamicVersions = true, resolveScopes = true)
 
         result.withInvariantIssues().toYaml() shouldBe expectedResult.withInvariantIssues().toYaml()
+    }
+
+    "Resolve workspace dependencies correctly" {
+        val definitionFile = getAssetFile("projects/synthetic/npm/workspaces/package.json")
+        val expectedResultFile = getAssetFile("projects/synthetic/npm/workspaces-expected-output.yml")
+
+        val result = analyze(definitionFile.parentFile, packageManagers = setOf(NpmFactory())).getAnalyzerResult()
+
+        result.toYaml() should matchExpectedResult(expectedResultFile, definitionFile)
+    }
+
+    "Resolve workspace dependencies with excluded paths and scopes correctly skipped" {
+        val definitionFile = getAssetFile("projects/synthetic/npm/workspaces/package.json")
+        val expectedResultFile = getAssetFile(
+            "projects/synthetic/npm/workspaces-skip-excluded-expected-output.yml"
+        )
+
+        val result = analyze(
+            definitionFile.parentFile,
+            excludedPaths = setOf("packages/pkg1/**"),
+            excludedScopes = setOf("devDependencies"),
+            skipExcluded = true,
+            packageManagers = setOf(NpmFactory())
+        ).getAnalyzerResult()
+
+        result.toYaml() should matchExpectedResult(expectedResultFile, definitionFile)
+    }
+
+    "Resolve platform-specific dependencies for 'openbsd', 'arm64'" {
+        val definitionFile = getAssetFile("projects/synthetic/npm/platform-specific/package.json")
+        val expectedResultFile = getAssetFile(
+            "projects/synthetic/npm/platform-specific-openbsd-arm64-expected-output.yml"
+        )
+
+        val result = NpmFactory.create(
+            os = NpmConfig.Platform.OPENBSD,
+            cpu = NpmConfig.ProcessorArchitecture.ARM64
+        ).resolveSingleProject(definitionFile, resolveScopes = true)
+
+        patchActualResult(result.toYaml()) should matchExpectedResult(expectedResultFile, definitionFile)
+    }
+
+    "Resolve platform-specific dependencies for 'darwin', 'x64'" {
+        val definitionFile = getAssetFile("projects/synthetic/npm/platform-specific/package.json")
+        val expectedResultFile = getAssetFile("projects/synthetic/npm/platform-specific-darwin-x64-expected-output.yml")
+
+        val result = NpmFactory.create(
+            os = NpmConfig.Platform.DARWIN,
+            cpu = NpmConfig.ProcessorArchitecture.X64
+        ).resolveSingleProject(definitionFile, resolveScopes = true)
+
+        patchActualResult(result.toYaml()) should matchExpectedResult(expectedResultFile, definitionFile)
+    }
+
+    "Use an explicitly specified Node.js version" {
+        // The test processes a project that depends on a deprecated native library which is incompatible with newer
+        // versions of Node.js. In Node.js >= 16, the `install` step fails. With version 14, the project can be
+        // installed. It still cannot be analyzed successfully because the dependency tree produced by the `list`
+        // command has an old format which causes the JSON deserialization to fail. However, this is a good proof that
+        // actually an old version of Node.js is used.
+        val definitionFile = getAssetFile("projects/synthetic/npm/fix-version/package.json")
+
+        try {
+            val result = NpmFactory.create(nodeVersion = "14")
+                .resolveSingleProject(definitionFile, allowDynamicVersions = true, resolveScopes = true)
+
+            result.toYaml() shouldContain "JsonDecodingException:"
+        } finally {
+            // Remove the old version again, so that it cannot interfere with other tests.
+            FnmCommand.run("uninstall", "14")
+        }
+    }
+
+    "Use a Node.js version configured by the project" {
+        // Same as the previous test, but the project directory is created dynamically and contains a `.node-version`
+        // file that specifies the version to use.
+        val projectDir = tempdir().apply { resolve(".node-version").writeText("14.21.3") }
+        val subDir = projectDir.resolve("project").also { it.mkdir() }
+        val definitionFile = subDir.resolve("package.json")
+        val sourceDefinitionFile = getAssetFile("projects/synthetic/npm/fix-version/package.json")
+        sourceDefinitionFile.copyTo(definitionFile)
+
+        try {
+            val result = NpmFactory.create(nodeVersion = NodeVersionManagerCommand.NODE_VERSION_AUTO_DISCOVER)
+                .resolveSingleProject(definitionFile, allowDynamicVersions = true, resolveScopes = true)
+
+            result.toYaml() shouldContain "JsonDecodingException:"
+        } finally {
+            // Remove the old version again, so that it cannot interfere with other tests.
+            FnmCommand.run("uninstall", "14")
+        }
+    }
+
+    "Reject an invalid Node.js version" {
+        val definitionFile = getAssetFile("projects/synthetic/npm/fix-version/package.json")
+        val invalidVersion = "'; echo test"
+
+        val result = NpmFactory.create(nodeVersion = invalidVersion).resolveSingleProject(definitionFile)
+
+        result.issues shouldBeSingleton {
+            it.source shouldBe "NPM"
+            it.severity shouldBe Severity.ERROR
+            it.message shouldContain "Invalid Node.js version string:"
+            it.message shouldContain invalidVersion
+        }
     }
 })

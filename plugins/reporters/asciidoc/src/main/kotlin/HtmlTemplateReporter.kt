@@ -25,13 +25,11 @@ import org.ossreviewtoolkit.reporter.Reporter
 import org.ossreviewtoolkit.reporter.ReporterFactory
 
 /**
- * A [Reporter] that creates HTML files from [Apache Freemarker][1] templates.
- *
- * [1]: https://freemarker.apache.org
+ * A [Reporter] that creates HTML files from [Apache Freemarker](https://freemarker.apache.org) templates.
  */
 @OrtPlugin(
     displayName = "HTML Template",
-    description = "Generates HTML from AsciiDoc files from Apache Freemarker templates.",
+    summary = "Generates HTML from AsciiDoc files from Apache Freemarker templates.",
     factory = ReporterFactory::class
 )
 class HtmlTemplateReporter(

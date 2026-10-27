@@ -104,7 +104,7 @@ abstract class PackageManager(val projectType: String) : Plugin {
                 val dirAsPath = dir.toPath()
 
                 when {
-                    IGNORED_DIRECTORY_MATCHERS.any { it.matches(dirAsPath) } -> {
+                    isIgnoredPath(dirAsPath) -> {
                         logger.info { "Not analyzing directory '$dir' as it is hard-coded to be ignored." }
                         false
                     }
@@ -205,6 +205,12 @@ abstract class PackageManager(val projectType: String) : Plugin {
             val vcsFromWorkingTree = VersionControlSystem.getPathInfo(projectDir).normalize()
             return vcsFromWorkingTree.merge(processPackageVcs(vcsFromProject, *fallbackUrls))
         }
+
+        /**
+         * Check whether the given [path] is matched by any of the ignored directory matchers. In this case, the path is
+         * not analyzed.
+         */
+        fun isIgnoredPath(path: Path): Boolean = IGNORED_DIRECTORY_MATCHERS.any { it.matches(path) }
 
         /**
          * Return an [Excludes] instance to be applied during analysis based on the given [repositoryConfiguration].
@@ -372,17 +378,16 @@ abstract class PackageManager(val projectType: String) : Plugin {
         labels: Map<String, String>
     ): List<ProjectAnalyzerResult>
 
-    protected fun requireLockfile(
+    protected fun requireLockfileForStableVersions(
         analysisRoot: File,
-        workingDir: File,
+        definitionFile: File,
         allowDynamicVersions: Boolean,
-        condition: () -> Boolean
+        hasLockfile: () -> Boolean
     ) {
-        require(allowDynamicVersions || condition()) {
-            val relativePathString = workingDir.relativeTo(analysisRoot).invariantSeparatorsPath.ifEmpty { "." }
-
-            "No lockfile found in '$relativePathString'. This potentially results in unstable versions of " +
-                "dependencies. To support this, enable the 'allowDynamicVersions' option in '$ORT_CONFIG_FILENAME'."
+        require(allowDynamicVersions || hasLockfile()) {
+            "No lockfile found for '${definitionFile.relativeTo(analysisRoot)}'. This potentially results in " +
+                "unstable versions of dependencies. To support this, enable the 'allowDynamicVersions' option in " +
+                "'$ORT_CONFIG_FILENAME'."
         }
     }
 

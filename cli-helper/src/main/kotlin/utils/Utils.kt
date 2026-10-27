@@ -19,7 +19,7 @@
 
 @file:Suppress("MatchingDeclarationName", "TooManyFunctions")
 
-package org.ossreviewtoolkit.helper.utils
+package org.ossreviewtoolkit.clihelper.utils
 
 import java.io.File
 
@@ -38,7 +38,7 @@ import org.ossreviewtoolkit.utils.common.fileSystemEncode
 import org.ossreviewtoolkit.utils.common.isSymbolicLink
 import org.ossreviewtoolkit.utils.common.replaceCredentialsInUri
 import org.ossreviewtoolkit.utils.common.withoutPrefix
-import org.ossreviewtoolkit.utils.spdx.SpdxExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxExpression
 
 const val ORTH_NAME = "orth"
 

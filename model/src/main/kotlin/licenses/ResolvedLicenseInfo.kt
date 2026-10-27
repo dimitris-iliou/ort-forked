@@ -29,11 +29,11 @@ import org.ossreviewtoolkit.model.config.LicenseFilePatterns
 import org.ossreviewtoolkit.model.config.PathExclude
 import org.ossreviewtoolkit.model.utils.PathLicenseMatcher
 import org.ossreviewtoolkit.utils.ort.CopyrightStatementsProcessor
-import org.ossreviewtoolkit.utils.spdx.SpdxExpression
-import org.ossreviewtoolkit.utils.spdx.SpdxLicenseChoice
-import org.ossreviewtoolkit.utils.spdx.SpdxOperator
-import org.ossreviewtoolkit.utils.spdx.SpdxSingleLicenseExpression
-import org.ossreviewtoolkit.utils.spdx.toExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxLicenseChoice
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxOperator
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxSingleLicenseExpression
+import org.ossreviewtoolkit.utils.spdxexpression.toExpression
 
 /**
  * Resolved license information about a package (or project).
@@ -115,23 +115,28 @@ data class ResolvedLicenseInfo(
     }
 
     /**
-     * Return the effective [SpdxExpression] of this [ResolvedLicenseInfo] based on their [licenses] filtered by the
-     * [licenseView] and the applied [licenseChoices]. Effective, in this context, refers to an [SpdxExpression] that
-     * can be used as a final license of this [ResolvedLicenseInfo]. [licenseChoices] will be applied in the order they
-     * are given to the function.
+     * Convenience function which returns the first coordinate from [effectiveLicenseAndAppliedChoices].
      */
-    fun effectiveLicense(licenseView: LicenseView, vararg licenseChoices: List<SpdxLicenseChoice>): SpdxExpression? {
+    fun effectiveLicense(licenseView: LicenseView, vararg licenseChoices: List<SpdxLicenseChoice>): SpdxExpression? =
+        effectiveLicenseAndAppliedChoices(licenseView, *licenseChoices).first
+
+    /**
+     * Return the effective [SpdxExpression] of this [ResolvedLicenseInfo] based on their [licenses] filtered by the
+     * [licenseView] and the applied [licenseChoices] along with applied choices in the order they have been applied.
+     * Effective, in this context, refers to an [SpdxExpression] that can be used as a final license of this
+     * [ResolvedLicenseInfo]. [licenseChoices] will be applied in the order they are given to the function.
+     */
+    fun effectiveLicenseAndAppliedChoices(
+        licenseView: LicenseView,
+        vararg licenseChoices: List<SpdxLicenseChoice>
+    ): Pair<SpdxExpression?, List<SpdxLicenseChoice>> {
         val resolvedLicenseInfo = filter(licenseView, filterSources = true)
+        val resolvedLicenses = resolvedLicenseInfo.toExpression() ?: return null to emptyList()
+        val choices = licenseChoices.asList().flatten().takeUnless { it.isEmpty() }
+            ?: return resolvedLicenses to emptyList()
 
-        val resolvedLicenses = resolvedLicenseInfo.toExpression()
-
-        val choices = licenseChoices.asList().flatten()
-
-        return if (choices.isEmpty()) {
-            resolvedLicenses
-        } else {
-            resolvedLicenses?.applyChoices(choices)?.validChoices()?.toExpression(SpdxOperator.OR)
-        }
+        val (expression, appliedChoices) = resolvedLicenses.applyAndGetChoices(choices)
+        return expression.validChoices().toExpression(SpdxOperator.OR) to appliedChoices
     }
 
     /**

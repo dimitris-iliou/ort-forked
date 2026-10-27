@@ -23,14 +23,16 @@ import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonPropertyOrder
 import com.fasterxml.jackson.databind.annotation.JsonSerialize
 
+import java.time.Instant
+
 import org.ossreviewtoolkit.model.utils.requireNoDuplicates
 import org.ossreviewtoolkit.model.utils.toPurl
 import org.ossreviewtoolkit.utils.ort.DeclaredLicenseProcessor
 import org.ossreviewtoolkit.utils.ort.ProcessedDeclaredLicense
 import org.ossreviewtoolkit.utils.ort.SpdxExpressionSortedConverter
 import org.ossreviewtoolkit.utils.ort.StringSortedSetConverter
-import org.ossreviewtoolkit.utils.spdx.SpdxExpression
-import org.ossreviewtoolkit.utils.spdx.SpdxOperator
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxOperator
 
 /**
  * A generic descriptor for a software package. It contains all relevant metadata about a package like the name,
@@ -108,6 +110,12 @@ data class Package(
      * The remote artifact where the source package can be downloaded.
      */
     val sourceArtifact: RemoteArtifact,
+
+    /**
+     * The timestamp when the package was published, usually to a package registry like Maven Central.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    val publishedAt: Instant? = null,
 
     /**
      * Original VCS-related information as defined in the package's metadata.

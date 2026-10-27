@@ -24,15 +24,18 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.inspectors.forAll
 import io.kotest.matchers.collections.containExactly
+import io.kotest.matchers.collections.shouldBeSingle
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 
+import java.time.Instant
+
 import org.ossreviewtoolkit.utils.ort.ProcessedDeclaredLicense
-import org.ossreviewtoolkit.utils.spdx.SpdxCompoundExpression
-import org.ossreviewtoolkit.utils.spdx.SpdxOperator
-import org.ossreviewtoolkit.utils.spdx.toSpdx
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxCompoundExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxOperator
+import org.ossreviewtoolkit.utils.spdxexpression.toSpdx
 
 class PackageCurationTest : WordSpec({
     "Applying a single curation" should {
@@ -59,6 +62,7 @@ class PackageCurationTest : WordSpec({
                         url = "http://source.artifact",
                         hash = Hash.create("source.hash")
                     ),
+                    publishedAt = Instant.EPOCH,
                     vcs = VcsInfoCurationData(
                         type = VcsType.GIT,
                         url = "http://url.git",
@@ -88,6 +92,7 @@ class PackageCurationTest : WordSpec({
                 homepageUrl shouldBe curation.data.homepageUrl
                 binaryArtifact shouldBe curation.data.binaryArtifact
                 sourceArtifact shouldBe curation.data.sourceArtifact
+                publishedAt shouldBe curation.data.publishedAt
                 vcs shouldBe pkg.vcs
                 vcsProcessed.toCuration() shouldBe curation.data.vcs
                 isMetadataOnly shouldBe true
@@ -95,8 +100,7 @@ class PackageCurationTest : WordSpec({
                 labels shouldBe curation.data.labels
             }
 
-            curatedPkg.curations shouldHaveSize 1
-            curatedPkg.curations.first() shouldBe curation.data
+            curatedPkg.curations.shouldBeSingle() shouldBe curation.data
         }
 
         "change only curated fields" {
@@ -148,8 +152,7 @@ class PackageCurationTest : WordSpec({
                 labels shouldBe pkg.labels
             }
 
-            curatedPkg.curations shouldHaveSize 1
-            curatedPkg.curations.first() shouldBe curation.data
+            curatedPkg.curations.shouldBeSingle() shouldBe curation.data
         }
 
         "be able to empty VCS information" {
@@ -473,3 +476,5 @@ private fun declaredLicenseMappingCuration(id: Identifier, vararg entries: Pair<
 
 private fun labelsCuration(id: Identifier, vararg entries: Pair<String, String>): PackageCuration =
     PackageCuration(id, PackageCurationData(labels = entries.toMap()))
+
+private val ProcessedDeclaredLicense.allLicenses get(): List<String> = decompose().map { it.toString() } + unmapped

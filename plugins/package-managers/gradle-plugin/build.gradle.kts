@@ -41,12 +41,11 @@ tapmoc {
     java(8)
 
     // This is the lowest version supported by the current Kotlin plugin.
-    kotlin("1.9.0")
+    kotlin("2.0.0")
 }
 
 dependencies {
     api(projects.plugins.packageManagers.gradleModel)
-
     api(libs.maven.model)
     api(libs.maven.model.builder)
 }

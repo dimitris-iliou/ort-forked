@@ -63,7 +63,7 @@ import org.ossreviewtoolkit.utils.ort.ortConfigDirectory
 
 @OrtPlugin(
     displayName = "Advise",
-    description = "Check dependencies for security vulnerabilities.",
+    summary = "Check dependencies for security vulnerabilities and project health metrics.",
     factory = OrtCommandFactory::class
 )
 class AdviseCommand(descriptor: PluginDescriptor = AdviseCommandFactory.descriptor) : OrtCommand(descriptor) {
@@ -122,7 +122,7 @@ class AdviseCommand(descriptor: PluginDescriptor = AdviseCommandFactory.descript
             outputDir.resolve("advisor-result.${format.fileExtension}")
         }
 
-        validateOutputFiles(outputFiles)
+        checkOutputFiles(outputFiles)
 
         val distinctProviders = providerFactories.distinct()
         echo("The following ${distinctProviders.size} advisor(s) are enabled:")
@@ -143,7 +143,7 @@ class AdviseCommand(descriptor: PluginDescriptor = AdviseCommandFactory.descript
         val advisorRun = ortResultOutput.advisor
         if (advisorRun == null) {
             echo(Theme.Default.danger("No advisor run was created."))
-            throw ProgramResult(1)
+            throw ProgramResult(STATUS_CODE_FATAL_ERROR)
         }
 
         val duration = with(advisorRun) { Duration.between(startTime, endTime).toKotlinDuration() }

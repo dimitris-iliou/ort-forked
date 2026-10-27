@@ -17,7 +17,7 @@
  * License-Filename: LICENSE
  */
 
-package org.ossreviewtoolkit.helper
+package org.ossreviewtoolkit.clihelper
 
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
@@ -37,14 +37,14 @@ import com.github.ajalt.mordant.terminal.Terminal
 
 import kotlin.system.exitProcess
 
-import org.ossreviewtoolkit.helper.commands.*
-import org.ossreviewtoolkit.helper.commands.classifications.LicenseClassificationsCommand
-import org.ossreviewtoolkit.helper.commands.dev.DevCommand
-import org.ossreviewtoolkit.helper.commands.packageconfig.PackageConfigurationCommand
-import org.ossreviewtoolkit.helper.commands.packagecuration.PackageCurationsCommand
-import org.ossreviewtoolkit.helper.commands.provenancestorage.ProvenanceStorageCommand
-import org.ossreviewtoolkit.helper.commands.repoconfig.RepositoryConfigurationCommand
-import org.ossreviewtoolkit.helper.utils.ORTH_NAME
+import org.ossreviewtoolkit.clihelper.commands.*
+import org.ossreviewtoolkit.clihelper.commands.classifications.LicenseClassificationsCommand
+import org.ossreviewtoolkit.clihelper.commands.dev.DevCommand
+import org.ossreviewtoolkit.clihelper.commands.packageconfig.PackageConfigurationCommand
+import org.ossreviewtoolkit.clihelper.commands.packagecuration.PackageCurationsCommand
+import org.ossreviewtoolkit.clihelper.commands.provenancestorage.ProvenanceStorageCommand
+import org.ossreviewtoolkit.clihelper.commands.repoconfig.RepositoryConfigurationCommand
+import org.ossreviewtoolkit.clihelper.utils.ORTH_NAME
 import org.ossreviewtoolkit.utils.common.Os
 import org.ossreviewtoolkit.utils.ort.printStackTrace
 
@@ -111,11 +111,10 @@ internal class HelperMain : CliktCommand(ORTH_NAME) {
     override fun helpEpilog(context: Context) = "$REQUIRED_OPTION_MARKER denotes required options."
 
     override fun run() {
-        // This is somewhat dirty: For logging, ORT uses the Log4j API (because of its nice Kotlin API), but Logback as
-        // the implementation (for its robustness). The former API does not provide a way to set the root log level,
-        // only the Log4j implementation does (via org.apache.logging.log4j.core.config.Configurator). However, the
-        // SLF4J API does provide a way to get the root logger and set its level. That is why ORT's CLI additionally
-        // depends on the SLF4J API, just to be able to set the root log level below.
+        // This is somewhat dirty: ORT uses Log4j as the logging API (because of its nice Kotlin API), but Logback as
+        // the implementation (for its robustness). The Log4j API does not provide a way to get the root logger.
+        // However, the SLF4J API does, and knowing it is Logback the root level can be set. That is why ORT's CLI
+        // additionally depends on the SLF4J API, just to be able to set the root log level.
         val rootLogger = LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME) as Logger
         rootLogger.level = logLevel
 

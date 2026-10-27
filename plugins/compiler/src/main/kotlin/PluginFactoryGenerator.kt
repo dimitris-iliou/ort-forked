@@ -270,12 +270,14 @@ class PluginFactoryGenerator(private val codeGenerator: CodeGenerator) {
                 PluginDescriptor(
                     id = %S,
                     displayName = %S,
+                    summary = %S,
                     description = %S,
                     options = listOf(
             
                 """.trimIndent(),
                 descriptor.id,
                 descriptor.displayName,
+                descriptor.summary,
                 descriptor.description
             )
 

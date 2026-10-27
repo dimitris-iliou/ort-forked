@@ -30,16 +30,12 @@ dependencies {
     api(projects.plugins.api)
     api(projects.plugins.licenseFactProviders.licenseFactProviderApi)
 
-    implementation(projects.utils.scriptingUtils)
-    implementation(projects.utils.spdxUtils)
-
-    implementation("org.jetbrains.kotlin:kotlin-scripting-common")
+    implementation(projects.utils.scriptUtils)
     implementation("org.jetbrains.kotlin:kotlin-scripting-jvm-host")
 
-    // Only the Java plugin's built-in "test" source set automatically depends on the test fixtures.
-    funTestImplementation(testFixtures(project))
-
-    funTestImplementation(libs.kotest.assertions.json)
+    funTestImplementation(testFixtures(project(path)))
 
     testFixturesImplementation(projects.utils.testUtils)
+
+    kotlinScriptDef(projects.utils.scriptUtils)
 }

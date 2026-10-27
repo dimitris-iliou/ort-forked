@@ -57,31 +57,6 @@ internal object SpdxDocumentModelMapper {
         val packages = mutableListOf<SpdxPackage>()
         val relationships = mutableListOf<SpdxRelationship>()
         val files = mutableListOf<SpdxFile>()
-        val linkageTypesForDependencyRelationships = ortResult.getLinkageTypesForDependencyRelationships()
-
-        /**
-         * Add relationships representing a directed relationship from the package or project denoted by [fromOrtId] to
-         * the one denoted by [toOrtId]. The [fromSpdxId] must correspond to the SPDX package corresponding to
-         * [fromOrtId].
-         */
-        fun addDependencyRelationships(fromOrtId: Identifier, fromSpdxId: String, toOrtId: Identifier) {
-            relationships += SpdxRelationship(
-                spdxElementId = fromSpdxId,
-                relationshipType = SpdxRelationship.Type.DEPENDS_ON,
-                relatedSpdxElement = toOrtId.toSpdxId()
-            )
-
-            linkageTypesForDependencyRelationships.getValue(fromOrtId to toOrtId)
-                .mapTo(mutableSetOf()) { it.toSpdxRelationshipType() }
-                .sorted()
-                .forEach { relationshipType ->
-                    relationships += SpdxRelationship(
-                        spdxElementId = fromSpdxId,
-                        relationshipType = relationshipType,
-                        relatedSpdxElement = toOrtId.toSpdxId()
-                    )
-                }
-        }
 
         val projects = ortResult.getProjects(omitExcluded = true, includeSubProjects = false).sortedBy { it.id }
         val projectPackages = projects.map { project ->
@@ -97,14 +72,6 @@ internal object SpdxDocumentModelMapper {
                 ortResult
             ).copy(hasFiles = filesForProject.map { it.spdxId })
 
-            ortResult.getDependencies(
-                id = project.id,
-                maxLevel = 1,
-                omitExcluded = true
-            ).forEach { dependency ->
-                addDependencyRelationships(project.id, spdxProjectPackage.spdxId, dependency)
-            }
-
             files += filesForProject
             spdxProjectPackage
         }
@@ -116,14 +83,6 @@ internal object SpdxDocumentModelMapper {
                 licenseInfoResolver,
                 ortResult
             )
-
-            ortResult.getDependencies(
-                id = pkg.id,
-                maxLevel = 1,
-                omitExcluded = true
-            ).forEach { dependency ->
-                addDependencyRelationships(pkg.id, binaryPackage.spdxId, dependency)
-            }
 
             packages += binaryPackage
 
@@ -178,6 +137,37 @@ internal object SpdxDocumentModelMapper {
             }
         }
 
+        ortResult.getLinkageTypesForDependencyRelationships().forEach { (fromId, toId), linkages ->
+            fun Identifier.toSpdxId(): String {
+                val type = if (ortResult.isProject(this)) {
+                    SpdxPackageType.PROJECT
+                } else {
+                    SpdxPackageType.BINARY_PACKAGE
+                }
+
+                return toSpdxId(type)
+            }
+
+            val fromSpdxId = fromId.toSpdxId()
+            val toSpdxId = toId.toSpdxId()
+
+            relationships += SpdxRelationship(
+                spdxElementId = fromSpdxId,
+                relationshipType = SpdxRelationship.Type.DEPENDS_ON,
+                relatedSpdxElement = toSpdxId
+            )
+
+            linkages.mapTo(mutableSetOf()) { it.toSpdxRelationshipType() }
+                .sorted()
+                .forEach { relationshipType ->
+                    relationships += SpdxRelationship(
+                        spdxElementId = fromSpdxId,
+                        relationshipType = relationshipType,
+                        relatedSpdxElement = toSpdxId
+                    )
+                }
+        }
+
         val creators = listOfNotNull(
             config.creationInfoPerson?.takeUnless { it.isEmpty() }?.let { "${SpdxConstants.PERSON} $it" },
             config.creationInfoOrganization?.takeUnless { it.isEmpty() }?.let { "${SpdxConstants.ORGANIZATION} $it" },
@@ -198,7 +188,7 @@ internal object SpdxDocumentModelMapper {
                 ?: projects.firstOrNull()?.id?.name?.takeIf(String::isNotBlank)
                 ?: "Unnamed document",
             packages = projectPackages + packages,
-            relationships = relationships.sortedBy { it.spdxElementId },
+            relationships = relationships,
             files = files
         ).addExtractedLicenseInfo(licenseFactProvider)
             .filterChecksums(config.wantSpdx23)
@@ -218,9 +208,10 @@ private fun SpdxPackage.filterChecksums(wantSpdx23: Boolean): SpdxPackage =
 private fun OrtResult.getLinkageTypesForDependencyRelationships():
     Map<Pair<Identifier, Identifier>, Set<PackageLinkage>> {
     val result = mutableMapOf<Pair<Identifier, Identifier>, MutableSet<PackageLinkage>>()
+    val visitedNodeReferenceKeys = mutableSetOf<Pair<String, Any>>()
 
     // Traverse all non-excluded edges and collect the linkage types used in between any pair of ids.
-    getProjects(omitExcluded = true, includeSubProjects = true).forEach { project ->
+    getProjects(omitExcluded = true).forEach { project ->
         val scopeNames = dependencyNavigator.scopeNames(project).filterNot { isScopeExcluded(it) }
 
         scopeNames.forEach { scopeName ->
@@ -234,6 +225,11 @@ private fun OrtResult.getLinkageTypesForDependencyRelationships():
 
             while (queue.isNotEmpty()) {
                 val parent = queue.removeFirst()
+
+                when (val key = project.id.type to parent.getInternalId()) {
+                    in visitedNodeReferenceKeys -> continue
+                    else -> visitedNodeReferenceKeys += key
+                }
 
                 val children = parent.visitDependencies { children ->
                     // Map to a list instead of to a sequence, so that the conversion to the stable reference is done

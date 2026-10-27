@@ -23,20 +23,20 @@ plugins {
 }
 
 dependencies {
+    api(projects.clients.fossidWebappClient)
     api(projects.model)
     api(projects.scanner)
 
-    implementation(projects.clients.fossidWebappClient)
     implementation(projects.downloader)
+    implementation(projects.utils.authenticationUtils)
     implementation(projects.utils.commonUtils)
     implementation(projects.utils.ortUtils)
     implementation(projects.utils.spdxUtils)
-
     implementation(libs.kotlinx.coroutines)
     implementation(libs.packageurl)
 
-    ksp(projects.scanner)
-
     testImplementation(libs.mockk)
     testImplementation(libs.wiremock)
+
+    ksp(projects.scanner)
 }

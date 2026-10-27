@@ -17,16 +17,16 @@
  * License-Filename: LICENSE
  */
 
-package org.ossreviewtoolkit.helper.commands
+package org.ossreviewtoolkit.clihelper.commands
 
 import com.github.ajalt.clikt.parameters.options.convert
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.required
 import com.github.ajalt.clikt.parameters.types.file
 
-import org.ossreviewtoolkit.helper.utils.OrtHelperCommand
-import org.ossreviewtoolkit.helper.utils.readOrtResult
-import org.ossreviewtoolkit.helper.utils.writeOrtResult
+import org.ossreviewtoolkit.clihelper.utils.OrtHelperCommand
+import org.ossreviewtoolkit.clihelper.utils.readOrtResult
+import org.ossreviewtoolkit.clihelper.utils.writeOrtResult
 import org.ossreviewtoolkit.model.FileList
 import org.ossreviewtoolkit.model.KnownProvenance
 import org.ossreviewtoolkit.model.OrtResult
@@ -70,8 +70,8 @@ internal class MergeScannerRunsCommand : OrtHelperCommand(
 
     override fun run() {
         val result = mergeScannerRuns(
-            result = readOrtResult(ortFile),
-            otherResult = readOrtResult(otherOrtFile)
+            result = readOrtResult(ortFile, resolveScopes = false),
+            otherResult = readOrtResult(otherOrtFile, resolveScopes = false)
         )
 
         writeOrtResult(result, outputOrtFile)

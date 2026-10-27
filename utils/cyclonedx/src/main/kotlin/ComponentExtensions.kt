@@ -21,6 +21,7 @@ package org.ossreviewtoolkit.utils.cyclonedx
 
 import org.cyclonedx.model.Component
 import org.cyclonedx.model.ExternalReference
+import org.cyclonedx.model.LicenseItem.LicenseItemType
 
 import org.ossreviewtoolkit.downloader.VcsHost
 import org.ossreviewtoolkit.model.Hash
@@ -33,10 +34,7 @@ import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.orNone
 import org.ossreviewtoolkit.model.utils.toIdentifier
 import org.ossreviewtoolkit.model.utils.toPackageUrl
-import org.ossreviewtoolkit.utils.ort.DeclaredLicenseProcessor
-import org.ossreviewtoolkit.utils.ort.ProcessedDeclaredLicense
 import org.ossreviewtoolkit.utils.ort.normalizeVcsUrl
-import org.ossreviewtoolkit.utils.spdx.toSpdx
 
 internal const val DEFAULT_ORT_TYPE = "CycloneDX"
 
@@ -70,14 +68,12 @@ fun Component.toIdentifier(defaultType: String = DEFAULT_ORT_TYPE): Identifier {
 fun Component.toProject(definitionFilePath: String, defaultType: String = DEFAULT_ORT_TYPE): Project {
     val vcsUrl = findExternalReferenceUrl(ExternalReference.Type.VCS)
     val vcs = if (vcsUrl.isNotBlank()) VcsHost.parseUrl(vcsUrl) else VcsInfo.EMPTY
-    val (declaredLicenses, declaredLicensesProcessed) = extractLicenseInfo()
 
     return Project(
         id = toIdentifier(defaultType),
         definitionFilePath = definitionFilePath,
         authors = extractAuthors(),
-        declaredLicenses = declaredLicenses,
-        declaredLicensesProcessed = declaredLicensesProcessed,
+        declaredLicenses = extractLicenseInfo(),
         vcs = vcs,
         homepageUrl = findExternalReferenceUrl(ExternalReference.Type.WEBSITE),
         description = description.orEmpty()
@@ -89,14 +85,11 @@ fun Component.toProject(definitionFilePath: String, defaultType: String = DEFAUL
  *
  * The [defaultType] is the identifier type to use if no PURL is present.
  */
-fun Component.toPackage(defaultType: String = DEFAULT_ORT_TYPE): Package {
-    val (declaredLicenses, declaredLicensesProcessed) = extractLicenseInfo()
-
-    return Package(
+fun Component.toPackage(defaultType: String = DEFAULT_ORT_TYPE): Package =
+    Package(
         id = toIdentifier(defaultType),
         purl = purl.orEmpty(),
-        declaredLicenses = declaredLicenses,
-        declaredLicensesProcessed = declaredLicensesProcessed,
+        declaredLicenses = extractLicenseInfo(),
         authors = extractAuthors(),
         description = description.orEmpty(),
         homepageUrl = findExternalReferenceUrl(ExternalReference.Type.WEBSITE),
@@ -104,36 +97,19 @@ fun Component.toPackage(defaultType: String = DEFAULT_ORT_TYPE): Package {
         sourceArtifact = extractSourceArtifact(),
         vcs = extractVcs()
     )
-}
 
 /**
- * Extract declared licenses and processed license info from the component.
- *
- * When an SPDX expression is present, the individual license IDs are extracted for `declaredLicenses`,
- * while the original expression is preserved in [ProcessedDeclaredLicense.spdxExpression].
- *
- * Returns a pair of (declaredLicenses, declaredLicensesProcessed).
+ * Extract license information for the [Component], preferring a license expression over a list of licenses.
  */
-internal fun Component.extractLicenseInfo(): Pair<Set<String>, ProcessedDeclaredLicense> {
-    licenses?.expression?.value?.takeIf { it.isNotBlank() }?.also { expression ->
-        val spdxExpression = runCatching { expression.toSpdx() }.getOrNull()
-
-        return if (spdxExpression != null) {
-            val individualLicenses = spdxExpression.licenses().toSet()
-            individualLicenses to ProcessedDeclaredLicense(spdxExpression)
-        } else {
-            // If parsing fails, treat the expression as a single unknown license.
-            val licenses = setOf(expression)
-            licenses to DeclaredLicenseProcessor.process(licenses)
-        }
+internal fun Component.extractLicenseInfo(): Set<String> =
+    licenses?.items.orEmpty().mapNotNullTo(mutableSetOf()) { licenseItem ->
+        when (licenseItem.type) {
+            LicenseItemType.LICENSE -> licenseItem.license?.id ?: licenseItem.license?.name
+            LicenseItemType.EXPRESSION -> licenseItem.expression?.value
+            LicenseItemType.EXPRESSION_DETAILED -> licenseItem.expressionDetailed?.expression
+            LicenseItemType.NONE -> null
+        }?.takeUnless { it.isBlank() }
     }
-
-    val individualLicenses = licenses?.licenses
-        ?.mapNotNullTo(mutableSetOf()) { it.id ?: it.name }
-        .orEmpty()
-
-    return individualLicenses to DeclaredLicenseProcessor.process(individualLicenses)
-}
 
 /**
  * Extract authors from the component.
@@ -194,9 +170,9 @@ internal fun Component.findExternalReferenceUrl(
     type: ExternalReference.Type,
     preferVcsHostParseable: Boolean = false
 ): String {
-    val urls = externalReferences.orEmpty()
-        .filter { it.type == type }
-        .mapNotNull { it.url?.takeIf(String::isNotBlank) }
+    val urls = externalReferences.orEmpty().mapNotNull { ref ->
+        ref.url?.takeIf { ref.type == type && it.isNotBlank() }
+    }
 
     if (urls.isEmpty()) return ""
 

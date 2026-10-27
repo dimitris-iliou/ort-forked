@@ -25,15 +25,15 @@ plugins {
 dependencies {
     api(projects.plugins.commands.commandApi)
 
-    ksp(projects.plugins.commands.commandApi)
-
     implementation(projects.model)
     implementation(projects.scanner)
     implementation(projects.utils.commonUtils)
     implementation(projects.utils.ortUtils)
-
-    implementation(libs.bundles.exposed)
     implementation(libs.clikt)
+    implementation(libs.exposed.core)
+    implementation(libs.exposed.jdbc)
 
     runtimeOnly(libs.postgres)
+
+    ksp(projects.plugins.commands.commandApi)
 }

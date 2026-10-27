@@ -23,12 +23,10 @@ plugins {
 }
 
 dependencies {
-    api(projects.model)
     api(projects.analyzer)
-
+    api(projects.model)
     api(libs.cyclonedx)
 
-    implementation(projects.utils.ortUtils)
-    implementation(projects.utils.spdxUtils)
     implementation(projects.downloader)
+    implementation(projects.utils.ortUtils)
 }

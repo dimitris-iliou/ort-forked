@@ -34,24 +34,19 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.InetSocketAddress
-
-import kotlin.random.Random
-
-import org.apache.logging.log4j.kotlin.logger
+import java.util.concurrent.ConcurrentHashMap
 
 class HttpFileStorageFunTest : WordSpec() {
     private val loopback = InetAddress.getLoopbackAddress()
-    private val port = Random.nextInt(1024, 49152) // See https://en.wikipedia.org/wiki/Registered_port.
-        .also { logger.debug { "Using port $it for HTTP server." } }
 
     private val handler = object : HttpHandler {
-        val requests = mutableMapOf<String, String>()
+        val requests = ConcurrentHashMap<String, String>()
 
         override fun handle(exchange: HttpExchange) {
             when (exchange.requestMethod) {
                 "PUT" -> {
-                    exchange.sendResponseHeaders(HttpURLConnection.HTTP_CREATED, 0)
                     requests[exchange.requestURI.toString()] = exchange.requestBody.reader().use { it.readText() }
+                    exchange.sendResponseHeaders(HttpURLConnection.HTTP_CREATED, -1)
                 }
 
                 "GET" -> {
@@ -60,7 +55,7 @@ class HttpFileStorageFunTest : WordSpec() {
                             exchange.sendResponseHeaders(HttpURLConnection.HTTP_OK, 0)
                             exchange.responseBody.writer().use { it.write(data) }
                         } else {
-                            exchange.sendResponseHeaders(HttpURLConnection.HTTP_NOT_FOUND, 0)
+                            exchange.sendResponseHeaders(HttpURLConnection.HTTP_NOT_FOUND, -1)
                         }
                     }
                 }
@@ -69,12 +64,12 @@ class HttpFileStorageFunTest : WordSpec() {
     }
 
     // Start the local HTTP server with the system default value for queued incoming connections.
-    private val server = HttpServer.create(InetSocketAddress(loopback, port), 0).apply {
+    private val server = HttpServer.create(InetSocketAddress(loopback, 0), 0).apply {
         createContext("/", handler)
         start()
     }
 
-    private val storage = HttpFileStorage("http://${loopback.hostAddress}:$port")
+    private val storage = HttpFileStorage("http://${loopback.hostAddress}:${server.address.port}")
 
     override suspend fun afterEach(testCase: TestCase, result: TestResult) {
         handler.requests.clear()

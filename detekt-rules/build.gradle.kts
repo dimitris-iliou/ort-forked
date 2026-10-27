@@ -31,20 +31,11 @@ dependencies {
     compileOnly(libs.detekt.api)
     compileOnly(libs.detekt.psiUtils)
 
-    testRuntimeOnly(libs.detekt.psiUtils)
-
-    testImplementation(projects.utils.testUtils)
-
+    testImplementation(projects.utils.commonUtils)
     testImplementation(libs.detekt.api)
     testImplementation(libs.detekt.test)
-}
 
-configurations.all {
-    resolutionStrategy.dependencySubstitution {
-        substitute(project(":utils:test-utils"))
-            .using(project(":utils:common-utils"))
-            .because("detekt 1.23.0 triggers an issue with logging in org.apache.sshd on Linux")
-    }
+    testRuntimeOnly(libs.detekt.psiUtils)
 }
 
 // A provider to get a StyledTextOutputFactory via dependency injection.

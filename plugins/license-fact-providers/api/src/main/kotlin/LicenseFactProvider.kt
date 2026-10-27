@@ -19,18 +19,83 @@
 
 package org.ossreviewtoolkit.plugins.licensefactproviders.api
 
+import org.apache.logging.log4j.kotlin.logger
+
+import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.plugins.api.Plugin
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxSingleLicenseExpression
 
 /** A provider for license facts. */
 abstract class LicenseFactProvider : Plugin {
-    /** Return the [LicenseText] for the given [licenseId], or `null` if no valid text is available. */
-    abstract fun getLicenseText(licenseId: String): LicenseText?
+    /** Return `true´ if this provider has a license text for the given [licenseOrExceptionId]. */
+    abstract fun hasLicenseText(licenseOrExceptionId: String): Boolean
 
-    /** Return a non-blank license text for the given [licenseId], or `null` if no valid text is available. */
+    /** Return a [LicenseText] for the given [licenseOrExceptionId], or `null` if no valid text is available. */
+    abstract fun getLicenseText(licenseOrExceptionId: String): LicenseText?
+
+    /**
+     * Return `true´ if this provider has an id-specific license text for the given [singleLicenseExpression] and [id].
+     */
+    open fun hasLicenseTextsForId(singleLicenseExpression: String, id: Identifier): Boolean =
+        getLicenseTextsForId(singleLicenseExpression, id).isNotEmpty()
+
+    /**
+     * Return all id-specific [LicenseText]s for the given [singleLicenseExpression] and [id], or an empty set if no
+     * such text is available.
+     */
+    open fun getLicenseTextsForId(singleLicenseExpression: String, id: Identifier): Set<LicenseText> = emptySet()
+
+    /**
+     * Return `true` if any id-specific [LicenseText]s for the given [singleLicenseExpression] and [id], or if a
+     * non-id-specific license text for [singleLicenseExpression] is available, or `false` otherwise.
+     */
+    fun hasLicenseText(singleLicenseExpression: String, id: Identifier): Boolean {
+        if (hasLicenseTextsForId(singleLicenseExpression, id)) return true
+
+        val spdxExpression = runCatching { SpdxSingleLicenseExpression.parse(singleLicenseExpression) }.getOrElse {
+            logger.info { "Could not parse '$singleLicenseExpression' as a single license expression." }
+            return false
+        }
+
+        return listOfNotNull(spdxExpression.simpleLicense(), spdxExpression.exception()).all { hasLicenseText(it) }
+    }
+
+    /**
+     * Return an id-specific [LicenseText] for the given [singleLicenseExpression] and [id] if available, or the
+     * non-id-specific license text for [singleLicenseExpression], or `null` if no such text is available.
+     */
+    fun getLicenseTexts(singleLicenseExpression: String, id: Identifier): Set<LicenseText> =
+        getLicenseTextsForId(singleLicenseExpression, id).ifEmpty {
+            val spdxExpression = runCatching {
+                SpdxSingleLicenseExpression.parse(singleLicenseExpression)
+            }.getOrElse {
+                logger.info { "Could not parse '$singleLicenseExpression' as a single license expression." }
+                return emptySet()
+            }
+
+            listOfNotNull(spdxExpression.simpleLicense(), spdxExpression.exception())
+                .map { getLicenseText(it) ?: return emptySet() }
+                .joinToString("\n") { it.text }
+                .let { setOf(LicenseText(it)) }
+        }
+
+    /**
+     * Return a non-blank license text for the given [licenseOrExceptionId], or `null` if no valid text is available.
+     */
     @Deprecated("Java-only API", level = DeprecationLevel.HIDDEN)
     @JvmName("getLicenseText")
-    fun getNonBlankLicenseText(licenseId: String): String? = getLicenseText(licenseId)?.text
+    fun getNonBlankLicenseText(licenseOrExceptionId: String): String? = getLicenseText(licenseOrExceptionId)?.text
 
-    /** Return `true´ if this provider has a license text for the given [licenseId]. */
-    abstract fun hasLicenseText(licenseId: String): Boolean
+    @JvmName("getLicenseTextsStringForId")
+    fun getNonBlankLicenseTextsForId(singleLicenseExpression: String, id: Identifier): Set<String> =
+        getLicenseTextsForId(singleLicenseExpression, id).mapTo(mutableSetOf()) { it.text }
+
+    /**
+     * Return all non-blank id-specific [LicenseText] for the given [singleLicenseExpression] and [id] if available, or
+     * the non-id-specific license text for [singleLicenseExpression], or an empty set if no such text is available.
+     */
+    @Deprecated("Java-only API", level = DeprecationLevel.HIDDEN)
+    @JvmName("getLicenseTextsString")
+    fun getNonBlankLicenseTexts(singleLicenseExpression: String, id: Identifier): Set<String> =
+        getLicenseTexts(singleLicenseExpression, id).mapTo(mutableSetOf()) { it.text }
 }

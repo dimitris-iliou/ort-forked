@@ -29,11 +29,10 @@ dependencies {
     api(projects.downloader)
     api(projects.model)
 
+    implementation(projects.utils.authenticationUtils)
     implementation(projects.utils.commonUtils)
     implementation(projects.utils.ortUtils)
-
     implementation(libs.jgit)
-    implementation(libs.semver4j)
 
     implementation(libs.jgit.ssh.apache) {
         exclude(group = "org.apache.sshd", module = "sshd-sftp")
@@ -42,8 +41,7 @@ dependencies {
 
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.kotlinx.serialization.xml)
-
-    ksp(projects.downloader)
+    implementation(libs.semver4j)
 
     runtimeOnly(libs.jgit.ssh.apache.agent) {
         exclude(group = "org.apache.sshd", module = "sshd-sftp")
@@ -51,4 +49,6 @@ dependencies {
     }
 
     testImplementation(libs.mockk)
+
+    ksp(projects.downloader)
 }

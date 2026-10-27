@@ -61,7 +61,7 @@ import org.ossreviewtoolkit.utils.ort.runBlocking
 
 @OrtPlugin(
     displayName = "Upload Curations",
-    description = "Upload ORT package curations to ClearlyDefined.",
+    summary = "Upload ORT package curations to ClearlyDefined.",
     factory = OrtCommandFactory::class
 )
 class UploadCurationsCommand(
@@ -102,7 +102,9 @@ class UploadCurationsCommand(
         val definitions = runBlocking { service.getDefinitionsChunked(curationsToCoordinates.values) }
 
         val curationsByHarvestStatus = curations.groupBy { curation ->
-            definitions[curationsToCoordinates[curation]]?.getHarvestStatus() ?: logger.warn {
+            definitions[curationsToCoordinates[curation]]?.map { defined ->
+                defined.getHarvestStatus()
+            } ?: logger.warn {
                 "No definition data available for package '${curation.id.toCoordinates()}', cannot request a harvest " +
                     "or upload curations for it."
             }
@@ -150,7 +152,7 @@ class UploadCurationsCommand(
 
         if (uploadedCurationsCount != count) {
             echo(Theme.Default.danger("At least one curation failed to be uploaded."))
-            throw ProgramResult(2)
+            throw ProgramResult(STATUS_CODE_FAILURE)
         }
     }
 }
@@ -161,6 +163,7 @@ private fun PackageCuration.toContributionPatch(): ContributionPatch? {
     // ClearlyDefined to use. So simply construct an empty Package and rely on the default Provider per ComponentType.
     val pkg = Package.EMPTY.copy(id = id)
 
+    // TODO: Find out how to handle VCS curations without a revision.
     val sourceLocation = pkg.toClearlyDefinedSourceLocation() ?: return null
     val coordinates = sourceLocation.toCoordinates()
 

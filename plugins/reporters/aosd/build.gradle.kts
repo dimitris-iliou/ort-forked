@@ -26,20 +26,17 @@ plugins {
 }
 
 dependencies {
-    api(projects.model)
     api(projects.reporter)
 
-    ksp(projects.reporter)
-
-    implementation(projects.utils.spdxUtils)
-
-    implementation(libs.bundles.ks3)
+    implementation(projects.model)
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.ks3.standard)
 
+    funTestImplementation(testFixtures(projects.reporter))
     funTestImplementation(projects.plugins.licenseFactProviders.spdxLicenseFactProvider)
     funTestImplementation(projects.utils.testUtils)
-    funTestImplementation(testFixtures(projects.reporter))
-
     funTestImplementation(libs.kotest.assertions.json)
+
+    ksp(projects.reporter)
 }

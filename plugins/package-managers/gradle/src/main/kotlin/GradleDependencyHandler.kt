@@ -19,7 +19,7 @@
 
 package org.ossreviewtoolkit.plugins.packagemanagers.gradle
 
-import OrtDependency
+import LegacyOrtComponent
 
 import org.apache.maven.project.ProjectBuildingException
 
@@ -34,8 +34,6 @@ import org.ossreviewtoolkit.model.PackageLinkage
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.utils.DependencyHandler
-import org.ossreviewtoolkit.plugins.packagemanagers.gradlemodel.getIdentifierType
-import org.ossreviewtoolkit.plugins.packagemanagers.gradlemodel.isProjectDependency
 import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.MavenSupport
 import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.identifier
 import org.ossreviewtoolkit.utils.common.collectMessages
@@ -50,7 +48,7 @@ internal class GradleDependencyHandler(
 
     /** The helper object to resolve packages via Maven. */
     private val maven: MavenSupport
-) : DependencyHandler<OrtDependency> {
+) : DependencyHandler<LegacyOrtComponent> {
     /**
      * A list with repositories to use when resolving packages. This list must be set before using this handler for
      * constructing the dependency graph of a project. As different projects may use different repositories, this
@@ -58,12 +56,14 @@ internal class GradleDependencyHandler(
      */
     var repositories = emptyList<RemoteRepository>()
 
-    override fun identifierFor(dependency: OrtDependency): Identifier =
-        with(dependency) { Identifier(getIdentifierType(projectType), groupId, artifactId, version) }
+    override fun identifierFor(dependency: LegacyOrtComponent): Identifier =
+        with(dependency.componentId) {
+            Identifier(dependency.getIdentifierType(projectType), groupId, artifactId, version)
+        }
 
-    override fun dependenciesFor(dependency: OrtDependency): List<OrtDependency> = dependency.dependencies
+    override fun dependenciesFor(dependency: LegacyOrtComponent): List<LegacyOrtComponent> = dependency.dependencies
 
-    override fun issuesFor(dependency: OrtDependency): List<Issue> =
+    override fun issuesFor(dependency: LegacyOrtComponent): List<Issue> =
         listOfNotNull(
             dependency.error?.let {
                 createAndLogIssue(
@@ -82,16 +82,16 @@ internal class GradleDependencyHandler(
             }
         )
 
-    override fun linkageFor(dependency: OrtDependency): PackageLinkage =
+    override fun linkageFor(dependency: LegacyOrtComponent): PackageLinkage =
         if (dependency.isProjectDependency) PackageLinkage.PROJECT_DYNAMIC else PackageLinkage.DYNAMIC
 
-    override fun createPackage(dependency: OrtDependency, issues: MutableCollection<Issue>): Package? {
+    override fun createPackage(dependency: LegacyOrtComponent, issues: MutableCollection<Issue>): Package? {
         // Only look for a package if there was no error resolving the dependency and it is no project dependency.
         if (dependency.error != null || dependency.isProjectDependency) return null
 
         val artifact = DefaultArtifact(
-            dependency.groupId, dependency.artifactId, dependency.classifier,
-            dependency.extension, dependency.version
+            dependency.componentId.groupId, dependency.componentId.artifactId, dependency.classifier,
+            dependency.extension, dependency.componentId.version
         )
 
         return runCatching {

@@ -40,6 +40,7 @@ import org.ossreviewtoolkit.model.PackageReference
 import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.RemoteArtifact
 import org.ossreviewtoolkit.model.Repository
+import org.ossreviewtoolkit.model.ResolvedConfiguration
 import org.ossreviewtoolkit.model.ScanResult
 import org.ossreviewtoolkit.model.ScanSummary
 import org.ossreviewtoolkit.model.ScannerDetails
@@ -60,8 +61,8 @@ import org.ossreviewtoolkit.model.config.ScopeExcludeReason
 import org.ossreviewtoolkit.model.vulnerabilities.Vulnerability
 import org.ossreviewtoolkit.model.vulnerabilities.VulnerabilityReference
 import org.ossreviewtoolkit.utils.ort.Environment
-import org.ossreviewtoolkit.utils.spdx.SpdxLicenseChoice
-import org.ossreviewtoolkit.utils.spdx.toSpdx
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxLicenseChoice
+import org.ossreviewtoolkit.utils.spdxexpression.toSpdx
 import org.ossreviewtoolkit.utils.test.scannerRunOf
 
 // TODO: Create a way to reduce the code required to prepare an OrtResult for testing.
@@ -98,6 +99,21 @@ val ORT_RESULT = OrtResult(
                             )
                         )
 
+                    )
+                )
+            )
+        )
+    ),
+    resolvedConfiguration = ResolvedConfiguration(
+        licenseChoices = LicenseChoices(
+            packageLicenseChoices = listOf(
+                PackageLicenseChoice(
+                    packageId = Identifier("NPM:@ort:license-file-and-additional-licenses:1.0"),
+                    licenseChoices = listOf(
+                        SpdxLicenseChoice(
+                            given = "Apache-2.0 OR BSD-3-Clause".toSpdx(),
+                            choice = "BSD-3-Clause".toSpdx()
+                        )
                     )
                 )
             )
@@ -443,56 +459,35 @@ val ORT_RESULT = OrtResult(
     )
 )
 
-private val VULNERABILITY = Vulnerability(
-    id = "CVE-2021-1234",
-    summary = "A vulnerability summary",
-    description = "A vulnerability description",
-    references = listOf(
-        VulnerabilityReference(URI("https://cves.example.org/cve1"), "CVSSv2", "MEDIUM", 6.0f, null)
-    )
-)
-
-private val ADVISOR_WITH_VULNERABILITIES = AdvisorRun(
-    startTime = Instant.now(),
-    endTime = Instant.now(),
-    environment = Environment(),
-    config = AdvisorConfiguration(),
-    results = mapOf(
-        Identifier("NPM:@ort:declared-license:1.0") to listOf(
-            AdvisorResult(
-                advisor = AdvisorDetails("VulnerableCode"),
-                summary = AdvisorSummary(Instant.now(), Instant.now()),
-                vulnerabilities = listOf(VULNERABILITY)
-            )
-        )
-    )
-)
-
-private val SCANNER_WITH_ILLEGAL_COPYRIGHTS = scannerRunOf(
-    Identifier("NPM:@ort:no-license-file:1.0") to listOf(
-        ScanResult(
-            provenance = UnknownProvenance,
-            scanner = ScannerDetails(name = "scanner", version = "1.0", configuration = ""),
-            summary = ScanSummary.EMPTY.copy(
-                licenseFindings = setOf(
-                    LicenseFinding(
-                        license = "MIT",
-                        location = TextLocation("file", 1)
-                    )
-                ),
-                copyrightFindings = setOf(
-                    CopyrightFinding(
-                        statement = "Portions created by the Initial Developer are Copyright (c) 2002 the Initial " +
-                            "Developer, holder is Tim Hudson (tjh@cryptsoft.com), Objc, (c) Objv, " +
-                            "\u0002 \u0002 \u0001A\u0002\u0002\u0001o\u0002\u0012 AB, Copyright (c)",
-                        location = TextLocation("file", 1)
+val ORT_RESULT_WITH_VULNERABILITIES = ORT_RESULT.copy(
+    advisor = AdvisorRun(
+        startTime = Instant.now(),
+        endTime = Instant.now(),
+        environment = Environment(),
+        config = AdvisorConfiguration(),
+        results = mapOf(
+            Identifier("NPM:@ort:declared-license:1.0") to listOf(
+                AdvisorResult(
+                    advisor = AdvisorDetails("VulnerableCode"),
+                    summary = AdvisorSummary(Instant.now(), Instant.now()),
+                    vulnerabilities = listOf(
+                        Vulnerability(
+                            id = "CVE-2021-1234",
+                            summary = "A vulnerability summary",
+                            description = "A vulnerability description",
+                            references = listOf(
+                                VulnerabilityReference(
+                                    url = URI("https://cves.example.org/cve1"),
+                                    scoringSystem = "CVSSv2",
+                                    severity = "MEDIUM",
+                                    score = 6.0f,
+                                    vector = null
+                                )
+                            )
+                        )
                     )
                 )
             )
         )
     )
 )
-
-val ORT_RESULT_WITH_VULNERABILITIES = ORT_RESULT.copy(advisor = ADVISOR_WITH_VULNERABILITIES)
-
-val ORT_RESULT_WITH_ILLEGAL_COPYRIGHTS = ORT_RESULT.copy(scanner = SCANNER_WITH_ILLEGAL_COPYRIGHTS)

@@ -17,7 +17,7 @@
  * License-Filename: LICENSE
  */
 
-package org.ossreviewtoolkit.helper.commands
+package org.ossreviewtoolkit.clihelper.commands
 
 import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.parameters.options.convert
@@ -31,14 +31,14 @@ import com.github.ajalt.clikt.parameters.types.file
 
 import java.io.File
 
-import org.ossreviewtoolkit.helper.utils.OrtHelperCommand
-import org.ossreviewtoolkit.helper.utils.downloadSources
-import org.ossreviewtoolkit.helper.utils.getLicenseFindingsById
-import org.ossreviewtoolkit.helper.utils.getScannedProvenance
-import org.ossreviewtoolkit.helper.utils.getSourceCodeOrigin
-import org.ossreviewtoolkit.helper.utils.getViolatedRulesByLicense
-import org.ossreviewtoolkit.helper.utils.readOrtResult
-import org.ossreviewtoolkit.helper.utils.replaceConfig
+import org.ossreviewtoolkit.clihelper.utils.OrtHelperCommand
+import org.ossreviewtoolkit.clihelper.utils.downloadSources
+import org.ossreviewtoolkit.clihelper.utils.getLicenseFindingsById
+import org.ossreviewtoolkit.clihelper.utils.getScannedProvenance
+import org.ossreviewtoolkit.clihelper.utils.getSourceCodeOrigin
+import org.ossreviewtoolkit.clihelper.utils.getViolatedRulesByLicense
+import org.ossreviewtoolkit.clihelper.utils.readOrtResult
+import org.ossreviewtoolkit.clihelper.utils.replaceConfig
 import org.ossreviewtoolkit.model.ArtifactProvenance
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.Provenance
@@ -48,7 +48,7 @@ import org.ossreviewtoolkit.model.TextLocation
 import org.ossreviewtoolkit.plugins.packageconfigurationproviders.dir.DirPackageConfigurationProvider
 import org.ossreviewtoolkit.utils.common.FileMatcher
 import org.ossreviewtoolkit.utils.common.expandTilde
-import org.ossreviewtoolkit.utils.spdx.SpdxExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxExpression
 
 internal class ListLicensesCommand : OrtHelperCommand(
     help = "Lists the license findings for a given package as distinct text locations."

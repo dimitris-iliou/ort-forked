@@ -23,6 +23,7 @@ import java.io.File
 import java.io.IOException
 import java.lang.invoke.MethodHandles
 import java.net.HttpURLConnection
+import java.net.PasswordAuthentication
 import java.net.URI
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
@@ -50,6 +51,9 @@ import okio.sink
 import org.apache.logging.log4j.kotlin.logger
 import org.apache.logging.log4j.kotlin.loggerOf
 
+import org.ossreviewtoolkit.utils.authentication.OrtAuthenticator
+import org.ossreviewtoolkit.utils.authentication.OrtProxySelector
+import org.ossreviewtoolkit.utils.authentication.requestPasswordAuthentication
 import org.ossreviewtoolkit.utils.common.ArchiveType
 import org.ossreviewtoolkit.utils.common.collectMessages
 import org.ossreviewtoolkit.utils.common.div
@@ -98,6 +102,7 @@ private const val CACHE_DIRECTORY = "cache/http"
 private val MAX_CACHE_SIZE_IN_BYTES = 1.gibibytes
 private const val READ_TIMEOUT_IN_SECONDS = 30L
 private const val AUTHORIZATION_HEADER = "Authorization"
+private const val BEARER_AUTH_SCHEME = "Bearer"
 
 /**
  * The default [OkHttpClient] for ORT to use.
@@ -137,13 +142,11 @@ val okHttpClient: OkHttpClient by lazy {
                     val request = chain.request()
 
                     if (request.header(AUTHORIZATION_HEADER) == null) {
-                        val credentials = requestPasswordAuthentication(request.url.toUri())
-                        if (credentials != null) {
+                        val requestUri = request.url.toUri()
+
+                        requestPasswordAuthentication(requestUri).getHeaderValue()?.also {
                             val authenticatedRequest = request.newBuilder()
-                                .header(
-                                    AUTHORIZATION_HEADER,
-                                    Credentials.basic(credentials.userName, String(credentials.password))
-                                )
+                                .header(AUTHORIZATION_HEADER, it)
                                 .build()
 
                             return@addInterceptor chain.proceed(authenticatedRequest)
@@ -163,15 +166,15 @@ val okHttpClient: OkHttpClient by lazy {
 }
 
 /**
- * Add a request interceptor that injects basic authorization using the [username] and [password] into the client
- * builder.
+ * Build the value for the "Authorization" header from this [PasswordAuthentication], if any. If the [user name]
+ * [PasswordAuthentication.getUserName] is "bearer", the password is treated as a Bearer token. Otherwise, the
+ * credentials are used for HTTP Basic authentication.
  */
-fun OkHttpClient.Builder.addBasicAuthorization(username: String, password: String): OkHttpClient.Builder =
-    addInterceptor { chain ->
-        val requestBuilder = chain.request().newBuilder()
-            .header("Authorization", Credentials.basic(username, password))
-
-        chain.proceed(requestBuilder.build())
+private fun PasswordAuthentication?.getHeaderValue(): String? =
+    when {
+        this == null -> null
+        userName == "bearer" -> "$BEARER_AUTH_SCHEME ${String(password)}"
+        else -> Credentials.basic(userName, String(password))
     }
 
 /**
@@ -336,15 +339,10 @@ internal class JavaNetAuthenticatorWrapper(
         if (response.request.header(AUTHORIZATION_HEADER) != null) return null
 
         val requestUri = response.request.url.toUri()
-        return requestPasswordAuthentication(requestUri)?.let { authentication ->
+        return requestPasswordAuthentication(requestUri)?.getHeaderValue()?.let {
             response.request.newBuilder()
-                .header(
-                    AUTHORIZATION_HEADER,
-                    Credentials.basic(
-                        authentication.userName,
-                        String(authentication.password)
-                    )
-                ).build()
+                .header(AUTHORIZATION_HEADER, it)
+                .build()
         }
     }
 }

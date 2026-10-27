@@ -17,7 +17,7 @@
  * License-Filename: LICENSE
  */
 
-package org.ossreviewtoolkit.helper.commands.classifications
+package org.ossreviewtoolkit.clihelper.commands.classifications
 
 import com.fasterxml.jackson.module.kotlin.readValue
 
@@ -32,7 +32,7 @@ import java.net.URI
 
 import org.apache.logging.log4j.kotlin.logger
 
-import org.ossreviewtoolkit.helper.utils.OrtHelperCommand
+import org.ossreviewtoolkit.clihelper.utils.OrtHelperCommand
 import org.ossreviewtoolkit.model.jsonMapper
 import org.ossreviewtoolkit.model.licenses.LicenseCategorization
 import org.ossreviewtoolkit.model.licenses.LicenseCategory
@@ -40,7 +40,7 @@ import org.ossreviewtoolkit.model.licenses.LicenseClassifications
 import org.ossreviewtoolkit.model.toYaml
 import org.ossreviewtoolkit.model.yamlMapper
 import org.ossreviewtoolkit.utils.common.expandTilde
-import org.ossreviewtoolkit.utils.spdx.SpdxSingleLicenseExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxSingleLicenseExpression
 
 internal class ImportCommand : OrtHelperCommand(
     help = "Import license classifications from supported providers to ORT format."

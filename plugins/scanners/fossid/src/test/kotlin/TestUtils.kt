@@ -93,7 +93,7 @@ import org.ossreviewtoolkit.plugins.scanners.fossid.events.CloneRepositoryHandle
 import org.ossreviewtoolkit.plugins.scanners.fossid.events.UploadArchiveHandler
 import org.ossreviewtoolkit.scanner.ScanContext
 import org.ossreviewtoolkit.scanner.provenance.NestedProvenance
-import org.ossreviewtoolkit.utils.spdx.SpdxExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxExpression
 
 /** A test user ID. */
 internal const val USER = "fossIdTestUser"
@@ -205,8 +205,8 @@ internal fun createVersionControlSystemMock(): VersionControlSystem {
     }
 
     val vcs = mockk<VersionControlSystem> {
-        every { getDefaultBranchName(any()) } returns REVISION_MASTER
-        every { initWorkingTree(any(), any()) } returns wt
+        every { getDefaultBranchName(any()) } returns Result.success(REVISION_MASTER)
+        every { initWorkingTree(any(), any()) } returns Result.success(wt)
         every { updateWorkingTree(any(), any()) } returns Result.success(REVISION_MASTER)
     }
 

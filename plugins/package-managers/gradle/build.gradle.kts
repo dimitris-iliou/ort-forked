@@ -27,24 +27,19 @@ dependencies {
     api(projects.model)
 
     implementation(projects.downloader)
-    implementation(projects.plugins.packageManagers.gradleModel)
     implementation(projects.plugins.packageManagers.mavenPackageManager)
     implementation(projects.utils.commonUtils)
     implementation(projects.utils.ortUtils)
-
     implementation("org.gradle:gradle-tooling-api:${gradle.gradleVersion}")
     implementation(libs.maven.core)
     implementation(libs.maven.resolver.api)
 
-    ksp(projects.analyzer)
-
-    funTestImplementation(projects.plugins.versionControlSystems.gitVersionControlSystem)
-    funTestImplementation(projects.utils.testUtils)
     funTestImplementation(testFixtures(projects.analyzer))
+    funTestImplementation(projects.utils.testUtils)
 
-    funTestImplementation(libs.kotest.assertions.table)
-
-    testImplementation(projects.utils.spdxUtils)
+    funTestRuntimeOnly(projects.plugins.versionControlSystems.gitVersionControlSystem)
 
     testImplementation(libs.mockk)
+
+    ksp(projects.analyzer)
 }

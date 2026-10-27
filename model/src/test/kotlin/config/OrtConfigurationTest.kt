@@ -40,7 +40,6 @@ import java.io.File
 
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.SourceCodeOrigin
-import org.ossreviewtoolkit.plugins.api.PluginConfig
 import org.ossreviewtoolkit.utils.common.EnvironmentVariableFilter
 import org.ossreviewtoolkit.utils.ort.ORT_REFERENCE_CONFIG_FILENAME
 
@@ -48,6 +47,7 @@ class OrtConfigurationTest : WordSpec({
     "OrtConfiguration" should {
         "be deserializable from YAML" {
             val refConfig = File("src/main/resources/$ORT_REFERENCE_CONFIG_FILENAME")
+
             val ortConfig = OrtConfiguration.load(file = refConfig)
 
             ortConfig.allowedProcessEnvironmentVariableNames should containExactlyInAnyOrder("PASSPORT", "USER_HOME")
@@ -60,17 +60,35 @@ class OrtConfigurationTest : WordSpec({
 
             ortConfig.forceOverwrite shouldBe true
 
-            ortConfig.licenseFactProviders should containExactlyEntries(
-                "spdx" to PluginConfig.EMPTY,
-                "scancode" to PluginConfig(mapOf("scanCodeLicenseTextDir" to "/path/to/scancode/license/text/dir")),
-                "defaultdir" to PluginConfig.EMPTY,
-                "dir" to PluginConfig(mapOf("licenseTextDir" to "/path/to/license/text/dir"))
+            ortConfig.licenseFactProviders should containExactly(
+                ProviderPluginConfiguration(type = "DefaultCustomLicenseTexts"),
+                ProviderPluginConfiguration(
+                    type = "CustomLicenseTexts",
+                    id = "local-custom-license-texts",
+                    options = mapOf("dir" to "/project-sources/.ort/custom-license-texts")
+                ),
+                ProviderPluginConfiguration(
+                    type = "CustomLicenseTexts",
+                    id = "global-custom-license-texts",
+                    options = mapOf("dir" to "/ort-config/custom-license-texts")
+                ),
+                ProviderPluginConfiguration(type = "DefaultLicenseTextCuration"),
+                ProviderPluginConfiguration(
+                    type = "LicenseTextCuration",
+                    options = mapOf("dir" to "/ort-config/license-text-curations")
+                ),
+                ProviderPluginConfiguration(type = "SPDX"),
+                ProviderPluginConfiguration(
+                    type = "ScanCode",
+                    options = mapOf("licenseDataDir" to "/path/to/scancode/license/data/dir")
+                )
             )
 
             with(ortConfig.licenseFilePatterns) {
-                licenseFilenames should containExactly("license*")
-                patentFilenames should containExactly("patents")
-                otherLicenseFilenames should containExactly("readme*")
+                licenseFilenames should containExactly("LICENSE*")
+                noticeFilenames should containExactly("NOTICE*")
+                patentFilenames should containExactly("PATENTS")
+                otherLicenseFilenames should containExactly("README*")
             }
 
             ortConfig.packageCurationProviders should containExactly(
@@ -260,6 +278,7 @@ class OrtConfigurationTest : WordSpec({
                         options should containExactlyEntries(
                             "apiUrl" to "https://api.osskb.org/",
                             "writeToStorage" to "true",
+                            "chosenSnippetModel" to "LICENSE_AND_COPYRIGHT_FINDING",
                             "enablePathObfuscation" to "false",
                             "minSnippetHits" to "5",
                             "minSnippetLines" to "3",
@@ -424,8 +443,8 @@ class OrtConfigurationTest : WordSpec({
             )
 
             val env = mapOf(
-                "ort.scanner.storages.postgres.connection.password" to "envPassword",
-                "ort.scanner.provenanceStorage.postgresStorage.connection.password" to "envPassword"
+                "ort_scanner_storages_postgres_connection_password" to "envPassword",
+                "ort_scanner_provenanceStorage_postgresStorage_connection_password" to "envPassword"
             )
 
             withEnvironment(env) {
@@ -531,10 +550,10 @@ class OrtConfigurationTest : WordSpec({
             val url = "url"
             val schema = "public"
             val env = mapOf(
-                "ort.scanner.storages.postgresStorage.connection.username" to user,
-                "ort.scanner.storages.postgresStorage.connection.url" to url,
-                "ort__scanner__storages__postgresStorage__connection__schema" to schema,
-                "ort__scanner__storages__postgresStorage__connection__password" to password
+                "ort_scanner_storages_postgresStorage_connection_username" to user,
+                "ort_scanner_storages_postgresStorage_connection_password" to password,
+                "ort_scanner_storages_postgresStorage_connection_url" to url,
+                "ort_scanner_storages_postgresStorage_connection_schema" to schema
             )
 
             withEnvironment(env) {

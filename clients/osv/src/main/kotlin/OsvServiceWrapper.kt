@@ -37,28 +37,48 @@ class OsvServiceWrapper(serverUrl: String? = null, httpClient: OkHttpClient? = n
     private val service = OsvService.create(serverUrl, httpClient)
 
     /**
-     * Return the vulnerability IDs for the respective package matched by the given [requests].
+     * Return the vulnerability IDs for the respective package matched by the given [requests], as one result per
+     * package in the same order as the requests.
      */
-    fun getVulnerabilityIdsForPackages(requests: List<VulnerabilitiesForPackageRequest>): Result<List<List<String>>> {
-        if (requests.isEmpty()) return Result.success(emptyList())
+    fun getVulnerabilityIdsForPackages(
+        requests: Collection<VulnerabilitiesForPackageRequest>
+    ): List<Result<List<String>>> {
+        if (requests.isEmpty()) return emptyList()
 
         @Suppress("ForbiddenMethodCall")
-        return runBlocking(Dispatchers.IO.limitedParallelism(20)) {
-            runCatching {
-                requests.chunked(OsvService.BATCH_REQUEST_MAX_SIZE).map { requestsChunk ->
-                    async {
-                        val batchRequest = VulnerabilitiesForPackageBatchRequest(requestsChunk)
+        val results = runBlocking(Dispatchers.IO.limitedParallelism(20)) {
+            requests.chunked(OsvService.BATCH_REQUEST_MAX_SIZE).map { chunk ->
+                async {
+                    val batchRequest = VulnerabilitiesForPackageBatchRequest(chunk)
+
+                    runCatching {
                         service.getVulnerabilityIdsForPackages(batchRequest)
-                    }
-                }.awaitAll()
-            }.map {
-                it.flatMap { batchResponse ->
-                    batchResponse.results.map { idList ->
-                        idList.vulnerabilities.mapTo(mutableListOf()) { it.id }
-                    }
+                    }.fold(
+                        onSuccess = { batchResponse ->
+                            // Unwrap a successful batch response to individual successful package responses.
+                            batchResponse.results.map { idList ->
+                                Result.success(idList.vulnerabilities.map { it.id })
+                            }
+                        },
+                        onFailure = {
+                            // Fall back to requesting individual packages of a failed chunk in parallel.
+                            chunk.map { request ->
+                                async {
+                                    runCatching {
+                                        val idList = service.getVulnerabilityIdsForPackage(request)
+                                        idList.vulnerabilities.map { it.id }
+                                    }.unwrapHttpException()
+                                }
+                            }.awaitAll()
+                        }
+                    )
                 }
-            }.handleHttpException()
-        }
+            }.awaitAll()
+        }.flatten()
+
+        check(requests.size == results.size)
+
+        return results
     }
 
     /**
@@ -68,18 +88,33 @@ class OsvServiceWrapper(serverUrl: String? = null, httpClient: OkHttpClient? = n
      * It's been considered to add a batch API in the future, see
      * https://github.com/google/osv.dev/issues/466#issuecomment-1163337495.
      */
-    fun getVulnerabilitiesForIds(ids: Set<String>): Result<List<Vulnerability>> =
+    fun getVulnerabilitiesForIds(ids: Collection<String>): Result<List<Vulnerability>> {
+        if (ids.isEmpty()) return Result.success(emptyList())
+
         @Suppress("ForbiddenMethodCall")
-        runBlocking(Dispatchers.IO.limitedParallelism(20)) {
-            runCatching {
-                ids.map { id ->
-                    async { service.getVulnerabilityForId(id) }
-                }.awaitAll()
-            }.handleHttpException()
+        val vulnerabilityResults = runBlocking(Dispatchers.IO.limitedParallelism(20)) {
+            ids.map { id ->
+                async {
+                    runCatching { service.getVulnerabilityForId(id) }.unwrapHttpException()
+                }
+            }.awaitAll()
         }
+
+        check(ids.size == vulnerabilityResults.size)
+
+        // Combine the individual results of requests into one encapsulating result that is a failure if any of the
+        // requests failed.
+        return runCatching {
+            vulnerabilityResults.map { it.getOrThrow() }
+        }
+    }
 }
 
-private fun <T> Result<T>.handleHttpException() =
+/**
+ * Get the inner code and message of an [HttpException], if any, as part of the [Result], and rethrow them as a
+ * streamlined message of an [IOException].
+ */
+private fun <T> Result<T>.unwrapHttpException() =
     recoverCatching { e ->
         if (e is HttpException) {
             val response = e.response()

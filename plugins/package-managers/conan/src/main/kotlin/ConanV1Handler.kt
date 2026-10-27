@@ -42,9 +42,18 @@ import org.ossreviewtoolkit.utils.ort.createOrtTempDir
  * commands or call common functions.
  */
 internal class ConanV1Handler(private val conan: Conan) : ConanVersionHandler {
-    override fun getConanHome(): File = Os.userHomeDirectory.resolve(".conan")
+    override fun getConanHome(): File = Os.env["CONAN_HOME"]?.let { File(it) } ?: Os.userHomeDirectory.resolve(".conan")
 
-    override fun getConanStoragePath(): File = getConanHome().resolve("data")
+    /**
+     * This is where Conan caches downloaded packages [1]. Note that the package cache is not concurrent, and its layout
+     * does not support packages from different remotes that are named (and versioned) the same.
+     *
+     * TODO: Consider using the experimental (and by default disabled) download cache [2] to lift these limitations.
+     *
+     * [1]: https://docs.conan.io/en/latest/reference/config_files/conan.conf.html#storage
+     * [2]: https://docs.conan.io/en/latest/configuration/download_cache.html#download-cache
+     */
+    override fun getConanPackageStoragePath(): File = getConanHome().resolve("data")
 
     override fun process(definitionFile: File, lockfileName: String?, conanProfile: File?): HandlerResults {
         val workingDir = definitionFile.parentFile
@@ -142,7 +151,7 @@ internal class ConanV1Handler(private val conan: Conan) : ConanVersionHandler {
         val homepageUrl = pkgInfo.homepage.orEmpty()
 
         val id = parsePackageId(pkgInfo, workingDir)
-        val conanData = conan.readConanData(id, conan.conanStoragePath)
+        val conanData = conan.readConanData(id, getConanPackageStoragePath())
 
         return Package(
             id = id,

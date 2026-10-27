@@ -25,6 +25,7 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize
 import org.ossreviewtoolkit.model.Issue
 import org.ossreviewtoolkit.model.OrtResult
 import org.ossreviewtoolkit.model.Package
+import org.ossreviewtoolkit.model.PackageCuration
 import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.RuleViolation
 import org.ossreviewtoolkit.model.Scope
@@ -32,6 +33,7 @@ import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.config.IssueResolution
 import org.ossreviewtoolkit.model.config.LicenseChoices
 import org.ossreviewtoolkit.model.config.LicenseFindingCuration
+import org.ossreviewtoolkit.model.config.PackageConfiguration
 import org.ossreviewtoolkit.model.config.PathExclude
 import org.ossreviewtoolkit.model.config.RuleViolationResolution
 import org.ossreviewtoolkit.model.config.ScopeExclude
@@ -47,6 +49,11 @@ data class Statistics(
      * Statistics for the repository configuration.
      */
     val repositoryConfiguration: RepositoryConfigurationStatistics,
+
+    /**
+     * Statistics for the resolved configuration.
+     */
+    val resolvedConfiguration: ResolvedConfigurationStatistics,
 
     /**
      * The number of [Issue]s by severity which are not resolved and not excluded.
@@ -197,6 +204,51 @@ data class RepositoryConfigurationStatistics(
      * The number of [LicenseFindingCuration]s.
      */
     val licenseFindingCurations: Int,
+
+    /**
+     * The number of [PackageConfiguration]s.
+     */
+    val packageConfigurations: Int,
+
+    /**
+     * The number of [PackageCuration]s.
+     */
+    val packageCurations: Int,
+
+    /**
+     * The number of [IssueResolution]s.
+     */
+    val issueResolutions: Int,
+
+    /**
+     * The number of [RuleViolationResolution]s.
+     */
+    val ruleViolationResolutions: Int,
+
+    /**
+     * The number of [VulnerabilityResolution]s.
+     */
+    val vulnerabilityResolutions: Int
+)
+
+/**
+ * A class containing statistics about the resolved configuration
+ */
+data class ResolvedConfigurationStatistics(
+    /**
+     * The number of [LicenseChoices].
+     */
+    val licenseChoices: Int,
+
+    /**
+     * The number of [PackageConfiguration]s.
+     */
+    val packageConfigurations: Int,
+
+    /**
+     * The number of [PackageCuration]s.
+     */
+    val packageCurations: Int,
 
     /**
      * The number of [IssueResolution]s.

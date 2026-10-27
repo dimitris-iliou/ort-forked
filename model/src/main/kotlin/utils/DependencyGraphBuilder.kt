@@ -94,6 +94,9 @@ private sealed interface DependencyGraphSearchResult {
  * dependencies [D] used by specific package managers. To make this class compatible with such a dependency
  * representation, the package manager implementation has to provide a [DependencyHandler]. Via this handler, all the
  * relevant information about dependencies can be extracted.
+ *
+ * Instances of this class are not thread-safe. They are intended to be used to construct a single [DependencyGraph]
+ * from a package manager implementation running in a single thread.
  */
 class DependencyGraphBuilder<D>(
     /**
@@ -136,7 +139,14 @@ class DependencyGraphBuilder<D>(
      * A map storing all [DependencyReference]s that have been created to represent the dependencies of type D known to
      * this builder.
      */
-    private val references = mutableMapOf<DependencyReference, D>()
+    private val referenceToDependencyMap = mutableMapOf<DependencyReference, D>()
+
+    /**
+     * A map serving a cache for search operations in the dependency graph. The map assigns dependency objects to the
+     * references that represent them. This can significantly speed up the construction of the dependency graph when
+     * complex subgraphs are involved that need to be looked up again and again.
+     */
+    private val dependencyToReferenceMap = mutableMapOf<D, DependencyReference>()
 
     /**
      * Add the given [dependency] for the scope with the given [scopeName] to this builder. This function needs to be
@@ -175,7 +185,7 @@ class DependencyGraphBuilder<D>(
         if (checkReferences) checkReferences()
 
         val (sortedDependencyIds, indexMapping) = constructSortedDependencyIds(dependencyIds)
-        val (nodes, edges) = references.keys.toGraph(indexMapping)
+        val (nodes, edges) = referenceToDependencyMap.keys.toGraph(indexMapping)
 
         return DependencyGraph(
             sortedDependencyIds,
@@ -193,9 +203,10 @@ class DependencyGraphBuilder<D>(
                 danglingIds.joinToString(postfix = ".") { "'${it.toCoordinates()}'" }
         }
 
-        val packageReferencesKeysWithMultipleDistinctPackageReferences = references.keys.groupBy { it.key }.filter {
-            it.value.distinct().size > 1
-        }.keys
+        val packageReferencesKeysWithMultipleDistinctPackageReferences =
+            referenceToDependencyMap.keys.groupBy { it.key }.filter {
+                it.value.distinct().size > 1
+            }.keys
 
         require(packageReferencesKeysWithMultipleDistinctPackageReferences.isEmpty()) {
             "Found multiple distinct package references for each of the following package / fragment index tuples " +
@@ -238,7 +249,10 @@ class DependencyGraphBuilder<D>(
         val issues = dependencyHandler.issuesFor(dependency).toMutableList()
         val index = updateDependencyMappingAndPackages(id, dependency, issues)
 
-        val ref = when (val result = findDependencyInGraph(index, dependency)) {
+        val result = dependencyToReferenceMap[dependency]?.let { DependencyGraphSearchResult.Found(it) }
+            ?: findDependencyInGraph(index, dependency)
+
+        val ref = when (result) {
             is DependencyGraphSearchResult.Found -> result.ref
 
             is DependencyGraphSearchResult.NotFound -> {
@@ -310,7 +324,7 @@ class DependencyGraphBuilder<D>(
      * these have to be placed in separate fragments of the dependency graph.
      */
     private fun dependencyTreeEquals(ref: DependencyReference, dependency: D): Boolean {
-        val refDep = checkNotNull(references[ref]) {
+        val refDep = checkNotNull(referenceToDependencyMap[ref]) {
             "$ref is not known to this builder."
         }
 
@@ -383,7 +397,8 @@ class DependencyGraphBuilder<D>(
             issues = issues
         )
         fragmentMapping[index.root] = ref
-        references[ref] = dependency
+        referenceToDependencyMap[ref] = dependency
+        dependencyToReferenceMap[dependency] = ref
 
         if (ref.issues.isEmpty() && ref.linkage !in PackageLinkage.PROJECT_LINKAGE) {
             validPackageDependencies += id

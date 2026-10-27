@@ -41,7 +41,6 @@ import retrofit2.http.Path
 
 /**
  * An interface for the REST API of the Google Open Source Vulnerabilities (OSV) service, see https://osv.dev/.
- * The list of data sources is documented at https://google.github.io/osv.dev/data/#current-data-sources.
  */
 interface OsvService {
     companion object {
@@ -71,6 +70,16 @@ interface OsvService {
     }
 
     /**
+     * Get the identifiers of the vulnerabilities for the package matched by the given [request]. This corresponds to
+     * the [v1/query](https://google.github.io/osv.dev/post-v1-query/) endpoint, which is a per-package alternative to
+     * [getVulnerabilityIdsForPackages].
+     */
+    @POST("v1/query")
+    suspend fun getVulnerabilityIdsForPackage(
+        @Body request: VulnerabilitiesForPackageRequest
+    ): VulnerabilitiesForPackageBatchResponse.IdList
+
+    /**
      * Get the identifiers of the vulnerabilities for the packages matched by the respective given [request].
      * The amount of requests contained in the give [batch request][request] must not exceed [BATCH_REQUEST_MAX_SIZE].
      */
@@ -86,7 +95,7 @@ interface OsvService {
 
 /** See https://google.github.io/osv.dev/post-v1-query/#parameters. */
 @Serializable
-class VulnerabilitiesForPackageRequest(
+data class VulnerabilitiesForPackageRequest(
     /** The commit hash to query for. If specified, [version] should not be set. */
     val commit: String? = null,
 

@@ -25,6 +25,7 @@ import ch.qos.logback.classic.Logger
 import com.github.ajalt.clikt.completion.completionOption
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.Context
+import com.github.ajalt.clikt.core.PrintMessage
 import com.github.ajalt.clikt.core.context
 import com.github.ajalt.clikt.core.main
 import com.github.ajalt.clikt.core.subcommands
@@ -46,6 +47,8 @@ import com.github.ajalt.mordant.table.ColumnWidth
 import com.github.ajalt.mordant.table.grid
 import com.github.ajalt.mordant.terminal.Terminal
 
+import java.io.File
+
 import kotlin.system.exitProcess
 
 import org.ossreviewtoolkit.model.config.LicenseFilePatterns
@@ -61,10 +64,14 @@ import org.ossreviewtoolkit.utils.common.mebibytes
 import org.ossreviewtoolkit.utils.common.replaceCredentialsInUri
 import org.ossreviewtoolkit.utils.ort.Environment
 import org.ossreviewtoolkit.utils.ort.ORT_CONFIG_FILENAME
+import org.ossreviewtoolkit.utils.ort.ORT_DECLARED_LICENSE_MAPPING_FILENAME
 import org.ossreviewtoolkit.utils.ort.ORT_NAME
+import org.ossreviewtoolkit.utils.ort.ORT_SIMPLE_LICENSE_MAPPING_FILENAME
 import org.ossreviewtoolkit.utils.ort.OkHttpClientHelper
 import org.ossreviewtoolkit.utils.ort.ortConfigDirectory
 import org.ossreviewtoolkit.utils.ort.printStackTrace
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxDeclaredLicenseMapper
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxSimpleLicenseMapper
 
 import org.slf4j.LoggerFactory
 
@@ -142,11 +149,10 @@ class OrtMain : CliktCommand(ORT_NAME) {
     override fun helpEpilog(context: Context) = "$REQUIRED_OPTION_MARKER denotes required options."
 
     override fun run() {
-        // This is somewhat dirty: For logging, ORT uses the Log4j API (because of its nice Kotlin API), but Logback as
-        // the implementation (for its robustness). The former API does not provide a way to set the root log level,
-        // only the Log4j implementation does (via org.apache.logging.log4j.core.config.Configurator). However, the
-        // SLF4J API does provide a way to get the root logger and set its level. That is why ORT's CLI additionally
-        // depends on the SLF4J API, just to be able to set the root log level below.
+        // This is somewhat dirty: ORT uses Log4j as the logging API (because of its nice Kotlin API), but Logback as
+        // the implementation (for its robustness). The Log4j API does not provide a way to get the root logger.
+        // However, the SLF4J API does, and knowing it is Logback the root level can be set. That is why ORT's CLI
+        // additionally depends on the SLF4J API, just to be able to set the root log level.
         val rootLogger = LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME) as Logger
         rootLogger.level = logLevel
 
@@ -156,6 +162,10 @@ class OrtMain : CliktCommand(ORT_NAME) {
         // Make options available to subcommands and apply static configuration.
         val ortConfig = OrtConfiguration.load(args = configArguments, file = configFile)
         currentContext.findOrSetObject { ortConfig }
+
+        configureDeclaredLicenseMapper(ortConfig)
+        configureSimpleLicenseMapper(ortConfig)
+
         LicenseFilePatterns.configure(ortConfig.licenseFilePatterns)
 
         EnvironmentVariableFilter.reset(
@@ -220,3 +230,67 @@ class OrtMain : CliktCommand(ORT_NAME) {
             }
         }
 }
+
+private fun configureDeclaredLicenseMapper(ortConfig: OrtConfiguration) {
+    val customMappingFile = ortConfig.declaredLicenseMappingFile?.let { File(it) }
+        ?: ortConfigDirectory.resolve(ORT_DECLARED_LICENSE_MAPPING_FILENAME).takeIf { it.isFile }
+
+    val customMapping = customMappingFile?.readDeclaredLicenseMapping()
+
+    SpdxDeclaredLicenseMapper.configure(
+        buildMap {
+            if (ortConfig.enableRiskyLicenseMappings) {
+                putAll(SpdxDeclaredLicenseMapper.AMBIGUOUS_MAPPING)
+            }
+
+            putAll(SpdxDeclaredLicenseMapper.MAPPING)
+
+            // Put the custom mapping last to allow the user to override built-in entries.
+            if (customMapping != null) {
+                putAll(customMapping)
+            }
+        }
+    )
+}
+
+private fun File.readDeclaredLicenseMapping() =
+    runCatching {
+        SpdxDeclaredLicenseMapper.readMapping(this)
+    }.getOrElse { e ->
+        throw PrintMessage(
+            message = "Could not read the declared license mapping from '$absolutePath': ${e.stackTraceToString()}.",
+            statusCode = 1
+        )
+    }
+
+private fun configureSimpleLicenseMapper(ortConfig: OrtConfiguration) {
+    val customMappingFile = ortConfig.simpleLicenseMappingFile?.let { File(it) }
+        ?: ortConfigDirectory.resolve(ORT_SIMPLE_LICENSE_MAPPING_FILENAME).takeIf { it.isFile }
+
+    val customMapping = customMappingFile?.readSimpleLicenseMapping()
+
+    SpdxSimpleLicenseMapper.configure(
+        buildMap {
+            if (ortConfig.enableRiskyLicenseMappings) {
+                putAll(SpdxSimpleLicenseMapper.AMBIGUOUS_SIMPLE_MAPPING)
+            }
+
+            putAll(SpdxSimpleLicenseMapper.SIMPLE_MAPPING)
+            putAll(SpdxSimpleLicenseMapper.DEPRECATED_MAPPING)
+
+            if (customMapping != null) {
+                putAll(customMapping)
+            }
+        }
+    )
+}
+
+private fun File.readSimpleLicenseMapping() =
+    runCatching {
+        SpdxSimpleLicenseMapper.readMapping(this)
+    }.getOrElse { e ->
+        throw PrintMessage(
+            message = "Could not read the simple license mapping from '$absolutePath': ${e.stackTraceToString()}.",
+            statusCode = 1
+        )
+    }

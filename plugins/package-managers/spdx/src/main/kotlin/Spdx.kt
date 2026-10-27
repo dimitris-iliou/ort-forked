@@ -50,8 +50,8 @@ import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.utils.common.enumSetOf
 import org.ossreviewtoolkit.utils.ort.DeclaredLicenseProcessor
-import org.ossreviewtoolkit.utils.spdx.toExpression
-import org.ossreviewtoolkit.utils.spdx.toSpdxOrNull
+import org.ossreviewtoolkit.utils.spdxexpression.toExpression
+import org.ossreviewtoolkit.utils.spdxexpression.toSpdxOrNull
 
 import org.spdx.library.SpdxModelFactory
 import org.spdx.library.model.v3_0_1.core.Element
@@ -70,7 +70,7 @@ private const val PACKAGE_TYPE_SPDX = "SPDX"
 
 @OrtPlugin(
     displayName = "SPDX",
-    description = "A package manager that uses SPDX version 3 documents as definition files.",
+    summary = "A package manager that uses SPDX version 3 documents as definition files.",
     factory = PackageManagerFactory::class
 )
 class Spdx(override val descriptor: PluginDescriptor = SpdxFactory.descriptor) : PackageManager(PROJECT_TYPE) {

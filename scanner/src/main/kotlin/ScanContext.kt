@@ -26,8 +26,10 @@ import org.ossreviewtoolkit.model.PackageType
 import org.ossreviewtoolkit.model.config.Excludes
 import org.ossreviewtoolkit.model.config.Includes
 import org.ossreviewtoolkit.model.config.ScannerConfiguration
+import org.ossreviewtoolkit.model.config.orEmpty
 import org.ossreviewtoolkit.model.config.snippet.SnippetChoices
-import org.ossreviewtoolkit.utils.spdx.SpdxExpression
+import org.ossreviewtoolkit.model.utils.isPathIncluded
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxExpression
 
 /**
  * Additional context information that can be used by a [ScannerWrapper] to alter its behavior.
@@ -44,12 +46,20 @@ data class ScanContext(
     val packageType: PackageType,
 
     /**
-     * The [Excludes] of the project to scan.
+     * Relative paths of all directories in the root provenance source tree of the project to scan, to which the root
+     * directory of the provenance corresponding to the scan is checked out to. This should only be set to non-default,
+     * if the [packageType] is [PackageType.PROJECT] and must never be empty, because there always is at least one
+     * checkout path.
+     */
+    val checkoutPaths: Set<String> = setOf(""),
+
+    /**
+     * The [Excludes] of the project to scan. Only set if [packageType] is [PackageType.PROJECT].
      */
     val excludes: Excludes? = null,
 
     /**
-     * The [Includes] of the project to scan.
+     * The [Includes] of the project to scan. Only set if [packageType] is [PackageType.PROJECT].
      */
     val includes: Includes? = null,
 
@@ -70,7 +80,42 @@ data class ScanContext(
     val coveredPackages: List<Package> = emptyList(),
 
     /**
-     * The [SnippetChoices] of the project to scan.
+     * The [SnippetChoices] of the project to scan. Only set if [packageType] is [PackageType.PROJECT].
      */
     val snippetChoices: List<SnippetChoices> = emptyList()
-)
+) {
+    init {
+        require(checkoutPaths.isNotEmpty()) {
+            "The checkout paths must not be empty."
+        }
+
+        val invalidCheckoutPaths = checkoutPaths.filter { it.startsWith("/") || it.endsWith("/") }
+        require(invalidCheckoutPaths.isEmpty()) {
+            "The following checkout paths start or end with a '/' which is not allowed: $invalidCheckoutPaths"
+        }
+    }
+
+    /**
+     * Returns true if the given [pathRelativeToProvenanceRoot] is excluded.
+     */
+    fun isPathExcluded(pathRelativeToProvenanceRoot: String): Boolean {
+        // For package scans, includes and excludes should not be set anyway. But return early to be on the safe side.
+        if (packageType != PackageType.PROJECT) return false
+
+        val pathsInRootProvenanceSourceTree = checkoutPaths.map {
+            if (it.isEmpty()) {
+                pathRelativeToProvenanceRoot
+            } else {
+                "${it.removeSuffix("/")}/$pathRelativeToProvenanceRoot"
+            }
+        }
+
+        return pathsInRootProvenanceSourceTree.all { path ->
+            !isPathIncluded(
+                path,
+                excludes.orEmpty(),
+                includes.orEmpty()
+            )
+        }
+    }
+}

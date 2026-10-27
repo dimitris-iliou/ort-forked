@@ -39,17 +39,17 @@ import java.time.Duration
 import kotlin.script.experimental.host.UrlScriptSource
 import kotlin.time.toKotlinDuration
 
-import org.apache.logging.log4j.kotlin.logger
-
 import org.ossreviewtoolkit.evaluator.Evaluator
 import org.ossreviewtoolkit.model.FileFormat
 import org.ossreviewtoolkit.model.ResolvedPackageCurations.Companion.REPOSITORY_CONFIGURATION_PROVIDER_ID
 import org.ossreviewtoolkit.model.RuleViolation
 import org.ossreviewtoolkit.model.config.CopyrightGarbage
+import org.ossreviewtoolkit.model.config.LicenseChoices
 import org.ossreviewtoolkit.model.config.LicenseFilePatterns
 import org.ossreviewtoolkit.model.config.RepositoryConfiguration
 import org.ossreviewtoolkit.model.config.createFileArchiver
 import org.ossreviewtoolkit.model.config.orEmpty
+import org.ossreviewtoolkit.model.config.plus
 import org.ossreviewtoolkit.model.licenses.DefaultLicenseInfoProvider
 import org.ossreviewtoolkit.model.licenses.LicenseClassifications
 import org.ossreviewtoolkit.model.licenses.LicenseInfoResolver
@@ -57,6 +57,7 @@ import org.ossreviewtoolkit.model.licenses.orEmpty
 import org.ossreviewtoolkit.model.readValue
 import org.ossreviewtoolkit.model.readValueOrDefault
 import org.ossreviewtoolkit.model.utils.DefaultResolutionProvider
+import org.ossreviewtoolkit.model.utils.filterApplicable
 import org.ossreviewtoolkit.model.utils.mergeLabels
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
@@ -69,26 +70,27 @@ import org.ossreviewtoolkit.plugins.commands.api.utils.outputGroup
 import org.ossreviewtoolkit.plugins.commands.api.utils.readOrtResult
 import org.ossreviewtoolkit.plugins.commands.api.utils.writeOrtResult
 import org.ossreviewtoolkit.plugins.packageconfigurationproviders.api.CompositePackageConfigurationProvider
-import org.ossreviewtoolkit.plugins.packageconfigurationproviders.api.PackageConfigurationProviderFactory
-import org.ossreviewtoolkit.plugins.packageconfigurationproviders.api.SimplePackageConfigurationProvider
+import org.ossreviewtoolkit.plugins.packageconfigurationproviders.api.getEnabledPackageConfigurationProviders
 import org.ossreviewtoolkit.plugins.packageconfigurationproviders.dir.DirPackageConfigurationProvider
 import org.ossreviewtoolkit.plugins.packagecurationproviders.api.SimplePackageCurationProvider
 import org.ossreviewtoolkit.plugins.packagecurationproviders.file.FilePackageCurationProvider
 import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.expandTilde
 import org.ossreviewtoolkit.utils.common.safeMkdirs
+import org.ossreviewtoolkit.utils.config.setLicenseChoices
 import org.ossreviewtoolkit.utils.config.setPackageConfigurations
 import org.ossreviewtoolkit.utils.config.setPackageCurations
 import org.ossreviewtoolkit.utils.config.setResolutions
 import org.ossreviewtoolkit.utils.ort.ORT_COPYRIGHT_GARBAGE_FILENAME
 import org.ossreviewtoolkit.utils.ort.ORT_EVALUATOR_RULES_FILENAME
+import org.ossreviewtoolkit.utils.ort.ORT_LICENSE_CHOICES_FILENAME
 import org.ossreviewtoolkit.utils.ort.ORT_LICENSE_CLASSIFICATIONS_FILENAME
 import org.ossreviewtoolkit.utils.ort.ORT_RESOLUTIONS_FILENAME
 import org.ossreviewtoolkit.utils.ort.ortConfigDirectory
 
 @OrtPlugin(
     displayName = "Evaluate",
-    description = "Evaluate ORT result files against policy rules.",
+    summary = "Evaluate ORT result files against policy rules.",
     factory = OrtCommandFactory::class
 )
 class EvaluateCommand(descriptor: PluginDescriptor = EvaluateCommandFactory.descriptor) : OrtCommand(descriptor) {
@@ -134,6 +136,15 @@ class EvaluateCommand(descriptor: PluginDescriptor = EvaluateCommandFactory.desc
         .file(mustExist = true, canBeFile = true, canBeDir = false, mustBeWritable = false, mustBeReadable = true)
         .convert { it.absoluteFile.normalize() }
         .default(ortConfigDirectory / ORT_COPYRIGHT_GARBAGE_FILENAME)
+        .configurationGroup()
+
+    private val licenseChoicesFile by option(
+        "--license-choices-file",
+        help = "A file containing license choices."
+    ).convert { it.expandTilde() }
+        .file(mustExist = true, canBeFile = true, canBeDir = false, mustBeWritable = false, mustBeReadable = true)
+        .convert { it.absoluteFile.normalize() }
+        .default(ortConfigDirectory / ORT_LICENSE_CHOICES_FILENAME)
         .configurationGroup()
 
     private val licenseClassificationsFile by option(
@@ -216,7 +227,7 @@ class EvaluateCommand(descriptor: PluginDescriptor = EvaluateCommandFactory.desc
                 scriptUris += defaultRulesFile.toURI()
             } else {
                 echo(Theme.Default.danger("No rules specified."))
-                throw ProgramResult(1)
+                throw ProgramResult(STATUS_CODE_FATAL_ERROR)
             }
         }
 
@@ -247,7 +258,7 @@ class EvaluateCommand(descriptor: PluginDescriptor = EvaluateCommandFactory.desc
                 absoluteOutputDir / "evaluation-result.${format.fileExtension}"
             }
 
-            validateOutputFiles(outputFiles)
+            checkOutputFiles(outputFiles)
         }
 
         if (checkSyntax) {
@@ -264,7 +275,7 @@ class EvaluateCommand(descriptor: PluginDescriptor = EvaluateCommandFactory.desc
                 }
             }
 
-            if (allChecksSucceeded) return else throw ProgramResult(2)
+            if (allChecksSucceeded) return else throw ProgramResult(STATUS_CODE_FAILURE)
         }
 
         val existingOrtFile = requireNotNull(ortFile) {
@@ -292,30 +303,23 @@ class EvaluateCommand(descriptor: PluginDescriptor = EvaluateCommandFactory.desc
             ortResultInput = ortResultInput.setPackageCurations(packageCurationProviders)
         }
 
-        val enabledPackageConfigurationProviders = buildList {
-            val repositoryPackageConfigurations = ortResultInput.repository.config.packageConfigurations
-
-            if (ortConfig.enableRepositoryPackageConfigurations) {
-                add(SimplePackageConfigurationProvider(configurations = repositoryPackageConfigurations))
-            } else {
-                if (repositoryPackageConfigurations.isNotEmpty()) {
-                    logger.info { "Local package configurations were not applied because the feature is not enabled." }
-                }
+        val packageConfigurationProvider = CompositePackageConfigurationProvider(
+            getEnabledPackageConfigurationProviders(ortConfig, ortResultInput) {
+                packageConfigurationsDir?.let { DirPackageConfigurationProvider(it) }
             }
-
-            if (packageConfigurationsDir != null) {
-                add(DirPackageConfigurationProvider(packageConfigurationsDir))
-            } else {
-                // This only adds those package configuration providers that are both enabled in the ORT configuration
-                // (which is the default) and available in the classpath.
-                val providers = PackageConfigurationProviderFactory.create(ortConfig.packageConfigurationProviders)
-                addAll(providers.map { it.second })
-            }
-        }
-
-        val packageConfigurationProvider = CompositePackageConfigurationProvider(enabledPackageConfigurationProviders)
+        )
 
         ortResultInput = ortResultInput.setPackageConfigurations(packageConfigurationProvider)
+
+        val applicableGlobalLicenseChoices = licenseChoicesFile
+            .takeIf { it.isFile }
+            ?.readValue<LicenseChoices>()
+            .orEmpty()
+            .filterApplicable(ortResultInput)
+
+        ortResultInput = ortResultInput.setLicenseChoices(
+            ortResultInput.repository.config.licenseChoices + applicableGlobalLicenseChoices
+        )
 
         val copyrightGarbage = copyrightGarbageFile.takeIf { it.isFile }?.readValue<CopyrightGarbage>().orEmpty()
 
@@ -340,6 +344,8 @@ class EvaluateCommand(descriptor: PluginDescriptor = EvaluateCommandFactory.desc
             evaluatorRun.violations.forEach { violation ->
                 echo(violation.format())
             }
+
+            echo(Theme.Default.info(RULE_VIOLATION_RESOLUTION_HINT))
         } else {
             echo("No rule violations have been found.")
         }
@@ -361,6 +367,12 @@ class EvaluateCommand(descriptor: PluginDescriptor = EvaluateCommandFactory.desc
             .print().conclude(ortConfig.severeRuleViolationThreshold, 2)
     }
 }
+
+private const val RULE_VIOLATION_RESOLUTION_HINT =
+    "See https://oss-review-toolkit.org/ort/docs/configuration/resolutions for how to resolve rule violations. " +
+        "The WebApp and Static-HTML reports also show context-aware how-to-fix texts when the global ORT " +
+        "configuration from the ort-config repository is used " +
+        "(see https://oss-review-toolkit.org/ort/docs/configuration/how-to-fix-text-provider)."
 
 private fun RuleViolation.format() =
     buildString {

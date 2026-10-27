@@ -26,11 +26,10 @@ dependencies {
     api(libs.commonsCompress)
     api(libs.semver4j)
 
-    implementation(libs.log4j.api)
     implementation(libs.springCore)
-
-    runtimeOnly(libs.xz)
 
     funTestImplementation(projects.plugins.versionControlSystems.gitVersionControlSystem)
     funTestImplementation(projects.utils.testUtils)
+
+    runtimeOnly(libs.xz)
 }

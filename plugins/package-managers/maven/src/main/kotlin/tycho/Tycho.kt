@@ -19,7 +19,9 @@
 
 package org.ossreviewtoolkit.plugins.packagemanagers.maven.tycho
 
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.PrintStream
 import java.util.concurrent.atomic.AtomicReference
 import java.util.jar.Manifest
 
@@ -55,6 +57,7 @@ import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
 import org.ossreviewtoolkit.model.utils.isScopeIncluded
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
+import org.ossreviewtoolkit.plugins.api.OrtPluginOption
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.packagemanagers.maven.PACKAGE_TYPE
 import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.LocalProjectWorkspaceReader
@@ -69,6 +72,17 @@ import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.parseScm
 import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.processDeclaredLicenses
 import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.toOrtProject
 import org.ossreviewtoolkit.utils.ort.createOrtTempFile
+
+/**
+ * A data class storing the configuration options supported by the [Tycho] package manager implementation.
+ */
+data class TychoConfig(
+    @OrtPluginOption(defaultValue = "true")
+    val skipTests: Boolean,
+
+    @OrtPluginOption(defaultValue = "false")
+    val enableDebugLogs: Boolean
+)
 
 /**
  * A package manager implementation supporting Maven projects using [Tycho](https://github.com/eclipse-tycho/tycho).
@@ -92,10 +106,13 @@ import org.ossreviewtoolkit.utils.ort.createOrtTempFile
  */
 @OrtPlugin(
     displayName = "Tycho",
-    description = "The Tycho package manager for Maven projects.",
+    summary = "The Tycho package manager for Maven projects.",
     factory = PackageManagerFactory::class
 )
-class Tycho(override val descriptor: PluginDescriptor = TychoFactory.descriptor) : PackageManager("Tycho") {
+class Tycho(
+    override val descriptor: PluginDescriptor = TychoFactory.descriptor,
+    private val config: TychoConfig
+) : PackageManager("Tycho") {
     override val globsForDefinitionFiles = listOf("pom.xml")
 
     /**
@@ -225,12 +242,23 @@ class Tycho(override val descriptor: PluginDescriptor = TychoFactory.descriptor)
             // using a system property.
             System.setProperty(MavenCli.MULTIMODULE_PROJECT_DIRECTORY, projectRoot.absolutePath)
 
-            val exitCode = cli.doMain(
-                generateMavenOptions(buildLog),
-                projectRoot.path,
-                null,
-                null
-            ).also { logger.info { "Tycho analysis completed. Exit code: $it." } }
+            val errorStream = ByteArrayOutputStream()
+
+            val exitCode = PrintStream(errorStream).use { stderr ->
+                cli.doMain(
+                    generateMavenOptions(buildLog),
+                    projectRoot.path,
+                    null,
+                    stderr
+                ).also {
+                    logger.info { "Tycho analysis completed. Exit code: $it." }
+                }
+            }
+
+            val errorMessage = errorStream.toString().trim()
+            if (errorMessage.isNotEmpty()) {
+                logger.error(errorMessage)
+            }
 
             return exitCode to buildLog
         } finally {
@@ -310,7 +338,18 @@ class Tycho(override val descriptor: PluginDescriptor = TychoFactory.descriptor)
             add("-DoutputFile=${dependencyTreeFile.absolutePath}")
             add("-DappendOutput=true")
             add("-Dverbose=true")
-        }.toTypedArray()
+            // Use pre-Java-24 unlimited JAXP XML processing.
+            add("-Djdk.xml.maxGeneralEntitySizeLimit=0")
+            add("-Djdk.xml.totalEntitySizeLimit=0")
+
+            if (config.skipTests) {
+                add("-Dmaven.test.skip=true")
+            }
+
+            if (config.enableDebugLogs) {
+                add("-X")
+            }
+        }.toTypedArray().also { logger.debug { "Maven CLI options: ${it.joinToString(" ")}" } }
 }
 
 /**
@@ -412,7 +451,7 @@ private fun resolveMavenArtifacts(
                     repositories = dependency.repositories
                 }
 
-                resolver(mappedDependency)
+                resolver(mappedDependency).withOriginalId(dependency.artifact)
             }.onFailure { exception ->
                 logger.debug(exception) { "Failed to resolve Maven artifact candidate." }
             }.getOrNull()
@@ -421,6 +460,22 @@ private fun resolveMavenArtifacts(
         "Failed to resolve ${candidates.size} candidates for dependency " +
             "'${dependency.artifact.identifier()}'."
     }
+
+/**
+ * Return a [Package] with the same properties as this [Package], but with an [Identifier] derived from the given
+ * [Artifact]. This is necessary for artifacts referenced by Tycho under alternative IDs. Here it must be ensured
+ * that this alternative ID is set for the package, even if it has been resolved using Maven's standard mechanism.
+ * Otherwise, there could be conflicts if the standard Maven packages are listed in the dependencies as well.
+ */
+private fun Package.withOriginalId(dependency: Artifact): Package =
+    copy(
+        id = Identifier(
+            type = id.type,
+            namespace = dependency.groupId,
+            name = dependency.artifactId,
+            version = dependency.version
+        )
+    )
 
 /**
  * Create a [Package] for the given [artifact] obtaining metadata from the given [manifest] and [resolver]. This

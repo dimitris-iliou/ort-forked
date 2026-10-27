@@ -50,7 +50,7 @@ data class DirPackageConfigurationProviderConfig(
 
 @OrtPlugin(
     displayName = "Default Directory",
-    description = "A package configuration provider that loads package curations from the default directory.",
+    summary = "A package configuration provider that loads package curations from the default directory.",
     factory = PackageConfigurationProviderFactory::class
 )
 class DefaultDirPackageConfigurationProvider(descriptor: PluginDescriptor) : DirPackageConfigurationProvider(
@@ -67,7 +67,7 @@ class DefaultDirPackageConfigurationProvider(descriptor: PluginDescriptor) : Dir
  */
 @OrtPlugin(
     displayName = "Directory",
-    description = "Provides package configurations from a directory.",
+    summary = "Provides package configurations from a directory.",
     factory = PackageConfigurationProviderFactory::class
 )
 open class DirPackageConfigurationProvider(
@@ -80,50 +80,48 @@ open class DirPackageConfigurationProvider(
         descriptor,
         File(config.path).takeUnless { !it.exists() && !config.mustExist }
     )
-
-    companion object {
-        fun readConfigurationFiles(paths: Collection<File>): List<PackageConfiguration> {
-            val allConfigurations = mutableListOf<Pair<PackageConfiguration, File>>()
-
-            val configurationFiles = paths.flatMap {
-                require(it.exists()) {
-                    "The path '$it' does not exist."
-                }
-
-                if (it.isDirectory) FileFormat.findFilesWithKnownExtensions(it) else listOf(it)
-            }.filterNot { it.length() == 0L }
-
-            configurationFiles.map { configurationFile ->
-                val configuration = runCatching {
-                    configurationFile.readValue<PackageConfiguration>()
-                }.getOrElse {
-                    throw IOException(
-                        "Failed parsing package configuration(s) from '${configurationFile.absolutePath}'.",
-                        it
-                    )
-                }
-
-                allConfigurations += configuration to configurationFile
-            }
-
-            val duplicates = allConfigurations.getDuplicates { it.first }
-            if (duplicates.isNotEmpty()) {
-                val duplicatesInfo = buildString {
-                    duplicates.forEach { (packageConfiguration, origins) ->
-                        appendLine("Configurations for '${packageConfiguration.id.toCoordinates()}' found in all of:")
-                        val files = origins.joinToString(separator = "\n") { (_, file) -> file.absolutePath }
-                        appendLine(files.prependIndent())
-                    }
-                }
-
-                throw DuplicatedConfigurationException(
-                    "Duplicate package configuration found:\n${duplicatesInfo.prependIndent()}"
-                )
-            }
-
-            return allConfigurations.unzip().first
-        }
-    }
 }
 
 private class DuplicatedConfigurationException(message: String?) : Exception(message)
+
+private fun readConfigurationFiles(paths: Collection<File>): List<PackageConfiguration> {
+    val allConfigurations = mutableListOf<Pair<PackageConfiguration, File>>()
+
+    val configurationFiles = paths.flatMap {
+        require(it.exists()) {
+            "The path '$it' does not exist."
+        }
+
+        if (it.isDirectory) FileFormat.findFilesWithKnownExtensions(it) else listOf(it)
+    }.filterNot { it.length() == 0L }
+
+    configurationFiles.map { configurationFile ->
+        val configuration = runCatching {
+            configurationFile.readValue<PackageConfiguration>()
+        }.getOrElse {
+            throw IOException(
+                "Failed parsing package configuration(s) from '${configurationFile.absolutePath}'.",
+                it
+            )
+        }
+
+        allConfigurations += configuration to configurationFile
+    }
+
+    val duplicates = allConfigurations.getDuplicates { it.first }
+    if (duplicates.isNotEmpty()) {
+        val duplicatesInfo = buildString {
+            duplicates.forEach { (packageConfiguration, origins) ->
+                appendLine("Configurations for '${packageConfiguration.id.toCoordinates()}' found in all of:")
+                val files = origins.joinToString(separator = "\n") { (_, file) -> file.absolutePath }
+                appendLine(files.prependIndent())
+            }
+        }
+
+        throw DuplicatedConfigurationException(
+            "Duplicate package configuration found:\n${duplicatesInfo.prependIndent()}"
+        )
+    }
+
+    return allConfigurations.unzip().first
+}

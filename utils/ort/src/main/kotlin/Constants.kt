@@ -70,9 +70,14 @@ const val ORT_REFERENCE_CONFIG_FILENAME = "reference.yml"
 const val ORT_COPYRIGHT_GARBAGE_FILENAME = "copyright-garbage.yml"
 
 /**
- * The name of the ORT custom license texts configuration directory.
+ * The name of the ORT declared license mapping file.
  */
-const val ORT_CUSTOM_LICENSE_TEXTS_DIRNAME = "custom-license-texts"
+const val ORT_DECLARED_LICENSE_MAPPING_FILENAME = "declared-license-mapping.yml"
+
+/**
+ * The name of the ORT simple license mapping file.
+ */
+const val ORT_SIMPLE_LICENSE_MAPPING_FILENAME = "simple-license-mapping.yml"
 
 /**
  * The name of the ORT package curations directory.
@@ -88,6 +93,11 @@ const val ORT_PACKAGE_CURATIONS_FILENAME = "curations.yml"
  * The name of the ORT how to fix text provider script file.
  */
 const val ORT_HOW_TO_FIX_TEXT_PROVIDER_FILENAME = "reporter.how-to-fix-text-provider.kts"
+
+/**
+ * The name of the ORT license choices configuration file.
+ */
+const val ORT_LICENSE_CHOICES_FILENAME = "license-choices.yml"
 
 /**
  * The name of the ORT license classifications file.

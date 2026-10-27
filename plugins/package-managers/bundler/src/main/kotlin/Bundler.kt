@@ -73,21 +73,27 @@ private const val BUNDLER_GEM_NAME = "bundler"
 /** The name of the file where Bundler stores locked down dependency information. */
 internal const val BUNDLER_LOCKFILE_NAME = "Gemfile.lock"
 
-private fun runScriptCode(sourceCode: String, workingDir: File? = null): Any? {
+/**
+ * Run the given Ruby [script] in the given [workingDir] and with the given [environment] (which gets merged with the
+ * default environment). If no [pathType] is given, the [script] is assumed to contain the code directly. Otherwise, the
+ * meaning of the [script] parameter is determined by the [pathType].
+ */
+private fun runScript(
+    script: String,
+    pathType: PathType? = null,
+    workingDir: File? = null,
+    environment: Map<String, String> = emptyMap()
+): Any? {
     val output = with(ScriptingContainer(LocalContextScope.THREADSAFE)) {
         if (workingDir != null) currentDirectory = workingDir.path
-        environment["BUNDLE_PATH"] = "${Os.userHomeDirectory}/.bundle"
-        runScriptlet(sourceCode)
-    }
 
-    return output
-}
+        this.environment.putAll(environment)
 
-private fun runScriptResource(resourceName: String, workingDir: File? = null): Any? {
-    val output = with(ScriptingContainer(LocalContextScope.THREADSAFE)) {
-        if (workingDir != null) currentDirectory = workingDir.path
-        environment["BUNDLE_PATH"] = "${Os.userHomeDirectory}/.bundle"
-        runScriptlet(PathType.CLASSPATH, resourceName)
+        if (pathType != null) {
+            runScriptlet(pathType, script)
+        } else {
+            runScriptlet(script)
+        }
     }
 
     return output
@@ -109,20 +115,20 @@ data class BundlerConfig(
 )
 
 /**
- * The [Bundler][1] package manager for Ruby. Also see [Clarifying the Roles of the .gemspec and Gemfile][2].
- *
- * [1]: https://bundler.io/
- * [2]: http://yehudakatz.com/2010/12/16/clarifying-the-roles-of-the-gemspec-and-gemfile/
+ * The [Bundler](https://bundler.io/) package manager for Ruby. Also see [Clarifying the Roles of the .gemspec and
+ * Gemfile](http://yehudakatz.com/2010/12/16/clarifying-the-roles-of-the-gemspec-and-gemfile/).
  */
 @OrtPlugin(
     displayName = "Bundler",
-    description = "The Bundler package manager for Ruby.",
+    summary = "The Bundler package manager for Ruby.",
     factory = PackageManagerFactory::class
 )
 class Bundler(
     override val descriptor: PluginDescriptor = BundlerFactory.descriptor,
     private val config: BundlerConfig
 ) : PackageManager(PROJECT_TYPE) {
+    private val scriptEnvironment = mapOf("BUNDLE_PATH" to "${Os.userHomeDirectory}/.bundle")
+
     override val globsForDefinitionFiles = listOf("Gemfile")
 
     override fun beforeResolution(
@@ -135,7 +141,7 @@ class Bundler(
         //
         // TODO: Find a way to customize the Bundler version to an older version than JRuby's, see [2].
         //
-        // [1]: https://github.com/jruby/jruby/blob/9.3.8.0/lib/pom.rb#L21
+        // [1]: https://github.com/jruby/jruby/blob/9.4.15.0/lib/pom.rb#L30
         // [2]: https://github.com/jruby/jruby/discussions/7403
 
         val lockfiles = definitionFiles.map { it.resolveSibling(BUNDLER_LOCKFILE_NAME) }.filter { it.isFile }
@@ -145,7 +151,7 @@ class Bundler(
         val bundlerVersion = config.bundlerVersion ?: lockfilesBundlerVersion
 
         if (bundlerVersion != null) {
-            logger.info { "Installing custom Bundler version $bundlerVersion..." }
+            logger.info { "Installing custom '$BUNDLER_GEM_NAME' version $bundlerVersion..." }
 
             runCatching {
                 val code = """
@@ -154,22 +160,22 @@ class Bundler(
                     cmd.handle_options ["--no-document", "--user-install", "$BUNDLER_GEM_NAME:$bundlerVersion"]
                     cmd.execute
                 """.trimIndent()
-                val result = runScriptCode(code) as Long
-                check(result == 0L) { "Installing the '$BUNDLER_GEM_NAME' Gem failed with error code $result." }
+                val result = runScript(code, environment = scriptEnvironment) as Long
+                check(result == 0L) { "Error code $result." }
             }.onSuccess {
-                logger.info { "Installing Bundler version $bundlerVersion completed successfully." }
+                logger.info { "Installing '$BUNDLER_GEM_NAME' version $bundlerVersion succeeded." }
             }.onFailure {
-                logger.info { "Installing Bundler version $bundlerVersion failed: ${it.collectMessages()}" }
+                logger.info { "Installing '$BUNDLER_GEM_NAME' version $bundlerVersion faied. ${it.collectMessages()}" }
             }
         }
 
         runCatching {
             val code = "Gem::Specification.find_by_name('$BUNDLER_GEM_NAME').version.to_s"
-            runScriptCode(code) as String
+            runScript(code, environment = scriptEnvironment) as String
         }.onSuccess { installedBundlerVersion ->
-            logger.info { "Using the '$BUNDLER_GEM_NAME' Gem in version $installedBundlerVersion." }
+            logger.info { "Using '$BUNDLER_GEM_NAME' in version $installedBundlerVersion." }
         }.onFailure {
-            logger.warn { "Unable to determine the '$BUNDLER_GEM_NAME' Gem version: ${it.collectMessages()}" }
+            logger.warn { "Unable to determine the '$BUNDLER_GEM_NAME' version: ${it.collectMessages()}" }
         }
     }
 
@@ -183,18 +189,18 @@ class Bundler(
     ): List<ProjectAnalyzerResult> {
         val workingDir = definitionFile.parentFile
 
-        requireLockfile(analysisRoot, workingDir, analyzerConfig.allowDynamicVersions) {
+        requireLockfileForStableVersions(analysisRoot, definitionFile, analyzerConfig.allowDynamicVersions) {
             workingDir.resolve(BUNDLER_LOCKFILE_NAME).isFile
         }
 
         val scopes = mutableSetOf<Scope>()
         val issues = mutableListOf<Issue>()
 
-        val gemsInfo = resolveGemsInfo(workingDir)
+        val gemsInfo = resolveGemsInfo(definitionFile)
 
         return with(parseProject(analysisRoot, definitionFile, gemsInfo)) {
             val projectId = Identifier(projectType, "", name, version)
-            val groupedDeps = getDependencyGroups(workingDir)
+            val groupedDeps = getDependencyGroups(definitionFile)
 
             groupedDeps.forEach { (groupName, dependencyList) ->
                 parseScope(workingDir, projectId, groupName, dependencyList, scopes, gemsInfo, issues)
@@ -290,11 +296,19 @@ class Bundler(
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun getDependencyGroups(workingDir: File): Map<String, List<String>> =
-        runScriptResource(ROOT_DEPENDENCIES_SCRIPT_RESOURCE_NAME, workingDir) as Map<String, List<String>>
+    private fun getDependencyGroups(gemfile: File): Map<String, List<String>> =
+        runScript(
+            ROOT_DEPENDENCIES_SCRIPT_RESOURCE_NAME,
+            PathType.CLASSPATH,
+            environment = scriptEnvironment + mapOf("BUNDLE_GEMFILE" to gemfile.absolutePath)
+        ) as Map<String, List<String>>
 
-    private fun resolveGemsInfo(workingDir: File): MutableMap<String, GemInfo> {
-        val specs = runScriptResource(RESOLVE_DEPENDENCIES_SCRIPT_RESOURCE_NAME, workingDir).toString()
+    private fun resolveGemsInfo(gemfile: File): MutableMap<String, GemInfo> {
+        val specs = runScript(
+            RESOLVE_DEPENDENCIES_SCRIPT_RESOURCE_NAME,
+            PathType.CLASSPATH,
+            environment = scriptEnvironment + mapOf("BUNDLE_GEMFILE" to gemfile.absolutePath)
+        ).toString()
 
         // The metadata produced by the "resolve_dependencies.rb" script separates specs for packages with the "\0"
         // character as delimiter.

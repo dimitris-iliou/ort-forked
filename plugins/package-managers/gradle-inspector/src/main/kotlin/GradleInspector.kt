@@ -112,7 +112,7 @@ data class GradleInspectorConfig(
  */
 @OrtPlugin(
     displayName = "Gradle Inspector",
-    description = "The Gradle package manager for Java.",
+    summary = "The Gradle package manager for Java.",
     factory = PackageManagerFactory::class
 )
 class GradleInspector(
@@ -124,15 +124,17 @@ class GradleInspector(
     // "build" file.
     override val globsForDefinitionFiles = GRADLE_BUILD_FILES + GRADLE_SETTINGS_FILES
 
-    private val graphBuilder = DependencyGraphBuilder(GradleDependencyHandler(projectType))
-    private val initScriptFile by lazy { extractInitScript() }
+    private val dependencyHandler = GradleDependencyHandler(projectType)
+    private val graphBuilder = DependencyGraphBuilder(dependencyHandler)
 
-    private fun extractInitScript(): File {
+    private fun extractInitScript(excludedScopes: Collection<String>, includedScopes: Collection<String>): File {
         val toolsDir = ortToolsDirectory.resolve(descriptor.id).apply { safeMkdirs() }
         val pluginJar = extractResource("/gradle-plugin.jar", toolsDir / "gradle-plugin.jar")
 
         val initScriptText = javaClass.getResource("/template.init.gradle").readText()
             .replace("<REPLACE_PLUGIN_JAR>", pluginJar.invariantSeparatorsPath)
+            .replace("<REPLACE_EXCLUDED_SCOPES>", excludedScopes.joinToString("\u0000"))
+            .replace("<REPLACE_INCLUDED_SCOPES>", includedScopes.joinToString("\u0000"))
 
         val initScript = toolsDir / "init.gradle"
 
@@ -143,6 +145,8 @@ class GradleInspector(
 
     private fun GradleConnector.getOrtDependencyTreeModel(
         projectDir: File,
+        excludes: Excludes,
+        includes: Includes,
         issues: MutableList<Issue>
     ): OrtDependencyTreeModel =
         forProjectDirectory(projectDir).connect().use { connection ->
@@ -159,6 +163,11 @@ class GradleInspector(
             val buildGradleVersion = Semver.coerce(environment.gradle.gradleVersion)
 
             logger.info { "The project at '$projectDir' uses Gradle version $buildGradleVersion." }
+
+            // Note that excludes / includes are cleared by the caller already if [AnalyzerConfiguration.skipExcluded]
+            // is false.
+            val excludedScopes = excludes.scopes.map { it.pattern }
+            val includedScopes = includes.scopes.map { it.pattern }
 
             // In order to debug the plugin, pass the "-Dorg.gradle.debug=true" option to the JVM running ORT. This will
             // then block execution of the plugin until a remote debug session is attached to port 5005 (by default),
@@ -199,7 +208,11 @@ class GradleInspector(
                 .setJvmArguments(jvmArgs)
                 .setStandardOutput(stdout)
                 .setStandardError(stderr)
-                .withArguments("-Duser.home=${Os.userHomeDirectory}", "--init-script", initScriptFile.path)
+                .withArguments(
+                    "-Duser.home=${Os.userHomeDirectory}",
+                    "--init-script",
+                    extractInitScript(excludedScopes, includedScopes).path
+                )
                 .get()
 
             if (stdout.size() > 0) {
@@ -242,7 +255,14 @@ class GradleInspector(
         }
 
         val issues = mutableListOf<Issue>()
-        val dependencyTreeModel = gradleConnector.getOrtDependencyTreeModel(projectDir, issues)
+
+        logger.info { "Resolving the dependency tree model via IPC from the Gradle Daemon..." }
+
+        val dependencyTreeModel =
+            gradleConnector.getOrtDependencyTreeModel(projectDir, excludes, includes, issues)
+        dependencyHandler.setTreeModel(dependencyTreeModel)
+
+        logger.info { "Successfully retrieved the dependency tree model from the Gradle Daemon." }
 
         dependencyTreeModel.errors.distinct().mapTo(issues) {
             createAndLogIssue(it, Severity.ERROR)
@@ -280,8 +300,19 @@ class GradleInspector(
         return listOf(result)
     }
 
-    override fun createPackageManagerResult(projectResults: Map<File, List<ProjectAnalyzerResult>>) =
-        PackageManagerResult(projectResults, graphBuilder.build(), graphBuilder.packages())
+    override fun createPackageManagerResult(
+        projectResults: Map<File, List<ProjectAnalyzerResult>>
+    ): PackageManagerResult {
+        val externalProjectResults = dependencyHandler.externalProjects().associate { project ->
+            File(project.definitionFilePath) to listOf(ProjectAnalyzerResult(project, emptySet()))
+        }
+
+        return PackageManagerResult(
+            projectResults + externalProjectResults,
+            graphBuilder.build(),
+            graphBuilder.packages()
+        )
+    }
 }
 
 /**

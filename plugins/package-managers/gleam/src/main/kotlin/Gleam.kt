@@ -54,7 +54,7 @@ private const val MANIFEST_TOML = "manifest.toml"
  */
 @OrtPlugin(
     displayName = "Gleam",
-    description = "The package manager for Gleam.",
+    summary = "The package manager for Gleam.",
     factory = PackageManagerFactory::class
 )
 class Gleam internal constructor(
@@ -108,7 +108,7 @@ class Gleam internal constructor(
         val gleamToml = parseGleamToml(definitionFile)
         val hasDependencies = gleamToml.dependencies.isNotEmpty() || gleamToml.devDependencies.isNotEmpty()
 
-        requireLockfile(analysisRoot, workingDir, analyzerConfig.allowDynamicVersions) {
+        requireLockfileForStableVersions(analysisRoot, definitionFile, analyzerConfig.allowDynamicVersions) {
             manifestFile.isFile || !hasDependencies
         }
 

@@ -86,15 +86,15 @@ data class GoModConfig(
 )
 
 /**
- * The [Go Modules](https://go.dev/ref/mod) package manager for Go. Also see the [usage and troubleshooting guide]
- * (https://github.com/golang/go/wiki/Modules).
+ * The [Go Modules](https://go.dev/ref/mod) package manager for Go. Also see the
+ * [usage and troubleshooting guide](https://github.com/golang/go/wiki/Modules).
  *
  * Note: The file `go.sum` is not a lockfile as Go modules already allows for reproducible builds without that file.
  * Thus, no logic for handling the [AnalyzerConfiguration.allowDynamicVersions] is needed.
  */
 @OrtPlugin(
     displayName = "GoMod",
-    description = "The Go Modules package manager for Go.",
+    summary = "The Go Modules package manager for Go.",
     factory = PackageManagerFactory::class
 )
 class GoMod(
@@ -267,6 +267,8 @@ class GoMod(
      */
     private fun getTransitiveMainModuleDependencies(projectDir: File): Set<String> {
         // See https://pkg.go.dev/text/template for the format syntax.
+        // TODO: Find a way to efficiently also get test dependencies, which is possible via "-test", but then they are
+        //       not distinguishable from non-test dependencies in the output.
         val list = runGo(projectDir, "list", "-deps", "-json=Module", "-buildvcs=false", "./...")
 
         val depInfos = list.stdout.byteInputStream().use { JSON.decodeToSequence<DepInfo>(it) }

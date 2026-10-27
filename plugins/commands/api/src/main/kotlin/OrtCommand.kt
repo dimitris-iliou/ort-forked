@@ -35,22 +35,36 @@ import org.ossreviewtoolkit.utils.ort.ORT_CONFIG_FILENAME
  * An interface for [CliktCommand]-based ORT commands that come as [Plugin]s.
  */
 abstract class OrtCommand(override val descriptor: PluginDescriptor) : CliktCommand(), Plugin {
-    override fun help(context: Context) = descriptor.description
+    companion object {
+        const val OPTION_GROUP_CONFIGURATION = "Configuration Options"
+        const val OPTION_GROUP_INPUT = "Input Options"
+        const val OPTION_GROUP_OUTPUT = "Output Options"
+
+        /** A status code to indicate success. */
+        const val STATUS_CODE_SUCCESS = 0
+
+        /** A status code for fundamental errors that prevented a command from running properly. */
+        const val STATUS_CODE_FATAL_ERROR = 1
+
+        /** A status code to indicate that the program did run properly but discovered issues. */
+        const val STATUS_CODE_FAILURE = 2
+    }
+
+    override fun help(context: Context) = descriptor.summary
 
     protected val ortConfig by requireObject<OrtConfiguration>()
 
     /**
-     * Validates that the provided [outputFiles] can be used. Throws a [UsageError] otherwise.
+     * Checks that the provided [outputFiles] can be used. Throws a [UsageError] otherwise.
      */
-    protected fun validateOutputFiles(outputFiles: Collection<File>) {
+    protected fun checkOutputFiles(outputFiles: Collection<File>) {
         if (ortConfig.forceOverwrite) return
 
         val existingOutputFiles = outputFiles.filter { it.exists() }
         if (existingOutputFiles.isNotEmpty()) {
             throw UsageError(
-                message = "None of the output files $existingOutputFiles must exist yet. To overwrite output files " +
-                    "set the 'forceOverwrite' option in '$ORT_CONFIG_FILENAME'.",
-                statusCode = 2
+                "None of the output files $existingOutputFiles must exist yet. To overwrite output files set the " +
+                    "'forceOverwrite' option in '$ORT_CONFIG_FILENAME'."
             )
         }
     }

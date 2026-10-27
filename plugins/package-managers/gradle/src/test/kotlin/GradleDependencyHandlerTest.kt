@@ -19,7 +19,8 @@
 
 package org.ossreviewtoolkit.plugins.packagemanagers.gradle
 
-import OrtDependency
+import LegacyOrtComponent
+import LegacyOrtComponentIdentifier
 
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.inspectors.forAll
@@ -55,7 +56,6 @@ import org.ossreviewtoolkit.model.Scope
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
-import org.ossreviewtoolkit.plugins.packagemanagers.gradlemodel.getIdentifierType
 import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.MavenSupport
 
 /**
@@ -315,7 +315,9 @@ class GradleDependencyHandlerTest : WordSpec({
             with(issues.first()) {
                 source shouldBe GradleFactory.descriptor.displayName
                 severity shouldBe Severity.ERROR
-                message should contain("${dep.groupId}:${dep.artifactId}:${dep.version}")
+                with(dep.componentId) {
+                    message should contain("$groupId:$artifactId:$version")
+                }
             }
         }
     }
@@ -332,12 +334,15 @@ private fun createDependency(
     artifact: String,
     version: String,
     path: String? = null,
-    dependencies: List<OrtDependency> = emptyList()
-): OrtDependency {
-    val dependency = mockk<OrtDependency>()
-    every { dependency.groupId } returns group
-    every { dependency.artifactId } returns artifact
-    every { dependency.version } returns version
+    dependencies: List<LegacyOrtComponent> = emptyList()
+): LegacyOrtComponent {
+    val componentId = mockk<LegacyOrtComponentIdentifier>()
+    every { componentId.groupId } returns group
+    every { componentId.artifactId } returns artifact
+    every { componentId.version } returns version
+
+    val dependency = mockk<LegacyOrtComponent>()
+    every { dependency.componentId } returns componentId
     every { dependency.localPath } returns path
     every { dependency.pomFile } returns "pom.xml"
     every { dependency.dependencies } returns dependencies
@@ -352,7 +357,7 @@ private fun createDependency(
  * Create a [DependencyGraphBuilder] equipped with a [GradleDependencyHandler] that is used by the test cases in
  * this class.
  */
-private fun createGraphBuilder(): DependencyGraphBuilder<OrtDependency> {
+private fun createGraphBuilder(): DependencyGraphBuilder<LegacyOrtComponent> {
     val dependencyHandler = GradleDependencyHandler(PROJECT_TYPE, createMavenSupport())
     dependencyHandler.repositories = remoteRepositories
     return DependencyGraphBuilder(dependencyHandler)
@@ -382,9 +387,12 @@ private fun createMavenSupport(): MavenSupport {
 }
 
 /**
- * Returns an [Identifier] for this [OrtDependency].
+ * Returns an [Identifier] for this [LegacyOrtComponent].
  */
-private fun OrtDependency.toId() = Identifier(getIdentifierType(PROJECT_TYPE), groupId, artifactId, version)
+private fun LegacyOrtComponent.toId() =
+    with(componentId) {
+        Identifier(getIdentifierType(PROJECT_TYPE), groupId, artifactId, version)
+    }
 
 /**
  * Return the package references from the given [scopes] associated with the scope with the given [scopeName].
@@ -400,7 +408,7 @@ private fun Collection<PackageReference>.identifiers(): List<Identifier> = map {
 /**
  * Find the package corresponding to the given [dependency] in this collection.
  */
-private fun Collection<PackageReference>.findDependency(dependency: OrtDependency): PackageReference =
+private fun Collection<PackageReference>.findDependency(dependency: LegacyOrtComponent): PackageReference =
     findId(dependency.toId())
 
 /**
@@ -412,7 +420,7 @@ private fun Collection<PackageReference>.findId(id: Identifier): PackageReferenc
 /**
  * Check whether this [PackageReference] contains exactly the given [dependencies][expectedDependencies].
  */
-private fun PackageReference.checkDependencies(vararg expectedDependencies: OrtDependency): Set<PackageReference> {
+private fun PackageReference.checkDependencies(vararg expectedDependencies: LegacyOrtComponent): Set<PackageReference> {
     val ids = expectedDependencies.map { it.toId() }
     dependencies.identifiers() should containExactlyInAnyOrder(ids)
     return dependencies

@@ -22,10 +22,10 @@ package org.ossreviewtoolkit.plugins.licensefactproviders.scancode
 import java.io.File
 import java.lang.invoke.MethodHandles
 
-import org.apache.logging.log4j.kotlin.logger
 import org.apache.logging.log4j.kotlin.loggerOf
 
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
+import org.ossreviewtoolkit.plugins.api.OrtPluginOption
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.licensefactproviders.api.LicenseFactProvider
 import org.ossreviewtoolkit.plugins.licensefactproviders.api.LicenseFactProviderFactory
@@ -41,16 +41,17 @@ private val FALLBACK_DIR = File("/opt/scancode-license-data")
 /** The configuration for the ScanCode license fact provider. */
 data class ScanCodeLicenseFactProviderConfig(
     /**
-     * The directory that contains the ScanCode license texts. If not set, the provider will try to locate the ScanCode
-     * license text directory using a heuristic based on the path of the ScanCode binary.
+     * The directory that contains the ScanCode license data. If not set, the provider will try to locate the ScanCode
+     * license data directory using a heuristic based on the path of the ScanCode binary.
      */
-    val scanCodeLicenseTextDir: String?
+    @OrtPluginOption(aliases = ["licenseTextDir", "scanCodeLicenseTextDir"])
+    val licenseDataDir: String?
 )
 
 @OrtPlugin(
     id = "ScanCode",
     displayName = "ScanCode License Fact Provider",
-    description = "A license fact provider that reads license information from a local ScanCode installation.",
+    summary = "Provide license facts from a local ScanCode installation.",
     factory = LicenseFactProviderFactory::class
 )
 class ScanCodeLicenseFactProvider(
@@ -58,71 +59,67 @@ class ScanCodeLicenseFactProvider(
     private val config: ScanCodeLicenseFactProviderConfig
 ) : LicenseFactProvider() {
     /**
-     * The directory that contains the ScanCode license texts. This is located using a heuristic based on the path of
-     * the ScanCode binary.
+     * The data directory reader for the directory found by [findLicenseDataDir], or null if no directory has been
+     * found.
      */
-    private val scanCodeLicenseTextDir: File? by lazy {
-        if (config.scanCodeLicenseTextDir != null) {
-            return@lazy File(config.scanCodeLicenseTextDir).also {
-                require(it.isDirectory) {
-                    "Configured ScanCode license text directory '${config.scanCodeLicenseTextDir}' does not exist or " +
-                        "is not a directory."
-                }
-
-                logger.debug { "Using configured ScanCode license text directory: ${it.absolutePath}" }
+    private val licenseDataDirReader: ScanCodeLicenseDataDirReader? by lazy {
+        findLicenseDataDir(config)?.let {
+            ScanCodeLicenseDataDirReader(it) { scanCodeLicense ->
+                scanCodeLicense.text != null && !scanCodeLicense.isGeneric && !scanCodeLicense.isUnknown
             }
         }
-
-        findLicenseDir()?.also {
-            logger.debug { "Located ScanCode license text directory: $it" }
-            return@lazy it
-        } ?: logger.debug { "Could not locate the ScanCode 'licenses' text directory." }
-
-        FALLBACK_DIR.takeIf { it.isDirectory }?.also {
-            logger.debug { "Located fallback ScanCode license text directory: $it" }
-            return@lazy it
-        } ?: logger.debug { "Could not locate fallback directory: $FALLBACK_DIR" }
-
-        val exportDir = ortDataDirectory / "scanner" / "scancode-license-data"
-        exportDir.takeIf { it.isDirectory }?.also {
-            logger.debug { "Using existing license data from directory: $it" }
-        } ?: exportLicenseData(exportDir)?.also {
-            logger.debug { "Using exported license data from directory: $it" }
-        } ?: run {
-            logger.warn { "Could not locate any ScanCode license text directory." }
-            null
-        }
     }
 
-    private fun getLicenseTextFile(licenseId: String): File? {
-        val filename = if (licenseId == "LicenseRef-scancode-x11-xconsortium-veillard") {
-            // Work around for https://github.com/aboutcode-org/scancode-toolkit/issues/2813 which affects ScanCode
-            // versions below 31.0.0.
-            "x11-xconsortium_veillard.LICENSE"
-        } else {
-            "${licenseId.removePrefix("LicenseRef-scancode-").lowercase()}.LICENSE"
-        }
+    override fun getLicenseText(licenseOrExceptionId: String) =
+        licenseDataDirReader?.getLicense(licenseOrExceptionId)?.text?.let { LicenseText(it) }
 
-        return scanCodeLicenseTextDir?.resolve(filename)?.takeIf { it.isFile && it.isNotBlank }
-    }
-
-    override fun getLicenseText(licenseId: String) =
-        getLicenseTextFile(licenseId)?.useLines { lines ->
-            lines.skipYamlFrontMatter().joinToString("\n").trimEnd()
-        }?.let {
-            LicenseText(it)
-        }
-
-    override fun hasLicenseText(licenseId: String): Boolean = getLicenseTextFile(licenseId) != null
+    override fun hasLicenseText(licenseOrExceptionId: String): Boolean =
+        licenseDataDirReader?.hasLicense(licenseOrExceptionId) == true
 }
 
 private val logger = loggerOf(MethodHandles.lookup().lookupClass())
 
-private val File.isNotBlank: Boolean
-    get() = useLines { lines -> lines.skipYamlFrontMatter().any { line -> line.any { !it.isWhitespace() } } }
+/**
+ * Return the directory that contains the ScanCode license data. If [config.licenseDataDir] is specified, that
+ * configured directory is used, or an exception is thrown in case it does not exist. Otherwise, a fallback mechanism is
+ * used, which prefers the license data directory of a detected ScanCode installation if any, or otherwise uses
+ * [FALLBACK_DIR] if it exists, or else returns `null`.
+ */
+internal fun findLicenseDataDir(config: ScanCodeLicenseFactProviderConfig? = null): File? {
+    if (config?.licenseDataDir != null) {
+        return File(config.licenseDataDir).also {
+            require(it.isDirectory) {
+                "Configured ScanCode license data directory '${config.licenseDataDir}' does not exist or is not " +
+                    "a directory."
+            }
 
-private fun findLicenseDir(): File? {
-    logger.debug { "Trying to locate the ScanCode license text directory..." }
+            logger.debug { "Using configured ScanCode license data directory: ${it.absolutePath}" }
+        }
+    }
+
+    findLicenseDataInstallationDir()?.also {
+        logger.debug { "Located ScanCode license text directory: $it" }
+        return it
+    } ?: logger.debug { "Could not locate the ScanCode 'licenses' text directory." }
+
+    FALLBACK_DIR.takeIf { it.isDirectory }?.also {
+        logger.debug { "Located fallback ScanCode license data directory: $it" }
+        return it
+    } ?: logger.debug { "Could not locate fallback directory: $FALLBACK_DIR" }
+
+    val exportDir = ortDataDirectory / "scanner" / "scancode-license-data"
+    return exportDir.takeIf { it.isDirectory }?.also {
+        logger.debug { "Using existing license data from directory: $it" }
+    } ?: exportLicenseData(exportDir)?.also {
+        logger.debug { "Using exported license data from directory: $it" }
+    } ?: run {
+        logger.warn { "Could not locate any ScanCode license data directory." }
+        null
+    }
+}
+
+private fun findLicenseDataInstallationDir(): File? {
+    logger.debug { "Trying to locate the ScanCode license data directory..." }
 
     val scanCodeExeDir = Os.getPathFromEnvironment("scancode")?.realFile?.parentFile
 
@@ -151,22 +148,4 @@ private fun exportLicenseData(targetDir: File): File? {
     )
 
     return targetDir.takeIf { process.isSuccess && it.isDirectory }
-}
-
-internal fun Sequence<String>.skipYamlFrontMatter(): Sequence<String> {
-    var inFrontMatter = false
-
-    return filterIndexed { index, line ->
-        if (index == 0 && line == "---") {
-            inFrontMatter = true
-            false
-        } else if (inFrontMatter) {
-            if (line == "---") inFrontMatter = false
-            false
-        } else {
-            true
-        }
-    }.dropWhile {
-        it.isBlank()
-    }
 }

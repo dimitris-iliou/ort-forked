@@ -34,11 +34,11 @@ import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
+import org.ossreviewtoolkit.utils.authentication.OrtAuthenticator
+import org.ossreviewtoolkit.utils.authentication.OrtProxySelector
+import org.ossreviewtoolkit.utils.authentication.requestPasswordAuthentication
 import org.ossreviewtoolkit.utils.common.collectMessages
 import org.ossreviewtoolkit.utils.common.div
-import org.ossreviewtoolkit.utils.ort.OrtAuthenticator
-import org.ossreviewtoolkit.utils.ort.OrtProxySelector
-import org.ossreviewtoolkit.utils.ort.requestPasswordAuthentication
 import org.ossreviewtoolkit.utils.ort.showStackTrace
 
 import org.tmatesoft.svn.core.SVNDepth
@@ -58,7 +58,7 @@ import org.tmatesoft.svn.util.Version
 
 @OrtPlugin(
     displayName = "Subversion",
-    description = "A VCS implementation to interact with Subversion repositories.",
+    summary = "A VCS implementation to interact with Subversion repositories.",
     factory = VersionControlSystemFactory::class
 )
 class Subversion(override val descriptor: PluginDescriptor = SubversionFactory.descriptor) : VersionControlSystem() {
@@ -73,7 +73,7 @@ class Subversion(override val descriptor: PluginDescriptor = SubversionFactory.d
 
     override fun getVersion(): String = Version.getVersionString()
 
-    override fun getDefaultBranchName(url: String) = "trunk"
+    override fun getDefaultBranchName(url: String) = Result.success("trunk")
 
     override fun getWorkingTree(vcsDirectory: File): WorkingTree =
         SubversionWorkingTree(vcsDirectory, type, clientManager)
@@ -93,8 +93,8 @@ class Subversion(override val descriptor: PluginDescriptor = SubversionFactory.d
             false
         }
 
-    override fun initWorkingTree(targetDir: File, vcs: VcsInfo): WorkingTree {
-        try {
+    override fun initWorkingTree(targetDir: File, vcs: VcsInfo): Result<WorkingTree> =
+        runCatching {
             clientManager.updateClient.doCheckout(
                 SVNURL.parseURIEncoded(vcs.url),
                 targetDir,
@@ -103,14 +103,13 @@ class Subversion(override val descriptor: PluginDescriptor = SubversionFactory.d
                 SVNDepth.EMPTY,
                 /* allowUnversionedObstructions = */ false
             )
-        } catch (e: SVNException) {
+        }.recoverCatching { e ->
             e.showStackTrace()
 
             throw IOException("Unable to initialize a $type working tree in '$targetDir' from ${vcs.url}.", e)
+        }.map {
+            getWorkingTree(targetDir)
         }
-
-        return getWorkingTree(targetDir)
-    }
 
     private fun deepenWorkingTreePath(workingTree: WorkingTree, path: String, revision: SVNRevision): Long {
         val finalPath = workingTree.workingDir / path

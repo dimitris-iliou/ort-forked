@@ -19,83 +19,86 @@
 
 package org.ossreviewtoolkit.plugins.packagecurationproviders.clearlydefined
 
-import io.kotest.assertions.retry
 import io.kotest.core.spec.style.WordSpec
+import io.kotest.engine.TestAbortedException
 import io.kotest.matchers.collections.beEmpty
-import io.kotest.matchers.collections.shouldHaveSingleElement
+import io.kotest.matchers.collections.shouldBeSingle
+import io.kotest.matchers.result.shouldBeSuccess
 import io.kotest.matchers.should
-import io.kotest.matchers.shouldNot
+import io.kotest.matchers.shouldBe
 
-import kotlin.time.Duration.Companion.seconds
+import java.net.SocketTimeoutException
+import java.time.Instant
 
 import org.ossreviewtoolkit.clients.clearlydefined.ClearlyDefinedService.Server
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.Package
-import org.ossreviewtoolkit.utils.spdx.toSpdx
+import org.ossreviewtoolkit.utils.spdxexpression.toSpdx
+
+import retrofit2.HttpException
 
 class ClearlyDefinedPackageCurationProviderFunTest : WordSpec({
-    "The production server" should {
-        val provider = ClearlyDefinedPackageCurationProviderFactory.create()
+    val provider by lazy { ClearlyDefinedPackageCurationProviderFactory.create() }
 
+    "The production server" should {
         "return an existing curation for the javax.servlet-api Maven package" {
+            // https://clearlydefined.io/definitions/sourcearchive/mavencentral/javax.servlet/javax.servlet-api/3.1.0
             val packages = createPackagesFromIds("Maven:javax.servlet:javax.servlet-api:3.1.0")
 
-            withRetry {
-                val curations = provider.getCurationsFor(packages)
+            val results = provider.getCurationResultsFor(packages).withIgnoreUnavailable()
 
-                curations.map { it.data.concludedLicense } shouldHaveSingleElement
-                    "CDDL-1.0 OR GPL-2.0-only WITH Classpath-exception-2.0".toSpdx()
+            with(results.shouldBeSingle().shouldBeSuccess().data) {
+                concludedLicense shouldBe "CDDL-1.0 OR GPL-2.0-only WITH Classpath-exception-2.0".toSpdx()
+                publishedAt shouldBe Instant.parse("2013-04-25T00:00:00Z")
             }
         }
 
         "return an existing curation for the slf4j-log4j12 Maven package" {
+            // https://clearlydefined.io/definitions/sourcearchive/mavencentral/org.slf4j/slf4j-log4j12/1.7.30
             val packages = createPackagesFromIds("Maven:org.slf4j:slf4j-log4j12:1.7.30")
 
-            withRetry {
-                val curations = provider.getCurationsFor(packages)
+            val results = provider.getCurationResultsFor(packages).withIgnoreUnavailable()
 
-                curations.map { it.data.vcs?.revision } shouldHaveSingleElement
-                    "0b97c416e42a184ff9728877b461c616187c58f7"
+            with(results.shouldBeSingle().shouldBeSuccess().data) {
+                vcs?.revision shouldBe "0b97c416e42a184ff9728877b461c616187c58f7"
+                publishedAt shouldBe Instant.parse("2019-12-16T00:00:00Z")
             }
         }
 
         "return no curation for a non-existing dummy NPM package" {
             val packages = createPackagesFromIds("NPM:@scope:name:1.2.3")
 
-            withRetry {
-                val curations = provider.getCurationsFor(packages)
+            val results = provider.getCurationResultsFor(packages).withIgnoreUnavailable()
 
-                curations should beEmpty()
-            }
+            results should beEmpty()
         }
     }
 
     "Curations" should {
         "get filtered by score" {
-            val config = ClearlyDefinedPackageCurationProviderConfig(
-                serverUrl = Server.PRODUCTION.apiUrl,
-                minTotalLicenseScore = 80
+            val customProvider = ClearlyDefinedPackageCurationProvider(
+                config = ClearlyDefinedPackageCurationProviderConfig(
+                    serverUrl = Server.PRODUCTION.apiUrl,
+                    minTotalLicenseScore = 80
+                )
             )
-            val provider = ClearlyDefinedPackageCurationProvider(config = config)
 
             // Use an id which is known to have non-empty results from an earlier test.
             val packages = createPackagesFromIds("Maven:org.slf4j:slf4j-log4j12:1.7.30")
 
-            withRetry {
-                val curations = provider.getCurationsFor(packages)
+            val results = customProvider.getCurationResultsFor(packages).withIgnoreUnavailable()
 
-                curations should beEmpty()
-            }
+            results should beEmpty()
         }
 
         "be retrieved for packages without a namespace" {
-            val provider = ClearlyDefinedPackageCurationProviderFactory.create()
+            // https://clearlydefined.io/definitions/npm/npmjs/-/acorn/0.6.0
             val packages = createPackagesFromIds("NPM::acorn:0.6.0")
 
-            withRetry {
-                val curations = provider.getCurationsFor(packages)
+            val results = provider.getCurationResultsFor(packages).withIgnoreUnavailable()
 
-                curations shouldNot beEmpty()
+            with(results.shouldBeSingle().shouldBeSuccess().data) {
+                publishedAt shouldBe Instant.parse("2014-06-06T00:00:00Z")
             }
         }
     }
@@ -103,11 +106,22 @@ class ClearlyDefinedPackageCurationProviderFunTest : WordSpec({
 
 private fun createPackagesFromIds(vararg ids: String) = ids.map { Package.EMPTY.copy(id = Identifier(it)) }
 
-private suspend fun <T> withRetry(f: suspend () -> T): T =
-    retry(
-        maxRetry = 5,
-        timeout = (10 + 20 + 40 + 80 + 160).seconds,
-        delay = 10.seconds,
-        multiplier = 2,
-        f = f
-    )
+/**
+ * Skip the test by throwing a `TestAbortedException` in case the service is unavailable for some reason. Otherwise,
+ * return the [Result] as-is.
+ *
+ * This way the tests can still act as a reminder to re-align the data model in case it deviated, without making noise
+ * when network is not available.
+ */
+private fun <T> List<Result<T>>.withIgnoreUnavailable(): List<Result<T>> =
+    onEach { result ->
+        result.onFailure { e ->
+            fun Int.isServerSideError(): Boolean = this / 100 == 5
+
+            throw when (e) {
+                is SocketTimeoutException -> TestAbortedException()
+                is HttpException -> if (e.code().isServerSideError()) TestAbortedException() else e
+                else -> e
+            }
+        }
+    }

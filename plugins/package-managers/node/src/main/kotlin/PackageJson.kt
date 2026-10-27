@@ -150,6 +150,8 @@ data class PackageJson(
     val dependencies: Map<String, String> = emptyMap(),
     val devDependencies: Map<String, String> = emptyMap(),
     val optionalDependencies: Map<String, String> = emptyMap(),
+    val peerDependencies: Map<String, String> = emptyMap(),
+    val publishConfig: PublishConfig? = null,
     /** This property does not belong to package.json but to the JSON returned by 'npm info'. */
     val dist: Distribution? = null
 ) {
@@ -164,6 +166,11 @@ data class PackageJson(
     data class Repository(
         val url: String,
         val type: String? = null,
+        val directory: String? = null
+    )
+
+    @Serializable
+    data class PublishConfig(
         val directory: String? = null
     )
 

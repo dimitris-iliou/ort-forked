@@ -31,6 +31,7 @@ import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.OrtResult
 import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.Project
+import org.ossreviewtoolkit.model.Repository
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 
@@ -49,13 +50,13 @@ class MultipleScannersTest : WordSpec({
 
         "return scan results with non-overlapping scanners" {
             ortResult.scanner shouldNotBeNull {
-                getScanResults(PROJECT_ID).shouldBeSingleton {
+                getScanResults(PROJECT_ID) shouldBeSingleton {
                     withClue(it.summary.issues) {
                         it.scanner.name shouldBe "Dummy2"
                     }
                 }
 
-                getScanResults(PACKAGE_ID).shouldBeSingleton {
+                getScanResults(PACKAGE_ID) shouldBeSingleton {
                     withClue(it.summary.issues) {
                         it.scanner.name shouldBe "Dummy1"
                     }
@@ -70,26 +71,30 @@ private fun createAnalyzerResult(): OrtResult {
         type = VcsType.GIT,
         url = "https://github.com/oss-review-toolkit/ort-test-data-scanner.git",
         revision = "97d57bb4795bc41f496e1a8e2c7751cefc7da7ec"
-    )
+    ).normalize()
 
-    val pkg = Package.EMPTY.copy(
-        id = PACKAGE_ID,
-        vcs = vcs,
-        vcsProcessed = vcs.normalize()
-    )
-
-    val project = Project.EMPTY.copy(
-        id = PROJECT_ID,
-        vcs = vcs,
-        vcsProcessed = vcs.normalize()
-    )
-
-    val analyzerRun = AnalyzerRun.EMPTY.copy(
-        result = AnalyzerResult.EMPTY.copy(
-            projects = setOf(project),
-            packages = setOf(pkg)
+    return OrtResult.EMPTY.copy(
+        repository = Repository(
+            vcs = vcs,
+            vcsProcessed = vcs
+        ),
+        analyzer = AnalyzerRun.EMPTY.copy(
+            result = AnalyzerResult.EMPTY.copy(
+                projects = setOf(
+                    Project.EMPTY.copy(
+                        id = PROJECT_ID,
+                        vcs = vcs,
+                        vcsProcessed = vcs
+                    )
+                ),
+                packages = setOf(
+                    Package.EMPTY.copy(
+                        id = PACKAGE_ID,
+                        vcs = vcs,
+                        vcsProcessed = vcs
+                    )
+                )
+            )
         )
     )
-
-    return OrtResult.EMPTY.copy(analyzer = analyzerRun)
 }

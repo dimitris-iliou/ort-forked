@@ -19,13 +19,16 @@
 
 package org.ossreviewtoolkit.plugins.packagemanagers.gradleplugin
 
+import OrtComponent
+import OrtComponentIdentifier
+import OrtComponentReference
 import OrtConfiguration
-import OrtDependency
 import OrtDependencyTreeModel
 import OrtMavenModel
 import OrtRepository
 import OrtVcsModel
 
+import java.io.File
 import java.io.Serializable
 
 @Suppress("SerialVersionUIDInSerializableClass")
@@ -33,6 +36,7 @@ internal class OrtDependencyTreeModelImpl(
     override val group: String,
     override val name: String,
     override val version: String,
+    override val components: List<OrtComponent>,
     override val configurations: List<OrtConfiguration>,
     override val repositories: List<OrtRepository>,
     override val errors: List<String>,
@@ -42,24 +46,35 @@ internal class OrtDependencyTreeModelImpl(
 @Suppress("SerialVersionUIDInSerializableClass")
 internal class OrtConfigurationImpl(
     override val name: String,
-    override val dependencies: List<OrtDependency>
+    override val dependencies: List<OrtComponentReference>
 ) : OrtConfiguration, Serializable
 
-@Suppress("LongParameterList", "SerialVersionUIDInSerializableClass")
-internal class OrtDependencyImpl(
+@Suppress("SerialVersionUIDInSerializableClass")
+internal data class OrtComponentIdentifierImpl(
     override val groupId: String,
     override val artifactId: String,
-    override val version: String,
+    override val version: String
+) : OrtComponentIdentifier, Serializable
+
+@Suppress("SerialVersionUIDInSerializableClass")
+internal data class OrtComponentReferenceImpl(
+    override val componentId: OrtComponentIdentifier,
+    override val dependencies: List<OrtComponentReference>
+) : OrtComponentReference, Serializable
+
+@Suppress("SerialVersionUIDInSerializableClass")
+internal class OrtComponentImpl(
+    override val componentId: OrtComponentIdentifier,
     override val classifier: String,
     override val extension: String,
     override val variants: Map<String, Map<String, String>>,
-    override val dependencies: List<OrtDependency>,
     override val error: String?,
     override val warning: String?,
     override val pomFile: String?,
     override val mavenModel: OrtMavenModel?,
-    override val localPath: String?
-) : OrtDependency, Serializable
+    override val localPath: String?,
+    override val projectDir: File?
+) : OrtComponent, Serializable
 
 @Suppress("SerialVersionUIDInSerializableClass")
 internal class OrtMavenModelImpl(
@@ -81,5 +96,7 @@ internal class OrtVcsModelImpl(
 internal class OrtRepositoryImpl(
     override val url: String,
     override val username: String?,
-    override val password: String?
+    override val password: String?,
+    override val headerName: String?,
+    override val headerValue: String?
 ) : OrtRepository, Serializable

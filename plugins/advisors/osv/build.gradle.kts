@@ -25,14 +25,12 @@ plugins {
 dependencies {
     api(projects.plugins.advisors.advisorApi)
 
-    ksp(projects.plugins.advisors.advisorApi)
-
     implementation(projects.clients.osvClient)
     implementation(projects.utils.commonUtils)
     implementation(projects.utils.ortUtils)
-
-    implementation(libs.kotlinx.serialization.core)
     implementation(libs.kotlinx.serialization.json)
 
     funTestImplementation(projects.utils.testUtils)
+
+    ksp(projects.plugins.advisors.advisorApi)
 }

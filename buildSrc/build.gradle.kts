@@ -39,13 +39,13 @@ repositories {
 
 dependencies {
     implementation(libs.jgit)
-    implementation(libs.plugin.dependencyAnalysis)
     implementation(libs.plugin.detekt)
     implementation(libs.plugin.dokka)
     implementation(libs.plugin.graalVmNativeImage)
     implementation(libs.plugin.kotlin)
     implementation(libs.plugin.ksp)
     implementation(libs.plugin.mavenPublish)
+    implementation(libs.plugin.sortDependencies)
     implementation(libs.plugin.tapmoc)
 }
 

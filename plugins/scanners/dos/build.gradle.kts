@@ -26,24 +26,20 @@ plugins {
 }
 
 dependencies {
+    api(projects.clients.dosClient)
     api(projects.model)
     api(projects.scanner)
 
-    implementation(projects.clients.dosClient)
     implementation(projects.downloader)
     implementation(projects.utils.commonUtils)
     implementation(projects.utils.ortUtils)
-    implementation(projects.utils.spdxUtils)
-
     implementation(libs.kotlinx.coroutines)
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.kotlinx.serialization.json)
-    implementation(libs.log4j.api)
-
-    ksp(projects.scanner)
 
     testImplementation(projects.utils.testUtils)
-
     testImplementation(libs.mockk)
     testImplementation(libs.wiremock)
+
+    ksp(projects.scanner)
 }

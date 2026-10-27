@@ -19,15 +19,13 @@
 
 package org.ossreviewtoolkit.scanner.storages
 
-import com.fasterxml.jackson.databind.JsonNode
-
 import java.time.Instant
 
 import kotlin.coroutines.cancellation.CancellationException
 
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.serialization.json.jsonObject
 
 import okhttp3.OkHttpClient
 
@@ -48,7 +46,6 @@ import org.ossreviewtoolkit.model.RepositoryProvenance
 import org.ossreviewtoolkit.model.ScanResult
 import org.ossreviewtoolkit.model.UnknownProvenance
 import org.ossreviewtoolkit.model.config.ClearlyDefinedStorageConfiguration
-import org.ossreviewtoolkit.model.jsonMapper
 import org.ossreviewtoolkit.model.utils.toClearlyDefinedCoordinates
 import org.ossreviewtoolkit.model.utils.toClearlyDefinedSourceLocation
 import org.ossreviewtoolkit.plugins.api.PluginConfig
@@ -60,7 +57,6 @@ import org.ossreviewtoolkit.utils.common.AlphaNumericComparator
 import org.ossreviewtoolkit.utils.common.collectMessages
 import org.ossreviewtoolkit.utils.common.withoutPrefix
 import org.ossreviewtoolkit.utils.ort.okHttpClient
-import org.ossreviewtoolkit.utils.ort.runBlocking
 
 import retrofit2.HttpException
 
@@ -84,10 +80,12 @@ class ClearlyDefinedStorage(
         ClearlyDefinedService.create(config.serverUrl, client ?: okHttpClient)
     }
 
-    override fun readInternal(pkg: Package, scannerMatcher: ScannerMatcher?): Result<List<ScanResult>> =
-        runBlocking(Dispatchers.IO) { readFromClearlyDefined(pkg) }
+    override suspend fun readInternal(pkg: Package, scannerMatcher: ScannerMatcher?): Result<List<ScanResult>> =
+        readFromClearlyDefined(pkg).onFailure {
+            if (it is CancellationException) throw it
+        }
 
-    override fun addInternal(id: Identifier, scanResult: ScanResult): Result<Unit> =
+    override suspend fun addInternal(id: Identifier, scanResult: ScanResult): Result<Unit> =
         Result.failure(ScanStorageException("Adding scan results directly to ClearlyDefined is not supported."))
 
     /**
@@ -123,7 +121,7 @@ class ClearlyDefinedStorage(
             supportedScanners.mapNotNull { (cliScanner, version) ->
                 val startTime = Instant.now()
                 val name = cliScanner.descriptor.id.lowercase()
-                val data = loadToolData(coordinates, name, version)
+                val data = service.harvestToolData(coordinates, name, version)
                 val provenance = getProvenance(coordinates)
                 val endTime = Instant.now()
 
@@ -141,7 +139,7 @@ class ClearlyDefinedStorage(
                     "Licensee" -> {
                         data["licensee"]?.let { result ->
                             val details = cliScanner.parseDetails(result.toString())
-                            val output = result["output"]["content"].toString()
+                            val output = result.jsonObject["output"]?.jsonObject?.get("content")?.toString().orEmpty()
                             val summary = cliScanner.createSummary(output, startTime, endTime)
 
                             ScanResult(provenance, details, summary)
@@ -165,25 +163,15 @@ class ClearlyDefinedStorage(
                 }
             }
 
-            throw ScanStorageException(message)
+            throw ScanStorageException(message, e)
         }
-    }
-
-    /**
-     * Load the data produced by the tool of the given [name] and [version] for the package with the given [coordinates]
-     * and return it as a [JsonNode].
-     */
-    private suspend fun loadToolData(coordinates: Coordinates, name: String, version: String): JsonNode {
-        val toolData = service.harvestToolData(coordinates, name, version)
-        return toolData.use { jsonMapper.readTree(it.byteStream()) }
     }
 
     /**
      * Return the [Provenance] from where the package with the given [coordinates] was harvested.
      */
     private suspend fun getProvenance(coordinates: Coordinates): Provenance {
-        val definitions = service.getDefinitions(listOf(coordinates))
-        val described = definitions.getValue(coordinates).described
+        val described = service.getDefinition(coordinates).described
         val sourceLocation = described.sourceLocation
 
         return when {

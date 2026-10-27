@@ -1,0 +1,46 @@
+/*
+ * Copyright (C) 2026 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ * License-Filename: LICENSE
+ */
+
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vitest/config";
+
+const projectDir = path.dirname(fileURLToPath(import.meta.url));
+
+export default defineConfig({
+    plugins: [react()],
+    resolve: {
+        alias: {
+            "@": path.resolve(projectDir, "src"),
+        },
+    },
+    test: {
+        environment: "jsdom",
+        globals: false,
+        // CI runs this suite while Gradle compiles the Kotlin sources on the same runner, which takes it
+        // from seconds to minutes. The defaults of five and ten seconds are not enough under that load.
+        hookTimeout: 30_000,
+        include: ["src/**/*.{test,spec}.{ts,tsx}"],
+        restoreMocks: true,
+        setupFiles: ["./src/test/setup.ts"],
+        testTimeout: 30_000,
+    },
+});

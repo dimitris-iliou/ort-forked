@@ -49,12 +49,9 @@ internal object ProvenantCommand : CommandLineTool {
         output.lineSequence().first().withoutPrefix("provenant-cli ").orEmpty()
 }
 
-/**
- * A wrapper for [Provenant](https://github.com/mstykow/provenant).
- */
 @OrtPlugin(
     displayName = "Provenant",
-    description = "A wrapper for [Provenant](https://github.com/mstykow/provenant).",
+    summary = "A wrapper for [Provenant](https://github.com/getprovenant/provenant).",
     factory = ScannerWrapperFactory::class
 )
 class Provenant(

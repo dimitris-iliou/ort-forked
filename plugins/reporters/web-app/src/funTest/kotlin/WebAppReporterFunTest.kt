@@ -38,9 +38,9 @@ class WebAppReporterFunTest : WordSpec({
             val reportFileResults = WebAppReporterFactory.create()
                 .generateReport(ReporterInput(ortResult), outputDir)
 
-            reportFileResults.shouldBeSingleton {
+            reportFileResults shouldBeSingleton {
                 it shouldBeSuccess { reportFile ->
-                    reportFile.length() should beInRange(1930000L..2000000L)
+                    reportFile.length() should beInRange(1500000L..1600000L)
                 }
             }
         }

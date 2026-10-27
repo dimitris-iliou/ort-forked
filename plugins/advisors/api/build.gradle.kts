@@ -26,5 +26,5 @@ dependencies {
     api(projects.model)
     api(projects.plugins.api)
 
-    api(libs.aeSecurity)
+    implementation(libs.aeSecurity)
 }

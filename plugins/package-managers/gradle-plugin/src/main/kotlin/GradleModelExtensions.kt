@@ -27,6 +27,8 @@ import org.gradle.api.artifacts.repositories.ArtifactRepository
 import org.gradle.api.artifacts.repositories.AuthenticationSupported
 import org.gradle.api.artifacts.repositories.UrlArtifactRepository
 import org.gradle.api.attributes.AttributeContainer
+import org.gradle.api.credentials.HttpHeaderCredentials
+import org.gradle.authentication.http.HttpHeaderAuthentication
 import org.gradle.internal.deprecation.DeprecatableConfiguration
 import org.gradle.util.GradleVersion
 
@@ -61,6 +63,12 @@ internal fun Configuration.isRelevant(): Boolean {
     return canBeResolved && !isDeprecatedConfiguration && !isDependenciesMetadata && !isDependencySources
 }
 
+internal fun String.isOrtScopeIncluded(excludes: Collection<Regex>, includes: Collection<Regex>): Boolean {
+    val isIncluded = includes.isEmpty() || includes.any { it.matches(this) }
+    val isExcluded = excludes.any { it.matches(this) }
+    return isIncluded && !isExcluded
+}
+
 /**
  * Return a map that associates names of artifact repositories to their model representations.
  */
@@ -71,10 +79,28 @@ internal fun RepositoryHandler.associateNamesWithUrlsTo(repositories: MutableMap
  * Convert this [UrlArtifactRepository] to an [OrtRepository] by extracting the relevant properties.
  */
 internal fun UrlArtifactRepository.toOrtRepository(): OrtRepository {
-    val credentials = (this as? AuthenticationSupported)?.credentials
-    return OrtRepositoryImpl(
-        url = url.toString(),
-        username = credentials?.username,
-        password = credentials?.password
-    )
+    val authSupported = this as? AuthenticationSupported
+
+    val isHttpHeaderAuth = authSupported?.authentication
+        ?.any { it is HttpHeaderAuthentication } == true
+
+    return if (isHttpHeaderAuth) {
+        val headerCredentials = authSupported.getCredentials(HttpHeaderCredentials::class.java)
+        OrtRepositoryImpl(
+            url = url.toString(),
+            username = null,
+            password = null,
+            headerName = headerCredentials.name,
+            headerValue = headerCredentials.value
+        )
+    } else {
+        val credentials = authSupported?.credentials
+        OrtRepositoryImpl(
+            url = url.toString(),
+            username = credentials?.username,
+            password = credentials?.password,
+            headerName = null,
+            headerValue = null
+        )
+    }
 }

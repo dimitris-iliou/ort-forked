@@ -65,6 +65,12 @@ private const val SCOPE_NAME_REQUIRE_DEV = "require-dev"
 private val ALL_SCOPE_NAMES = setOf(SCOPE_NAME_REQUIRE, SCOPE_NAME_REQUIRE_DEV)
 
 internal object ComposerCommand : CommandLineTool {
+    private val DEFAULT_ENVIRONMENT = mapOf(
+        "COMPOSER_NO_AUDIT" to "1",
+        "COMPOSER_NO_BLOCKING" to "1",
+        "COMPOSER_NO_INTERACTION" to "1"
+    )
+
     override fun command(workingDir: File?) =
         if (workingDir?.resolve(COMPOSER_PHAR_BINARY)?.isFile == true) {
             "php $COMPOSER_PHAR_BINARY"
@@ -75,6 +81,9 @@ internal object ComposerCommand : CommandLineTool {
                 "composer"
             }
         }
+
+    override fun run(workingDir: File?, vararg args: CharSequence) =
+        run(args = args, workingDir = workingDir, environment = DEFAULT_ENVIRONMENT)
 
     override fun transformVersion(output: String) =
         // The version string can be something like:
@@ -90,7 +99,7 @@ internal object ComposerCommand : CommandLineTool {
  */
 @OrtPlugin(
     displayName = "Composer",
-    description = "The Composer package manager for PHP.",
+    summary = "The Composer package manager for PHP.",
     factory = PackageManagerFactory::class
 )
 class Composer(override val descriptor: PluginDescriptor = ComposerFactory.descriptor) : PackageManager(PROJECT_TYPE) {
@@ -148,7 +157,7 @@ class Composer(override val descriptor: PluginDescriptor = ComposerFactory.descr
         val lockfile = stashDirectories(workingDir / "vendor").use { _ ->
             val lockfileProvider = LockfileProvider(definitionFile)
 
-            requireLockfile(analysisRoot, workingDir, analyzerConfig.allowDynamicVersions) {
+            requireLockfileForStableVersions(analysisRoot, definitionFile, analyzerConfig.allowDynamicVersions) {
                 lockfileProvider.lockfile.isFile
             }
 
@@ -241,7 +250,7 @@ class Composer(override val descriptor: PluginDescriptor = ComposerFactory.descr
                 type = projectType,
                 namespace = namespace,
                 name = name,
-                version = pkgInfo.version.orEmpty()
+                version = pkgInfo.version.orEmpty().removePrefix("v")
             ),
             definitionFilePath = VersionControlSystem.getPathInfo(definitionFile).path,
             authors = parseAuthors(pkgInfo),
@@ -314,7 +323,7 @@ private fun parseVirtualPackageNames(
 
 private fun PackageInfo.toPackage(): Package {
     val rawName = checkNotNull(name)
-    val version = version.orEmpty()
+    val version = version.orEmpty().removePrefix("v")
     val homepageUrl = homepage.orEmpty()
     val vcsFromPackage = parseVcsInfo(this)
 

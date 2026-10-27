@@ -35,6 +35,7 @@ import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.PackageLinkage
 import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.Repository
+import org.ossreviewtoolkit.model.ResolvedConfiguration
 import org.ossreviewtoolkit.model.ScanResult
 import org.ossreviewtoolkit.model.ScanSummary
 import org.ossreviewtoolkit.model.ScannerDetails
@@ -55,8 +56,8 @@ import org.ossreviewtoolkit.model.vulnerabilities.VulnerabilityReference
 import org.ossreviewtoolkit.utils.ort.DeclaredLicenseProcessor
 import org.ossreviewtoolkit.utils.ort.Environment
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
-import org.ossreviewtoolkit.utils.spdx.SpdxLicenseChoice
-import org.ossreviewtoolkit.utils.spdx.toSpdx
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxLicenseChoice
+import org.ossreviewtoolkit.utils.spdxexpression.toSpdx
 import org.ossreviewtoolkit.utils.test.scannerRunOf
 
 val concludedLicense = "LicenseRef-a OR LicenseRef-b OR LicenseRef-c or LicenseRef-d".toSpdx()
@@ -175,6 +176,47 @@ val allProjects = setOf(
     projectIncluded
 )
 
+val licenseChoices = LicenseChoices(
+    repositoryLicenseChoices = listOf(
+        SpdxLicenseChoice("LicenseRef-a OR LicenseRef-b".toSpdx(), "LicenseRef-b".toSpdx()),
+        SpdxLicenseChoice("LicenseRef-c OR LicenseRef-d".toSpdx(), "LicenseRef-d".toSpdx())
+    ),
+    packageLicenseChoices = listOf(
+        PackageLicenseChoice(
+            packageId = Identifier("Maven:org.ossreviewtoolkit:package-with-only-concluded-license:1.0"),
+            licenseChoices = listOf(
+                SpdxLicenseChoice("LicenseRef-a OR LicenseRef-b".toSpdx(), "LicenseRef-a".toSpdx())
+            )
+        )
+    )
+)
+
+val criticalVulnerability = Vulnerability(
+    id = "CVE-2021-critical",
+    references = listOf(
+        VulnerabilityReference(
+            url = URI("https://oss-review-toolkit.org"),
+            scoringSystem = "CVSS3",
+            severity = "CRITICAL",
+            score = 9.0f,
+            vector = null
+        )
+    )
+)
+
+val lowVulnerability = Vulnerability(
+    id = "CVE-2021-low",
+    references = listOf(
+        VulnerabilityReference(
+            url = URI("https://oss-review-toolkit.org"),
+            scoringSystem = "CVSS3",
+            severity = "LOW",
+            score = 2.0f,
+            vector = null
+        )
+    )
+)
+
 val ortResult = OrtResult(
     repository = Repository(
         vcs = VcsInfo.EMPTY,
@@ -188,24 +230,10 @@ val ortResult = OrtResult(
                     )
                 )
             ),
-            licenseChoices = LicenseChoices(
-                repositoryLicenseChoices = listOf(
-                    // This license choice will not be applied to "only-concluded-license" since the package license
-                    // choice takes precedence.
-                    SpdxLicenseChoice("LicenseRef-a OR LicenseRef-b".toSpdx(), "LicenseRef-b".toSpdx()),
-                    SpdxLicenseChoice("LicenseRef-c OR LicenseRef-d".toSpdx(), "LicenseRef-d".toSpdx())
-                ),
-                packageLicenseChoices = listOf(
-                    PackageLicenseChoice(
-                        packageId = Identifier("Maven:org.ossreviewtoolkit:package-with-only-concluded-license:1.0"),
-                        licenseChoices = listOf(
-                            SpdxLicenseChoice("LicenseRef-a OR LicenseRef-b".toSpdx(), "LicenseRef-a".toSpdx())
-                        )
-                    )
-                )
-            )
+            licenseChoices = licenseChoices
         )
     ),
+    resolvedConfiguration = ResolvedConfiguration(licenseChoices = licenseChoices),
     analyzer = AnalyzerRun.EMPTY.copy(
         config = AnalyzerConfiguration(allowDynamicVersions = true),
         result = AnalyzerResult(
@@ -224,30 +252,8 @@ val ortResult = OrtResult(
                     advisor = AdvisorDetails("Advisor"),
                     summary = AdvisorSummary(startTime = Instant.EPOCH, endTime = Instant.EPOCH),
                     vulnerabilities = listOf(
-                        Vulnerability(
-                            id = "CVE-2021-critical",
-                            references = listOf(
-                                VulnerabilityReference(
-                                    url = URI("https://oss-review-toolkit.org"),
-                                    scoringSystem = "CVSS3",
-                                    severity = "CRITICAL",
-                                    score = 9.0f,
-                                    vector = null
-                                )
-                            )
-                        ),
-                        Vulnerability(
-                            id = "CVE-2021-trivial",
-                            references = listOf(
-                                VulnerabilityReference(
-                                    url = URI("https://oss-review-toolkit.org"),
-                                    scoringSystem = "CVSS3",
-                                    severity = "LOW",
-                                    score = 2.0f,
-                                    vector = null
-                                )
-                            )
-                        )
+                        criticalVulnerability,
+                        lowVulnerability
                     )
                 )
             )

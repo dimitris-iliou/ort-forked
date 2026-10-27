@@ -53,11 +53,11 @@ import org.ossreviewtoolkit.utils.ort.okHttpClient
 
 /**
  * An [AdviceProvider] implementation that obtains security vulnerability information from a
- * [SCANOSS][https://github.com/aboutcode-org/vulnerablecode] instance.
+ * [SCANOSS](https://github.com/aboutcode-org/vulnerablecode) instance.
  */
 @OrtPlugin(
     displayName = "SCANOSS",
-    description = "An advisor that uses a SCANOSS instance to determine vulnerabilities in dependencies.",
+    summary = "An advisor that uses a SCANOSS instance to determine vulnerabilities in dependencies.",
     factory = AdviceProviderFactory::class
 )
 class ScanOss(

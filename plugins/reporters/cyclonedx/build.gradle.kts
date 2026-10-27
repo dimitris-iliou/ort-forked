@@ -24,20 +24,16 @@ plugins {
 
 dependencies {
     api(projects.reporter)
-
     api(libs.cyclonedx)
 
-    ksp(projects.reporter)
-
     implementation(projects.model)
-    implementation(projects.utils.commonUtils)
     implementation(projects.utils.ortUtils)
     implementation(projects.utils.spdxUtils)
 
-    funTestImplementation(testFixtures(projects.reporter))
-
     funTestImplementation(projects.plugins.licenseFactProviders.spdxLicenseFactProvider)
+    funTestImplementation(projects.utils.commonUtils)
     funTestImplementation(projects.utils.testUtils)
-
     funTestImplementation(libs.kotest.assertions.json)
+
+    ksp(projects.reporter)
 }

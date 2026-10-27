@@ -38,10 +38,13 @@ import io.mockk.mockk
 import org.ossreviewtoolkit.model.AdvisorResult
 import org.ossreviewtoolkit.model.AnalyzerResult
 import org.ossreviewtoolkit.model.AnalyzerRun
+import org.ossreviewtoolkit.model.HealthMetric
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.OrtResult
 import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.Project
+import org.ossreviewtoolkit.model.VcsInfo
+import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.AdvisorConfiguration
 import org.ossreviewtoolkit.plugins.advisors.api.AdviceProvider
 import org.ossreviewtoolkit.plugins.advisors.api.AdviceProviderFactory
@@ -118,6 +121,39 @@ class AdvisorTest : WordSpec({
             }
         }
 
+        "return the merged results of multiple advice providers including project health data" {
+            val pkg1 = createPackage(1)
+            val packages = setOf(pkg1)
+            val ortResult = createOrtResultWithPackages(packages)
+            val projectPackages = ortResult.getProjects().mapTo(mutableSetOf()) { it.toPackage() }
+
+            val advisorResult1 = mockkAdvisorResult()
+            val healthInfo = listOf(HealthMetric(name = "CodeQuality", value = 90.0))
+            val advisorResult2 = mockkAdvisorResult(healthInfo)
+
+            val provider1 = mockkAdviceProvider()
+            val provider2 = mockkAdviceProvider("HealthProvider")
+
+            coEvery { provider1.retrievePackageFindings(projectPackages + packages) } returns mapOf(
+                pkg1 to advisorResult1
+            )
+            coEvery { provider2.retrievePackageFindings(projectPackages + packages) } returns mapOf(
+                pkg1 to advisorResult2
+            )
+
+            val expectedResults = mapOf(
+                pkg1.id to listOf(advisorResult1, advisorResult2)
+            )
+
+            val advisor = createAdvisor(listOf(provider1, provider2))
+
+            val result = advisor.advise(ortResult)
+
+            result.advisor shouldNotBeNull {
+                results shouldBe expectedResults
+            }
+        }
+
         "continue with other providers when a provider fails to be created" {
             val pkg = createPackage(1)
             val packages = setOf(pkg)
@@ -131,7 +167,8 @@ class AdvisorTest : WordSpec({
             )
 
             val failingFactory = mockk<AdviceProviderFactory> {
-                every { descriptor } returns PluginDescriptor("failing-provider", "FailingProvider", "", emptyList())
+                every { descriptor } returns
+                    PluginDescriptor("failing-provider", "FailingProvider", "", options = emptyList())
                 every { create(any()) } throws IllegalStateException("Could not initialize provider")
             }
 
@@ -145,7 +182,7 @@ class AdvisorTest : WordSpec({
 
             result.advisor shouldNotBeNull {
                 results should containExactly(pkg.id to listOf(successfulResult))
-                providerIssues.shouldBeSingleton {
+                providerIssues shouldBeSingleton {
                     it.message shouldBe "Failed to create provider 'FailingProvider': IllegalStateException: Could " +
                         "not initialize provider"
                 }
@@ -179,7 +216,7 @@ class AdvisorTest : WordSpec({
 
             result.advisor shouldNotBeNull {
                 results should containExactly(pkg.id to listOf(successfulResult))
-                providerIssues.shouldBeSingleton {
+                providerIssues shouldBeSingleton {
                     it.message shouldBe "Failed to retrieve findings via 'FailingProvider': IllegalStateException: " +
                         "Could not query provider service"
                 }
@@ -255,15 +292,23 @@ private fun createOrtResultWithPackages(packages: Set<Package>): OrtResult =
  * Create a test [Package] based on the given [index].
  */
 private fun createPackage(index: Int): Package =
-    Package.EMPTY.copy(id = Identifier.EMPTY.copy(name = "test-package$index"))
+    Package.EMPTY.copy(
+        id = Identifier.EMPTY.copy(name = "test-package$index"),
+        vcsProcessed = VcsInfo(
+            type = VcsType.GIT,
+            url = "https://github.com/oss-review-toolkit/ort.git",
+            revision = "main"
+        )
+    )
 
 private fun mockkAdviceProvider(displayName: String = "Provider"): AdviceProvider =
     mockk<AdviceProvider>().apply {
-        every { descriptor } returns PluginDescriptor(displayName, displayName, "", emptyList())
+        every { descriptor } returns PluginDescriptor(displayName, displayName, "", options = emptyList())
     }
 
-private fun mockkAdvisorResult(): AdvisorResult =
+private fun mockkAdvisorResult(healthInfo: List<HealthMetric> = emptyList()): AdvisorResult =
     mockk<AdvisorResult>().apply {
         every { vulnerabilities } returns emptyList()
+        every { healthMetrics } returns healthInfo
         every { copy(vulnerabilities = any()) } returns this
     }

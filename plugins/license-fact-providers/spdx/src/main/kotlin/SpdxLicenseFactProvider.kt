@@ -30,23 +30,24 @@ import org.ossreviewtoolkit.plugins.licensefactproviders.api.LicenseText
 @OrtPlugin(
     id = "SPDX",
     displayName = "SPDX License Fact Provider",
-    description = "A provider for SPDX license facts.",
+    summary = "Provide license facts from ORT's built-in SPDX resources.",
     factory = LicenseFactProviderFactory::class
 )
 class SpdxLicenseFactProvider(
     override val descriptor: PluginDescriptor = SpdxLicenseFactProviderFactory.descriptor
 ) : LicenseFactProvider() {
-    override fun getLicenseText(licenseId: String) =
-        getLicenseTextResource(licenseId)?.readText()?.let {
+    override fun getLicenseText(licenseOrExceptionId: String) =
+        getLicenseTextResource(licenseOrExceptionId)?.readText()?.let {
             // It can be safely assumed that the license text is not blank as all SPDX license texts are non-blank.
             LicenseText(it)
         }
 
-    override fun hasLicenseText(licenseId: String) = getLicenseTextResource(licenseId) != null
+    override fun hasLicenseText(licenseOrExceptionId: String) = getLicenseTextResource(licenseOrExceptionId) != null
 
-    private fun getLicenseTextResource(licenseId: String): URL? =
-        if (licenseId.isNotEmpty()) {
-            javaClass.getResource("/licenses/$licenseId") ?: javaClass.getResource("/exceptions/$licenseId")
+    private fun getLicenseTextResource(licenseOrExceptionId: String): URL? =
+        if (licenseOrExceptionId.isNotEmpty()) {
+            javaClass.getResource("/licenses/$licenseOrExceptionId")
+                ?: javaClass.getResource("/exceptions/$licenseOrExceptionId")
         } else {
             null
         }

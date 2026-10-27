@@ -31,6 +31,7 @@ import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.config.IssueResolution
 import org.ossreviewtoolkit.model.config.OrtConfiguration
 import org.ossreviewtoolkit.model.config.RuleViolationResolution
+import org.ossreviewtoolkit.model.config.orEmpty
 import org.ossreviewtoolkit.model.licenses.LicenseInfoResolver
 import org.ossreviewtoolkit.model.licenses.LicenseView
 import org.ossreviewtoolkit.model.licenses.ResolvedLicenseInfo
@@ -47,6 +48,7 @@ object StatisticsCalculator {
     fun getStatistics(ortResult: OrtResult, licenseInfoResolver: LicenseInfoResolver, ortConfig: OrtConfiguration) =
         Statistics(
             repositoryConfiguration = getRepositoryConfigurationStatistics(ortResult),
+            resolvedConfiguration = getResolvedConfigurationStatistics(ortResult),
             openIssues = getOpenIssues(ortResult, ortConfig),
             openRuleViolations = getOpenRuleViolations(ortResult, ortConfig),
             openVulnerabilities = getOpenVulnerabilities(ortResult),
@@ -167,9 +169,27 @@ object StatisticsCalculator {
                 it.packageLicenseChoices.size + it.repositoryLicenseChoices.size
             },
             licenseFindingCurations = config.curations.licenseFindings.size,
+            packageConfigurations = config.packageConfigurations.size,
+            packageCurations = config.curations.packages.size,
             issueResolutions = config.resolutions.issues.size,
             ruleViolationResolutions = config.resolutions.ruleViolations.size,
             vulnerabilityResolutions = config.resolutions.vulnerabilities.size
+        )
+    }
+
+    private fun getResolvedConfigurationStatistics(ortResult: OrtResult): ResolvedConfigurationStatistics {
+        val resolvedConfiguration = ortResult.resolvedConfiguration
+        val resolutions = resolvedConfiguration.resolutions.orEmpty()
+
+        return ResolvedConfigurationStatistics(
+            licenseChoices = resolvedConfiguration.licenseChoices.let {
+                it.packageLicenseChoices.size + it.repositoryLicenseChoices.size
+            },
+            packageConfigurations = resolvedConfiguration.packageConfigurations.orEmpty().size,
+            packageCurations = resolvedConfiguration.getAllPackageCurations().size,
+            issueResolutions = resolutions.issues.size,
+            ruleViolationResolutions = resolutions.ruleViolations.size,
+            vulnerabilityResolutions = resolutions.vulnerabilities.size
         )
     }
 }

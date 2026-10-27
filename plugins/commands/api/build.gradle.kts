@@ -25,11 +25,10 @@ plugins {
 dependencies {
     api(projects.model)
     api(projects.plugins.api)
-
     api(libs.clikt)
 
+    implementation(projects.utils.commonUtils)
     implementation(projects.utils.ortUtils)
-
     implementation(jacksonLibs.jacksonCore)
     implementation(jacksonLibs.jacksonDatabind)
 }

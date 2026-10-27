@@ -25,14 +25,12 @@ import org.ossreviewtoolkit.reporter.Reporter
 import org.ossreviewtoolkit.reporter.ReporterFactory
 
 /**
- * A [Reporter] that creates [DocBook][1] files from [Apache Freemarker][2] templates.
- *
- * [1]: https://docbook.org
- * [2]: https://freemarker.apache.org
+ * A [Reporter] that creates [DocBook](https://docbook.org) files from
+ * [Apache Freemarker](https://freemarker.apache.org) templates.
  */
 @OrtPlugin(
     displayName = "DocBook Template",
-    description = "Generates DocBook from AsciiDoc files from Apache Freemarker templates.",
+    summary = "Generates DocBook from AsciiDoc files from Apache Freemarker templates.",
     factory = ReporterFactory::class
 )
 class DocBookTemplateReporter(

@@ -17,7 +17,7 @@
  * License-Filename: LICENSE
  */
 
-package org.ossreviewtoolkit.helper.commands.packageconfig
+package org.ossreviewtoolkit.clihelper.commands.packageconfig
 
 import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.parameters.options.convert
@@ -30,10 +30,10 @@ import com.github.ajalt.clikt.parameters.types.file
 
 import java.io.File
 
-import org.ossreviewtoolkit.helper.utils.OrtHelperCommand
-import org.ossreviewtoolkit.helper.utils.PathExcludeGenerator
-import org.ossreviewtoolkit.helper.utils.sortPathExcludes
-import org.ossreviewtoolkit.helper.utils.write
+import org.ossreviewtoolkit.clihelper.utils.OrtHelperCommand
+import org.ossreviewtoolkit.clihelper.utils.PathExcludeGenerator
+import org.ossreviewtoolkit.clihelper.utils.sortPathExcludes
+import org.ossreviewtoolkit.clihelper.utils.write
 import org.ossreviewtoolkit.model.ArtifactProvenance
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.RepositoryProvenance
@@ -45,8 +45,9 @@ import org.ossreviewtoolkit.model.readValue
 import org.ossreviewtoolkit.scanner.storages.PackageBasedFileStorage
 import org.ossreviewtoolkit.utils.common.expandTilde
 import org.ossreviewtoolkit.utils.common.safeMkdirs
+import org.ossreviewtoolkit.utils.ort.runBlocking
 import org.ossreviewtoolkit.utils.ort.storage.LocalFileStorage
-import org.ossreviewtoolkit.utils.spdx.SpdxSingleLicenseExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxSingleLicenseExpression
 
 internal class CreateCommand : OrtHelperCommand(
     help = "Creates one package configuration for the source artifact scan and one for the VCS scan, if " +
@@ -119,7 +120,7 @@ internal class CreateCommand : OrtHelperCommand(
         outputDir.safeMkdirs()
 
         val scanResultsStorage = PackageBasedFileStorage(LocalFileStorage(scanResultsStorageDir))
-        val scanResults = scanResultsStorage.readForId(id = packageId).getOrThrow().run {
+        val scanResults = runBlocking { scanResultsStorage.readForId(id = packageId) }.getOrThrow().run {
             listOfNotNull(
                 find { it.provenance is RepositoryProvenance },
                 find { it.provenance is ArtifactProvenance }

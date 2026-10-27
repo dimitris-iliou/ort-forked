@@ -33,7 +33,6 @@ import io.kotest.matchers.shouldNot
 import java.io.File
 
 import org.ossreviewtoolkit.model.ArtifactProvenance
-import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.RemoteArtifact
 import org.ossreviewtoolkit.model.RepositoryProvenance
 import org.ossreviewtoolkit.model.VcsInfo
@@ -43,6 +42,8 @@ import org.ossreviewtoolkit.model.config.LicenseFilePatterns
 import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.safeMkdirs
 import org.ossreviewtoolkit.utils.ort.storage.LocalFileStorage
+
+private val DEFAULT_PATTERNS = LicenseFilePatterns.DEFAULT.allLicenseFilenames.map { "**/$it" }
 
 private val REPOSITORY_PROVENANCE = RepositoryProvenance(
     vcsInfo = VcsInfo(
@@ -91,7 +92,7 @@ class FileArchiverTest : StringSpec() {
             createFile("path/LICENSE")
 
             val archiver = FileArchiver(setOf("**/LICENSE"), storage)
-            archiver.archive(workingDir, REPOSITORY_PROVENANCE, Identifier.EMPTY)
+            archiver.archive(workingDir, REPOSITORY_PROVENANCE)
             val result = archiver.unarchive(targetDir, REPOSITORY_PROVENANCE)
 
             result shouldBe true
@@ -108,7 +109,7 @@ class FileArchiverTest : StringSpec() {
             createFile("d/LiCeNsE")
 
             val archiver = FileArchiver(setOf("**/LICENSE"), storage)
-            archiver.archive(workingDir, REPOSITORY_PROVENANCE, Identifier.EMPTY)
+            archiver.archive(workingDir, REPOSITORY_PROVENANCE)
             val result = archiver.unarchive(targetDir, REPOSITORY_PROVENANCE)
 
             result shouldBe true
@@ -128,7 +129,7 @@ class FileArchiverTest : StringSpec() {
 
             val archiver = FileArchiver(setOf("a", "**/a"), storage)
 
-            archiver.archive(workingDir, REPOSITORY_PROVENANCE, Identifier.EMPTY)
+            archiver.archive(workingDir, REPOSITORY_PROVENANCE)
             val result = archiver.unarchive(targetDir, REPOSITORY_PROVENANCE)
 
             result shouldBe true
@@ -151,7 +152,7 @@ class FileArchiverTest : StringSpec() {
             createFile("c/b")
 
             val archiver = FileArchiver(setOf("**"), storage)
-            archiver.archive(workingDir, REPOSITORY_PROVENANCE, Identifier.EMPTY)
+            archiver.archive(workingDir, REPOSITORY_PROVENANCE)
 
             val result = archiver.unarchive(targetDir, REPOSITORY_PROVENANCE)
 
@@ -165,9 +166,9 @@ class FileArchiverTest : StringSpec() {
         }
 
         "Empty archives can be handled" {
-            val archiver = FileArchiver(LicenseFilePatterns.DEFAULT.allLicenseFilenames, storage)
+            val archiver = FileArchiver(DEFAULT_PATTERNS, storage)
 
-            archiver.archive(workingDir, REPOSITORY_PROVENANCE, Identifier.EMPTY)
+            archiver.archive(workingDir, REPOSITORY_PROVENANCE)
 
             archiver.unarchive(targetDir, REPOSITORY_PROVENANCE) shouldBe true
             targetDir shouldContainNFiles 0
@@ -176,19 +177,30 @@ class FileArchiverTest : StringSpec() {
         "exclude basic binary license file" {
             createFile("License") { writeBytes(byteArrayOf(0xFF.toByte(), 0xD8.toByte())) }
 
-            val archiver = FileArchiver(LicenseFilePatterns.DEFAULT.allLicenseFilenames, storage)
-            archiver.archive(workingDir, REPOSITORY_PROVENANCE, Identifier.EMPTY)
+            val archiver = FileArchiver(DEFAULT_PATTERNS, storage)
+            archiver.archive(workingDir, REPOSITORY_PROVENANCE)
             val result = archiver.unarchive(targetDir, REPOSITORY_PROVENANCE)
 
             result shouldBe true
             targetDir shouldNot containFile("License")
         }
 
+        "exclude a file which does not match the default patterns" {
+            createFile("build.gradle")
+
+            val archiver = FileArchiver(DEFAULT_PATTERNS, storage)
+            archiver.archive(workingDir, REPOSITORY_PROVENANCE)
+            val result = archiver.unarchive(targetDir, REPOSITORY_PROVENANCE)
+
+            result shouldBe true
+            targetDir shouldNot containFile("build.gradle")
+        }
+
         "include utf8 file with japanese chars" {
             createFile("License") { writeText("ぁあぃいぅうぇえぉおかが") }
 
-            val archiver = FileArchiver(LicenseFilePatterns.DEFAULT.allLicenseFilenames, storage)
-            archiver.archive(workingDir, REPOSITORY_PROVENANCE, Identifier.EMPTY)
+            val archiver = FileArchiver(DEFAULT_PATTERNS, storage)
+            archiver.archive(workingDir, REPOSITORY_PROVENANCE)
             val result = archiver.unarchive(targetDir, REPOSITORY_PROVENANCE)
 
             result shouldBe true
@@ -198,8 +210,8 @@ class FileArchiverTest : StringSpec() {
         "include files with mime type text/x-web-markdown" {
             createFile("License.md") { writeText("# Heading level 1") }
 
-            val archiver = FileArchiver(LicenseFilePatterns.DEFAULT.allLicenseFilenames, storage)
-            archiver.archive(workingDir, REPOSITORY_PROVENANCE, Identifier.EMPTY)
+            val archiver = FileArchiver(DEFAULT_PATTERNS, storage)
+            archiver.archive(workingDir, REPOSITORY_PROVENANCE)
             val result = archiver.unarchive(targetDir, REPOSITORY_PROVENANCE)
 
             result shouldBe true
@@ -209,27 +221,24 @@ class FileArchiverTest : StringSpec() {
         "LICENSE files from source artifacts are archived" {
             createFile("LICENSE")
 
-            val archiver = FileArchiver(LicenseFilePatterns.DEFAULT.allLicenseFilenames, storage)
-            archiver.archive(workingDir, ARTIFACT_PROVENANCE, Identifier.EMPTY)
+            val archiver = FileArchiver(DEFAULT_PATTERNS, storage)
+            archiver.archive(workingDir, ARTIFACT_PROVENANCE)
+
             val result = archiver.unarchive(targetDir, ARTIFACT_PROVENANCE)
 
             result shouldBe true
-            with(targetDir) {
-                shouldContainFileWithContent("LICENSE")
-            }
+            targetDir.shouldContainFileWithContent("LICENSE")
         }
 
         "LICENSE files from Maven artifacts with META-INF are archived" {
             createFile("META-INF/LICENSE")
 
-            val archiver = FileArchiver(LicenseFilePatterns.DEFAULT.allLicenseFilenames, storage)
-            archiver.archive(workingDir, ARTIFACT_PROVENANCE, Identifier("Maven:::"))
+            val archiver = FileArchiver(DEFAULT_PATTERNS, storage)
+            archiver.archive(workingDir, ARTIFACT_PROVENANCE)
             val result = archiver.unarchive(targetDir, ARTIFACT_PROVENANCE)
 
             result shouldBe true
-            with(targetDir) {
-                shouldContainFileWithContent("META-INF/LICENSE")
-            }
+            targetDir.shouldContainFileWithContent("META-INF/LICENSE")
         }
     }
 }

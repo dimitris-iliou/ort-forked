@@ -22,6 +22,7 @@ package org.ossreviewtoolkit.plugins.commands.plugins
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.split
+import com.github.ajalt.clikt.parameters.types.enum
 import com.github.ajalt.mordant.widgets.HorizontalRule
 import com.github.ajalt.mordant.widgets.UnorderedList
 
@@ -32,6 +33,7 @@ import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.commands.api.OrtCommand
 import org.ossreviewtoolkit.plugins.commands.api.OrtCommandFactory
+import org.ossreviewtoolkit.plugins.licensefactproviders.api.LicenseFactProviderFactory
 import org.ossreviewtoolkit.plugins.packageconfigurationproviders.api.PackageConfigurationProviderFactory
 import org.ossreviewtoolkit.plugins.packagecurationproviders.api.PackageCurationProviderFactory
 import org.ossreviewtoolkit.reporter.ReporterFactory
@@ -39,20 +41,18 @@ import org.ossreviewtoolkit.scanner.ScannerWrapperFactory
 
 @OrtPlugin(
     displayName = "Plugins",
-    description = "Print information about the installed ORT plugins.",
+    summary = "Print information about the installed ORT plugins.",
     factory = OrtCommandFactory::class
 )
 class PluginsCommand(descriptor: PluginDescriptor = PluginsCommandFactory.descriptor) : OrtCommand(descriptor) {
     private val types by option(
         "--types",
         help = "A comma-separated list of plugin types to show."
-    ).split(",").default(PluginType.entries.map { it.optionName })
+    ).enum<PluginType>(key = { it.optionName }).split(",").default(PluginType.entries)
 
     override fun run() {
         types.forEach { type ->
-            PluginType.entries.find { it.optionName == type }?.let { pluginType ->
-                renderPlugins(pluginType.title, pluginType.descriptors.value)
-            }
+            renderPlugins(type.title, type.descriptors.value)
         }
     }
 
@@ -65,6 +65,9 @@ class PluginsCommand(descriptor: PluginDescriptor = PluginsCommandFactory.descri
             echo()
 
             echo("ID: ${plugin.id}")
+            echo()
+
+            echo("Summary: ${plugin.summary}")
             echo()
 
             echo("Description: ${plugin.description}")
@@ -109,6 +112,11 @@ private enum class PluginType(
         "commands",
         "CLI Commands",
         lazy { OrtCommandFactory.ALL.map { it.value.descriptor } }
+    ),
+    LICENSE_FACT_PROVIDERS(
+        "license-fact-providers",
+        "License Fact Providers",
+        lazy { LicenseFactProviderFactory.ALL.map { it.value.descriptor } }
     ),
     PACKAGE_CONFIGURATION_PROVIDERS(
         "package-configuration-providers",

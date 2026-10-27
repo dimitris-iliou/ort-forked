@@ -27,6 +27,7 @@ import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.PackageLinkage
 import org.ossreviewtoolkit.model.utils.DependencyHandler
 import org.ossreviewtoolkit.plugins.packagemanagers.node.ModuleInfoResolver
+import org.ossreviewtoolkit.plugins.packagemanagers.node.NON_EXISTING_SEMVER
 import org.ossreviewtoolkit.plugins.packagemanagers.node.NodePackageManagerType
 import org.ossreviewtoolkit.plugins.packagemanagers.node.PackageJson
 import org.ossreviewtoolkit.plugins.packagemanagers.node.parsePackage
@@ -38,24 +39,49 @@ internal class PnpmDependencyHandler(
     private val moduleInfoResolver: ModuleInfoResolver
 ) : DependencyHandler<Dependency> {
     private val workspaceModuleDirs = mutableSetOf<File>()
+    private val workspaceModuleDirForPublishDir = mutableMapOf<File, File>()
     private val packageJsonCache = mutableMapOf<File, PackageJson>()
 
+    /**
+     * The directory of the workspace module this dependency refers to, or null if it does not refer to a workspace
+     * module. If a workspace module sets "publishConfig.directory", PNPM links dependents to that publish directory
+     * instead of to the module directory, no matter whether the publish directory exists.
+     */
+    private val Dependency.projectDir: File?
+        get() = workspaceModuleDirForPublishDir[workingDir.absoluteFile.normalize()]
+            ?: workingDir.takeIf { isInstalled }?.realFile?.takeIf { it in workspaceModuleDirs }
+
     private val Dependency.isProject: Boolean
-        get() = isInstalled && workingDir.realFile in workspaceModuleDirs
+        get() = projectDir != null
 
     fun setWorkspaceModuleDirs(dirs: Collection<File>) {
         workspaceModuleDirs.apply {
             clear()
             addAll(dirs)
         }
+
+        workspaceModuleDirForPublishDir.clear()
+        dirs.forEach { dir ->
+            val packageJson = readPackageJson(dir.resolve(NodePackageManagerType.DEFINITION_FILE))
+            packageJson.publishConfig?.directory?.let { publishDir ->
+                workspaceModuleDirForPublishDir[dir.resolve(publishDir).normalize()] = dir
+            }
+        }
     }
+
+    /**
+     * Return whether the [dependency] is relevant for the dependency graph, which is the case if it is installed or
+     * refers to a workspace module.
+     */
+    fun isRelevant(dependency: Dependency): Boolean = dependency.isInstalled || dependency.isProject
 
     override fun identifierFor(dependency: Dependency): Identifier {
         val type = with(NodePackageManagerType.PNPM) { if (dependency.isProject) projectType else packageType }
         val namespace = dependency.from.substringBeforeLast("/", "")
         val name = dependency.from.substringAfterLast("/")
-        val version = if (dependency.isProject) {
-            readPackageJson(dependency.packageJsonFile).version.orEmpty()
+        val projectDir = dependency.projectDir
+        val version = if (projectDir != null) {
+            readPackageJson(projectDir.resolve(NodePackageManagerType.DEFINITION_FILE)).version.orEmpty()
         } else {
             dependency.version.takeUnless { it.startsWith("link:") || it.startsWith("file:") }.orEmpty()
         }
@@ -64,7 +90,7 @@ internal class PnpmDependencyHandler(
     }
 
     override fun dependenciesFor(dependency: Dependency): List<Dependency> =
-        (dependency.dependencies + dependency.optionalDependencies).values.filter { it.isInstalled }
+        (dependency.dependencies + dependency.optionalDependencies).values.filter { isRelevant(it) }
 
     override fun linkageFor(dependency: Dependency): PackageLinkage =
         PackageLinkage.DYNAMIC.takeUnless { dependency.isProject } ?: PackageLinkage.PROJECT_DYNAMIC
@@ -73,6 +99,30 @@ internal class PnpmDependencyHandler(
         dependency.takeUnless { it.isProject || !it.isInstalled }?.let {
             parsePackage(it.packageJsonFile, moduleInfoResolver)
         }
+
+    /**
+     * Return the module IDs in the form "name@version" of all packages which are (transitive) dependencies of the given
+     * [dependencies]. This allows requesting the package details for all packages upfront.
+     */
+    fun getAllPackageModuleIds(dependencies: Collection<Dependency>): Set<String> {
+        val moduleIds = mutableSetOf<String>()
+        val queue = ArrayDeque(dependencies)
+
+        // Note that the same module may occur multiple times with different (deduplicated) dependencies in the output
+        // of "pnpm list", so all occurrences need to be visited.
+        while (queue.isNotEmpty()) {
+            val dependency = queue.removeFirst()
+
+            if (!dependency.isProject) {
+                val packageJson = readPackageJson(dependency.packageJsonFile)
+                moduleIds += "${packageJson.name.orEmpty()}@${packageJson.version ?: NON_EXISTING_SEMVER}"
+            }
+
+            queue += dependenciesFor(dependency)
+        }
+
+        return moduleIds
+    }
 
     private fun readPackageJson(packageJsonFile: File): PackageJson =
         packageJsonCache.getOrPut(packageJsonFile.realFile) { parsePackageJson(packageJsonFile) }

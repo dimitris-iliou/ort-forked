@@ -17,13 +17,14 @@
  * License-Filename: LICENSE
  */
 
-val cliAnalyzerOnly: String? by project
+val cliAnalyzerOnly = project.findProperty("cliAnalyzerOnly")?.toString().toBoolean()
 
 plugins {
     // Apply precompiled plugins.
     id("ort-application-conventions")
 }
 
+// See https://docs.gradle.org/current/userguide/declaring_configurations.html#sec:configuration-flags-roles.
 configurations.dependencyScope("pluginClasspath")
 configurations["runtimeOnly"].extendsFrom(configurations["pluginClasspath"])
 
@@ -33,16 +34,7 @@ application {
 }
 
 dependencies {
-    implementation(projects.model)
-    implementation(projects.plugins.commands.commandApi)
-    implementation(projects.utils.commonUtils)
-    implementation(projects.utils.ortUtils)
-
-    implementation(libs.clikt)
-    implementation(libs.mordant)
-    implementation(libs.slf4j)
-
-    if (cliAnalyzerOnly.toBoolean()) {
+    if (cliAnalyzerOnly) {
         "pluginClasspath"(projects.plugins.commands.analyzerCommand)
         "pluginClasspath"(platform(projects.plugins.packageCurationProviders))
         "pluginClasspath"(platform(projects.plugins.packageManagers))
@@ -58,16 +50,21 @@ dependencies {
         "pluginClasspath"(platform(projects.plugins.versionControlSystems))
     }
 
-    funTestImplementation(platform(projects.plugins.commands))
-    funTestImplementation(platform(projects.plugins.packageCurationProviders))
-    funTestImplementation(platform(projects.plugins.packageManagers))
-    funTestImplementation(platform(projects.plugins.reporters))
+    implementation(projects.model)
+    implementation(projects.plugins.commands.commandApi)
+    implementation(projects.utils.commonUtils)
+    implementation(projects.utils.ortUtils)
+    implementation(libs.clikt)
+    implementation(libs.mordant)
+    implementation(libs.slf4j)
+
+    funTestImplementation(testFixtures(projects.analyzer))
     funTestImplementation(projects.downloader)
     funTestImplementation(projects.evaluator)
     funTestImplementation(projects.notifier)
+    funTestImplementation(projects.plugins.packageManagers.gradleInspector)
+    funTestImplementation(projects.plugins.versionControlSystems.gitVersionControlSystem)
     funTestImplementation(projects.reporter)
     funTestImplementation(projects.utils.testUtils)
-    funTestImplementation(testFixtures(projects.analyzer))
-
     funTestImplementation(libs.greenmail)
 }

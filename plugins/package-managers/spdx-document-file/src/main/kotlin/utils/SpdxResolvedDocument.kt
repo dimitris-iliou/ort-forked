@@ -19,7 +19,7 @@
 
 @file:Suppress("TooManyFunctions")
 
-package org.ossreviewtoolkit.plugins.packagemanagers.spdx.utils
+package org.ossreviewtoolkit.plugins.packagemanagers.spdxdocumentfile.utils
 
 import java.io.File
 import java.net.URI
@@ -30,15 +30,13 @@ import org.ossreviewtoolkit.model.Hash
 import org.ossreviewtoolkit.model.Issue
 import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.createAndLogIssue
-import org.ossreviewtoolkit.plugins.packagemanagers.spdx.SpdxDocumentFile
-import org.ossreviewtoolkit.plugins.packagemanagers.spdx.SpdxDocumentFileFactory
+import org.ossreviewtoolkit.plugins.packagemanagers.spdxdocumentfile.SpdxDocumentFile
+import org.ossreviewtoolkit.plugins.packagemanagers.spdxdocumentfile.SpdxDocumentFileFactory
 import org.ossreviewtoolkit.utils.common.collectMessages
 import org.ossreviewtoolkit.utils.common.safeDeleteRecursively
-import org.ossreviewtoolkit.utils.ort.OkHttpClientHelper
-import org.ossreviewtoolkit.utils.ort.addBasicAuthorization
 import org.ossreviewtoolkit.utils.ort.createOrtTempDir
 import org.ossreviewtoolkit.utils.ort.downloadFile
-import org.ossreviewtoolkit.utils.ort.requestPasswordAuthentication
+import org.ossreviewtoolkit.utils.ort.okHttpClient
 import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxDocument
 import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxExternalDocumentReference
 import org.ossreviewtoolkit.utils.spdxdocument.model.SpdxPackage
@@ -105,6 +103,17 @@ internal data class SpdxResolvedDocument(
 
             return SpdxResolvedDocument(resolvedRootDocument, references, relations, packages, issues)
         }
+    }
+
+    private val relationshipsByIdsWithoutPrefix: Map<Pair<String, String>, List<SpdxRelationship>> by lazy {
+        relationships.groupBy {
+            it.spdxElementId.removeDocumentRefPrefix() to it.relatedSpdxElement.removeDocumentRefPrefix()
+        }
+    }
+
+    fun getRelationships(spdxElementId: String, relatedSpdxElementId: String): List<SpdxRelationship> {
+        val key = spdxElementId.removeDocumentRefPrefix() to relatedSpdxElementId.removeDocumentRefPrefix()
+        return relationshipsByIdsWithoutPrefix[key].orEmpty()
     }
 
     /**
@@ -266,7 +275,8 @@ private fun URI.toDefinitionFile(): File? =
 internal fun SpdxExternalDocumentReference.resolve(cache: SpdxDocumentCache, baseUri: URI): ResolutionResult {
     val uri = runCatching {
         val resolvedUri = baseUri.resolve(spdxDocument)
-        resolvedUri.takeUnless { baseUri.query != null } ?: URI("$resolvedUri?${baseUri.query}")
+        resolvedUri.takeUnless { baseUri.query != null && resolvedUri.query == null }
+            ?: URI("$resolvedUri?${baseUri.query}")
     }.getOrElse {
         return ResolutionResult(
             document = null,
@@ -335,16 +345,7 @@ private fun SpdxExternalDocumentReference.resolveFromDownload(
 
     val tempDir = createOrtTempDir()
     return try {
-        val client = OkHttpClientHelper.buildClient {
-            // Use the authenticator also to request preemptive authentication.
-            val auth = requestPasswordAuthentication(uri)
-
-            if (auth != null) {
-                addBasicAuthorization(auth.userName, String(auth.password))
-            }
-        }
-
-        val file = client.downloadFile(uri.toString(), tempDir).getOrElse {
+        val file = okHttpClient.downloadFile(uri.toString(), tempDir).getOrElse {
             return ResolutionResult(
                 document = null,
                 uri = uri,

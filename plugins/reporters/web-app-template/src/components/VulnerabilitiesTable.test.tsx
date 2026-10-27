@@ -1,0 +1,86 @@
+/*
+ * Copyright (C) 2026 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ * License-Filename: LICENSE
+ */
+
+import { render, screen } from "@testing-library/react";
+import { beforeAll, describe, expect, it } from "vitest";
+
+import { VulnerabilitiesTable } from "@/components/VulnerabilitiesTable";
+import type WebAppEvaluatedModel from "@/models/WebAppEvaluatedModel";
+import WebAppVulnerability from "@/models/WebAppVulnerability";
+import { showColumn } from "@/test/dataTable";
+import { buildResult, loadSampleEvaluatedModel } from "@/test/fixture";
+
+describe("VulnerabilitiesTable", () => {
+    let vulnerabilities: readonly WebAppVulnerability[];
+
+    beforeAll(async () => {
+        const result = await buildResult(loadSampleEvaluatedModel());
+        vulnerabilities = result.vulnerabilities;
+    });
+
+    it("renders its column headers", () => {
+        render(<VulnerabilitiesTable vulnerabilities={vulnerabilities} />);
+        expect(screen.getByRole("columnheader", { name: /rating/i })).toBeInTheDocument();
+        expect(screen.getByRole("columnheader", { name: /package/i })).toBeInTheDocument();
+        expect(screen.getByRole("columnheader", { name: /summary/i })).toBeInTheDocument();
+    });
+
+    it("shows the empty state when there are no vulnerabilities", () => {
+        render(<VulnerabilitiesTable vulnerabilities={[]} />);
+        expect(screen.getByText("No vulnerabilities")).toBeInTheDocument();
+    });
+
+    it("shows the resolution comment, not only the reason, for a resolved vulnerability", () => {
+        const resolved = vulnerabilities.find((vulnerability) => vulnerability.isResolved);
+        expect(resolved).toBeDefined();
+        if (!resolved) return;
+        const [resolution] = resolved.resolutions ?? [];
+        expect(resolution?.comment).toBeTruthy();
+        if (!resolution?.comment || !resolved.id) return;
+
+        render(<VulnerabilitiesTable focusVulnerabilityId={resolved.id} vulnerabilities={vulnerabilities} />);
+
+        expect(screen.getByText(new RegExp(resolution.reason ?? ""))).toBeInTheDocument();
+        expect(screen.getByText(resolution.comment.trim())).toBeInTheDocument();
+    });
+
+    it("shows vulnerabilities of excluded packages as excluded", async () => {
+        // A minimal stand-in model resolving the package indexes to an excluded and an included package.
+        const packages = [
+            { excludeReasons: new Set(["TEST_OF"]), id: "Maven:acme:excluded:1.0", isExcluded: true },
+            { excludeReasons: new Set(), id: "Maven:acme:included:1.0", isExcluded: false },
+        ];
+        const model = { getPackageByIndex: (index: number) => packages[index] } as unknown as WebAppEvaluatedModel;
+        const excluded = new WebAppVulnerability({ id: "CVE-2026-0001", pkg: 0, references: [] }, model);
+        const included = new WebAppVulnerability({ id: "CVE-2026-0002", pkg: 1, references: [] }, model);
+
+        const { unmount } = render(<VulnerabilitiesTable vulnerabilities={[included]} />);
+        expect(screen.queryByTitle("Included / excluded")).not.toBeInTheDocument();
+        unmount();
+
+        render(<VulnerabilitiesTable vulnerabilities={[excluded, included]} />);
+        expect(screen.queryByTitle("Included / excluded")).not.toBeInTheDocument();
+        await showColumn("Excludes");
+        expect(screen.getByTitle("Included / excluded")).toBeInTheDocument();
+        const excludedName = screen.getByText("Maven:acme:excluded:1.0");
+        expect(excludedName).toHaveClass("line-through", "text-muted-foreground");
+        expect(excludedName.parentElement).toHaveAttribute("title", "Excluded: TEST_OF");
+        expect(screen.getByText("Maven:acme:included:1.0")).not.toHaveClass("line-through");
+    });
+});

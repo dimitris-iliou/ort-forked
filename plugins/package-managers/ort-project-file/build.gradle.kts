@@ -30,13 +30,12 @@ dependencies {
     api(projects.model)
 
     implementation(projects.downloader)
-
     implementation(libs.kotlinx.serialization.core)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.serialization.yaml)
 
-    ksp(projects.analyzer)
-
-    funTestImplementation(projects.utils.testUtils)
     funTestImplementation(testFixtures(projects.analyzer))
+    funTestImplementation(projects.utils.testUtils)
+
+    ksp(projects.analyzer)
 }

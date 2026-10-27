@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#
+
 # Copyright (C) 2020 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,10 +23,11 @@ GIT_ROOT=$(git rev-parse --show-toplevel)
 ORT_VERSION=$("$GIT_ROOT/gradlew" -q properties --property version | sed -nr "s/version: (.+)/\1/p")
 DOCKER_IMAGE_ROOT="${DOCKER_IMAGE_ROOT:-ghcr.io/oss-review-toolkit}"
 
-echo "Setting ORT_VERSION to $ORT_VERSION."
+echo "ORT_VERSION was set to: $ORT_VERSION"
 
-# shellcheck disable=SC2046
-export $(cat "$GIT_ROOT/.env.versions" | xargs)
+set -o allexport
+source .env.versions
+set +o allexport
 
 # ---------------------------
 # image_build function
@@ -78,6 +79,7 @@ image_build python ort/python "$PYTHON_VERSION" \
 image_build nodejs ort/nodejs "$NODEJS_VERSION" \
     --build-arg NODEJS_VERSION="$NODEJS_VERSION" \
     --build-arg BOWER_VERSION="$BOWER_VERSION" \
+    --build-arg BUN_VERSION="$BUN_VERSION" \
     --build-arg NPM_VERSION="$NPM_VERSION" \
     --build-arg PNPM_VERSION="$PNPM_VERSION" \
     --build-arg YARN_VERSION="$YARN_VERSION" \

@@ -25,11 +25,11 @@ import org.ossreviewtoolkit.model.OrtResult
 import org.ossreviewtoolkit.model.Project
 
 /**
- * Defines which parts of a repository should be excluded.
+ * Defines which parts of a (root) repository should be excluded.
  */
 data class Excludes(
     /**
-     * Path excludes.
+     * Path excludes which target file paths relative to the analysis root.
      */
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     val paths: List<PathExclude> = emptyList(),
@@ -70,7 +70,7 @@ data class Excludes(
     /**
      * True if the scope with the given [scopeName] is excluded by this [Excludes] configuration.
      */
-    fun isScopeExcluded(scopeName: String): Boolean = findScopeExcludes(scopeName).isNotEmpty()
+    fun isScopeExcluded(scopeName: String): Boolean = scopes.any { it.matches(scopeName) }
 }
 
 fun Excludes?.orEmpty(): Excludes = this ?: Excludes.EMPTY

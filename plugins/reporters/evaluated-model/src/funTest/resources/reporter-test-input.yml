@@ -155,6 +155,7 @@ analyzer:
         hash:
           value: "a6c32b40bf3d76eca54e3c601e5d1470c86fcdfa"
           algorithm: "SHA-1"
+      published_at: "2014-12-04T16:17:28Z"
       vcs:
         type: ""
         url: ""
@@ -853,6 +854,15 @@ evaluator:
     how_to_fix: "* *Step 1*\n* __Step 2__\n* ***Step 3***\n```\nSome long text verify\
       \ that overflow:scroll is working as expected.\n```"
 resolved_configuration:
+  license_choices:
+    repository_license_choices:
+    - given: "GPL-2.0-only OR MIT"
+      choice: "MIT"
+    package_license_choices:
+    - package_id: "Maven:com.h2database:h2:1.4.200"
+      license_choices:
+      - given: "MPL-2.0 OR EPL-1.0"
+        choice: "MPL-2.0"
   package_curations:
   - provider:
       id: "DefaultDir"

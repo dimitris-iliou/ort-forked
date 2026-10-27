@@ -36,6 +36,7 @@ import java.io.File
 
 import org.ossreviewtoolkit.clients.fossid.FossIdRestService
 import org.ossreviewtoolkit.clients.fossid.FossIdServiceWithVersion
+import org.ossreviewtoolkit.clients.fossid.SCAN_CODE_KEY
 import org.ossreviewtoolkit.clients.fossid.generateReport
 import org.ossreviewtoolkit.clients.fossid.model.report.ReportType
 import org.ossreviewtoolkit.clients.fossid.model.report.SelectionType
@@ -198,7 +199,7 @@ class FossIdReporterTest : WordSpec({
 
             val reportFileResults = reporterMock.generateReport(input)
 
-            reportFileResults.shouldBeSingleton {
+            reportFileResults shouldBeSingleton {
                 it shouldBeSuccess FILE_SAMPLE
             }
         }
@@ -241,7 +242,7 @@ private fun createReporterInput(vararg scanCodes: String): ReporterInput {
 
     val results = scanCodes.associateByTo(
         destination = sortedMapOf(),
-        keySelector = { Identifier.EMPTY.copy(name = it) },
+        keySelector = { Identifier.EMPTY.copy(type = "generic", name = it) },
         valueTransform = { code ->
             val unmatchedScanResult = ScanResult(
                 provenance = UnknownProvenance,
@@ -279,5 +280,5 @@ private fun createScanResult(scanCode: String): ScanResult =
         provenance = UnknownProvenance,
         scanner = ScannerDetails.EMPTY,
         summary = ScanSummary.EMPTY,
-        additionalData = mapOf(FossIdReporter.SCAN_CODE_KEY to scanCode)
+        additionalData = mapOf(SCAN_CODE_KEY to scanCode)
     )

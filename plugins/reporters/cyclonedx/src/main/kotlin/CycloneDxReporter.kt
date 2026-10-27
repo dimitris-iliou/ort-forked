@@ -37,7 +37,6 @@ import org.ossreviewtoolkit.reporter.ReporterFactory
 import org.ossreviewtoolkit.reporter.ReporterInput
 
 internal const val DEFAULT_SCHEMA_VERSION_NAME = "1.6" // Version.VERSION_16.versionString
-internal val DEFAULT_SCHEMA_VERSION = Version.entries.single { it.versionString == DEFAULT_SCHEMA_VERSION_NAME }
 
 @Suppress("EnumEntryNameCase", "EnumNaming")
 enum class SchemaVersion(val version: Version) {
@@ -113,7 +112,27 @@ data class CycloneDxReporterConfig(
         defaultValue = "JSON",
         aliases = ["output.file.formats"]
     )
-    val outputFileFormats: List<Format>
+    val outputFileFormats: List<Format>,
+
+    /**
+     * Allows specifying a supplier name in the metadata of the generated BOMs.
+     * See https://cyclonedx.org/docs/1.7/json/#metadata_tools_oneOf_i0_components_items_supplier_name
+     */
+    @OrtPluginOption(
+        defaultValue = "",
+        aliases = ["metadata.supplier.name"]
+    )
+    val metadataSupplierName: String,
+
+    /**
+     * Allows specifying a supplier URL in the metadata of the generated BOMs.
+     * See https://cyclonedx.org/docs/1.7/json/#metadata_tools_oneOf_i0_components_items_supplier_url
+     */
+    @OrtPluginOption(
+        defaultValue = "",
+        aliases = ["metadata.supplier.url"]
+    )
+    val metadataSupplierUrl: String
 )
 
 /**
@@ -123,7 +142,7 @@ data class CycloneDxReporterConfig(
 @OrtPlugin(
     id = "CycloneDX",
     displayName = "CycloneDX SBOM",
-    description = "Creates software bills of materials (SBOM) in the CycloneDX format.",
+    summary = "Creates software bills of materials (SBOM) in the CycloneDX format.",
     factory = ReporterFactory::class
 )
 class CycloneDxReporter(

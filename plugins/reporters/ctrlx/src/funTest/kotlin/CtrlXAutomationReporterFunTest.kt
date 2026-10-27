@@ -22,6 +22,7 @@ package org.ossreviewtoolkit.plugins.reporters.ctrlx
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.engine.spec.tempdir
 import io.kotest.matchers.collections.haveSize
+import io.kotest.matchers.collections.shouldBeSingle
 import io.kotest.matchers.collections.shouldBeSingleton
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldNotBeNull
@@ -54,8 +55,8 @@ import org.ossreviewtoolkit.reporter.ORT_RESULT
 import org.ossreviewtoolkit.reporter.ReporterInput
 import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.ort.createOrtTempDir
-import org.ossreviewtoolkit.utils.spdx.SpdxSingleLicenseExpression
-import org.ossreviewtoolkit.utils.spdx.toSpdx
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxSingleLicenseExpression
+import org.ossreviewtoolkit.utils.spdxexpression.toSpdx
 import org.ossreviewtoolkit.utils.test.getResource
 
 class CtrlXAutomationReporterFunTest : StringSpec({
@@ -72,7 +73,7 @@ class CtrlXAutomationReporterFunTest : StringSpec({
         val outputDir = tempdir()
         val reportFiles = CtrlXAutomationReporterFactory.create().generateReport(ReporterInput(ORT_RESULT), outputDir)
 
-        reportFiles.shouldBeSingleton {
+        reportFiles shouldBeSingleton {
             it shouldBeSuccess outputDir / REPORT_FILENAME
         }
     }
@@ -114,16 +115,13 @@ class CtrlXAutomationReporterFunTest : StringSpec({
         val reporterResult = reporter.generateReport(input, outputDir)
 
         validateReport(reporterResult) {
-            components shouldNotBeNull {
-                this shouldHaveSize 1
-                first().name shouldBe "package2"
-            }
+            components.shouldNotBeNull().shouldBeSingle().name shouldBe "package2"
         }
     }
 })
 
 private fun validateReport(reporterResult: List<Result<File>>, validate: FossInfo.() -> Unit) {
-    reporterResult.shouldBeSingleton { result ->
+    reporterResult shouldBeSingleton { result ->
         result shouldBeSuccess { file ->
             file.name shouldBe "fossinfo.json"
             val fossInfo = file.inputStream().use {

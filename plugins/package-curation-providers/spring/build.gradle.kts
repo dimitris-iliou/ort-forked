@@ -23,14 +23,13 @@ plugins {
 }
 
 dependencies {
+    api(projects.model)
     api(projects.plugins.packageCurationProviders.packageCurationProviderApi)
 
-    ksp(projects.plugins.packageCurationProviders.packageCurationProviderApi)
-
-    implementation(projects.model)
     implementation(projects.utils.commonUtils)
     implementation(projects.utils.ortUtils)
-
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.semver4j)
+
+    ksp(projects.plugins.packageCurationProviders.packageCurationProviderApi)
 }

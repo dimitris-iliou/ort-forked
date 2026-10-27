@@ -29,15 +29,18 @@
 require 'bundler'
 require 'yaml'
 
-# Resolve dependencies independently of the Ruby interpreter.
-Bundler.settings.set_global(:force_ruby_platform, true)
+Bundler.ui.silence do
+  # Get dependencies independently of the Ruby interpreter.
+  all_groups = Bundler.settings.temporary(force_ruby_platform: true) do
+    Bundler.definition.dependencies.flat_map(&:groups)
+  end
 
-# This command tries to resolve dependencies that are specified in the Gemfile of the current working directory.
-# Explicitly enable resolution of remote `gem` or `git` dependencies. `path` dependencies are still resolved locally.
-Bundler.ui.silence {
+  # Resolve all groups including optional ones.
+  Bundler.settings.temporary(with: all_groups) do
+    # This command resolves dependencies that are specified in the Gemfile of the current working directory.
     Bundler.definition.resolve_remotely!
 
-    # Resolving is triggered lazily, so the below "to_yaml" call might be the place where progress output needs to be
-    # silenced in addition to the above "resolve_remotely" call.
-    Bundler.definition.specs.map { |spec| spec.to_yaml }.join("\0")
-}
+    # Resolving is triggered lazily, so the below "to_yaml" might create progress output.
+    Bundler.definition.specs.map(&:to_yaml).join("\0")
+  end
+end

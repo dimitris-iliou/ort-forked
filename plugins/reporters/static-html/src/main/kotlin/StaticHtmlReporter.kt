@@ -55,11 +55,11 @@ import org.ossreviewtoolkit.utils.common.normalizeLineBreaks
 import org.ossreviewtoolkit.utils.common.titlecase
 import org.ossreviewtoolkit.utils.ort.ORT_FULL_NAME
 import org.ossreviewtoolkit.utils.ort.ORT_VERSION
-import org.ossreviewtoolkit.utils.spdx.SpdxCompoundExpression
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
-import org.ossreviewtoolkit.utils.spdx.SpdxExpression
-import org.ossreviewtoolkit.utils.spdx.SpdxLicenseIdExpression
-import org.ossreviewtoolkit.utils.spdx.SpdxLicenseWithExceptionExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxCompoundExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxLicenseIdExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxLicenseWithExceptionExpression
 
 private const val RULE_VIOLATION_TABLE_ID = "rule-violation-summary"
 
@@ -67,7 +67,7 @@ private const val RULE_VIOLATION_TABLE_ID = "rule-violation-summary"
 @OrtPlugin(
     id = "StaticHTML",
     displayName = "Static HTML",
-    description = "Generates a static HTML report.",
+    summary = "Generates a static HTML report.",
     factory = ReporterFactory::class
 )
 class StaticHtmlReporter(override val descriptor: PluginDescriptor = StaticHtmlReporterFactory.descriptor) : Reporter {

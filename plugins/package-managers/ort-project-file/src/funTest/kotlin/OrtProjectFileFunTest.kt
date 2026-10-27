@@ -17,13 +17,14 @@
  * License-Filename: LICENSE
  */
 
-package org.ossreviewtoolkit.plugins.packagemanagers.ortproject
+package org.ossreviewtoolkit.plugins.packagemanagers.ortprojectfile
 
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.matchers.collections.beEmpty as beEmptyCollection
 import io.kotest.matchers.collections.containExactly
 import io.kotest.matchers.collections.containExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldBeSingleton
+import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.maps.beEmpty as beEmptyMap
 import io.kotest.matchers.maps.shouldContainExactly
 import io.kotest.matchers.nulls.shouldNotBeNull
@@ -41,6 +42,7 @@ import org.ossreviewtoolkit.analyzer.getAnalyzerResult
 import org.ossreviewtoolkit.analyzer.resolveSingleProject
 import org.ossreviewtoolkit.model.HashAlgorithm
 import org.ossreviewtoolkit.model.Identifier
+import org.ossreviewtoolkit.model.PackageLinkage
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.RemoteArtifact
 import org.ossreviewtoolkit.model.VcsInfo
@@ -57,6 +59,22 @@ class OrtProjectFileFunTest : WordSpec({
         "return properly resolved packages list based on yaml file" {
             val definitionFile = getAssetFile("projects/ortproject.yml")
             verifyBasicProject(OrtProjectFileFactory.create().resolveSingleProject(definitionFile))
+        }
+
+        "return the expected linkage types" {
+            val definitionFile = getAssetFile("projects/linkage.ortproject.yml")
+
+            val result = OrtProjectFileFactory.create().resolveSingleProject(definitionFile)
+
+            result.project.scopes shouldBeSingleton { scope ->
+                scope.dependencies.map {
+                    it.id.toCoordinates() to it.linkage
+                }.shouldContainExactly(
+                    "Maven:com.example:default-linkage:0.1.0" to PackageLinkage.DYNAMIC,
+                    "Maven:com.example:dynamic-linkage:0.1.0" to PackageLinkage.DYNAMIC,
+                    "Maven:com.example:static-linkage:0.1.0" to PackageLinkage.STATIC
+                )
+            }
         }
 
         "return properly resolved package list for minimal project definition using purl" {
@@ -81,7 +99,7 @@ class OrtProjectFileFunTest : WordSpec({
                     dependencies.map { dep -> dep.id.name } should containExactly("minimal")
                 }
 
-                packages.shouldBeSingleton {
+                packages shouldBeSingleton {
                     it.purl shouldBe "pkg:maven/com.example/minimal@0.1.0"
                     it.id shouldBe Identifier("Maven:com.example:minimal:0.1.0")
                 }
@@ -110,7 +128,7 @@ class OrtProjectFileFunTest : WordSpec({
                     dependencies.map { dep -> dep.id.name } should containExactly("minimal")
                 }
 
-                packages.shouldBeSingleton {
+                packages shouldBeSingleton {
                     it.purl shouldBe "pkg:maven/com.example/minimal@0.1.0"
                     it.id shouldBe Identifier("Maven:com.example:minimal:0.1.0")
                 }
@@ -121,7 +139,7 @@ class OrtProjectFileFunTest : WordSpec({
             val definitionFile = getAssetFile("projects/no-hash-alg.ortproject.yml")
             val project = OrtProjectFileFactory.create().resolveSingleProject(definitionFile)
             project.packages should beEmptyCollection()
-            project.issues.shouldBeSingleton {
+            project.issues shouldBeSingleton {
                 it.message shouldContain "Property 'algorithm' is required but it is missing"
             }
         }
@@ -130,7 +148,7 @@ class OrtProjectFileFunTest : WordSpec({
             val definitionFile = getAssetFile("projects/wrong-hash-alg.ortproject.yml")
             val project = OrtProjectFileFactory.create().resolveSingleProject(definitionFile)
             project.issues should beEmptyCollection()
-            project.packages.shouldBeSingleton {
+            project.packages shouldBeSingleton {
                 it.sourceArtifact.hash.value shouldBe "da39a3ee5e6b4b0d3255bfef95601890afd80709"
                 it.sourceArtifact.hash.algorithm shouldBe HashAlgorithm.UNKNOWN
             }
@@ -140,7 +158,7 @@ class OrtProjectFileFunTest : WordSpec({
             val definitionFile = getAssetFile("projects/uppercase-hash-val.ortproject.yml")
             val project = OrtProjectFileFactory.create().resolveSingleProject(definitionFile)
             project.issues should beEmptyCollection()
-            project.packages.shouldBeSingleton {
+            project.packages shouldBeSingleton {
                 it.sourceArtifact.hash.value shouldBe "da39a3ee5e6b4b0d3255bfef95601890afd80709"
                 it.sourceArtifact.hash.algorithm shouldBe HashAlgorithm.SHA1
             }
@@ -150,7 +168,7 @@ class OrtProjectFileFunTest : WordSpec({
             val definitionFile = getAssetFile("projects/no-pkg-id-or-purl.ortproject.yml")
             val project = OrtProjectFileFactory.create().resolveSingleProject(definitionFile)
             project.packages should beEmptyCollection()
-            project.issues.shouldBeSingleton {
+            project.issues shouldBeSingleton {
                 it.message shouldContain "There is no id or purl defined for the package."
                 it.source shouldBe "ORT Project File"
             }
@@ -160,7 +178,7 @@ class OrtProjectFileFunTest : WordSpec({
             val definitionFile = getAssetFile("projects/invalid-pkg-id.ortproject.yml")
             val project = OrtProjectFileFactory.create().resolveSingleProject(definitionFile)
             project.packages should beEmptyCollection()
-            project.issues.shouldBeSingleton {
+            project.issues shouldBeSingleton {
                 it.message shouldContain "The id 'Maven:0.1.0::' is not a valid Identifier."
                 it.source shouldBe "ORT Project File"
             }
@@ -170,7 +188,7 @@ class OrtProjectFileFunTest : WordSpec({
             val definitionFile = getAssetFile("projects/invalid-pkg-purl.ortproject.yml")
             val project = OrtProjectFileFactory.create().resolveSingleProject(definitionFile)
             project.packages should beEmptyCollection()
-            project.issues.shouldBeSingleton {
+            project.issues shouldBeSingleton {
                 it.message shouldContain "The purl 'pkg/maven/com.example/minimal@0.1.0' is not a valid PackageURL."
                 it.source shouldBe "ORT Project File"
             }
@@ -180,7 +198,7 @@ class OrtProjectFileFunTest : WordSpec({
             val definitionFile = getAssetFile("projects/malformed-vcs.ortproject.yml")
             val project = OrtProjectFileFactory.create().resolveSingleProject(definitionFile)
             project.packages should beEmptyCollection()
-            project.issues.shouldBeSingleton {
+            project.issues shouldBeSingleton {
                 it.message shouldContain "Fields [type, revision] are required"
             }
         }
@@ -228,11 +246,11 @@ private fun verifyBasicProject(result: ProjectAnalyzerResult) {
         project.homepageUrl shouldBe "https://project_x.example.com"
 
         project.scopeDependencies.orEmpty().associate { scope ->
-            scope.name to scope.dependencies.mapTo(mutableSetOf()) { it.id.name }
+            scope.name to scope.dependencies.mapTo(mutableSetOf()) { it.id.name to it.linkage }
         } shouldContainExactly mapOf(
-            "main" to setOf("full"),
-            "some_scope" to setOf("full"),
-            "unnamed" to setOf("minimal")
+            "main" to setOf("full" to PackageLinkage.DYNAMIC),
+            "some_scope" to setOf("full" to PackageLinkage.DYNAMIC),
+            "unnamed" to setOf("minimal" to PackageLinkage.DYNAMIC)
         )
 
         packages.map { it.purl } should containExactlyInAnyOrder(

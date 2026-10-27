@@ -47,6 +47,7 @@ import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.Repository
 import org.ossreviewtoolkit.model.RepositoryProvenance
+import org.ossreviewtoolkit.model.ResolvedConfiguration
 import org.ossreviewtoolkit.model.ScanResult
 import org.ossreviewtoolkit.model.ScanSummary
 import org.ossreviewtoolkit.model.ScannerDetails
@@ -64,9 +65,9 @@ import org.ossreviewtoolkit.model.licenses.ResolvedOriginalExpression
 import org.ossreviewtoolkit.model.vulnerabilities.Vulnerability
 import org.ossreviewtoolkit.reporter.ReporterInput
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
-import org.ossreviewtoolkit.utils.spdx.SpdxLicenseChoice
-import org.ossreviewtoolkit.utils.spdx.SpdxSingleLicenseExpression
-import org.ossreviewtoolkit.utils.spdx.toSpdx
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxLicenseChoice
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxSingleLicenseExpression
+import org.ossreviewtoolkit.utils.spdxexpression.toSpdx
 import org.ossreviewtoolkit.utils.test.advisorRunOf
 import org.ossreviewtoolkit.utils.test.scannerRunOf
 
@@ -338,22 +339,24 @@ class FreeMarkerTemplateProcessorTest : WordSpec({
                 ResolvedOriginalExpression("GPL-2.0-only OR MIT OR Apache-2.0".toSpdx(), LicenseSource.DECLARED)
             )
 
-            val ortResult = ORT_RESULT.copy(
-                repository = ORT_RESULT.repository.copy(
-                    config = RepositoryConfiguration(
-                        licenseChoices = LicenseChoices(
-                            repositoryLicenseChoices = listOf(
-                                SpdxLicenseChoice("GPL-2.0-only OR MIT".toSpdx(), "MIT".toSpdx())
-                            ),
-                            packageLicenseChoices = listOf(
-                                PackageLicenseChoice(
-                                    projects[1].id,
-                                    listOf(SpdxLicenseChoice("MIT OR Apache-2.0".toSpdx(), "MIT".toSpdx()))
-                                )
-                            )
-                        )
+            val licenseChoices = LicenseChoices(
+                repositoryLicenseChoices = listOf(
+                    SpdxLicenseChoice("GPL-2.0-only OR MIT".toSpdx(), "MIT".toSpdx())
+                ),
+                packageLicenseChoices = listOf(
+                    PackageLicenseChoice(
+                        projects[1].id,
+                        listOf(SpdxLicenseChoice("MIT OR Apache-2.0".toSpdx(), "MIT".toSpdx()))
                     )
                 )
+            )
+
+            val ortResult = ORT_RESULT.copy(
+                repository = ORT_RESULT.repository.copy(
+                    config = RepositoryConfiguration(licenseChoices = licenseChoices)
+                ),
+                // The getters read license choices from the resolved configuration, mirroring the production flow.
+                resolvedConfiguration = ResolvedConfiguration(licenseChoices = licenseChoices)
             )
 
             val input = ReporterInput(ortResult, licenseInfoResolver = resolver)

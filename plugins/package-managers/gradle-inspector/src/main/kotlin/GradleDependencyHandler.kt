@@ -19,21 +19,29 @@
 
 package org.ossreviewtoolkit.plugins.packagemanagers.gradleinspector
 
-import OrtDependency
+import OrtComponent
+import OrtComponentIdentifier
+import OrtComponentReference
+import OrtDependencyTreeModel
 
+import java.io.File
 import java.lang.invoke.MethodHandles
 
 import org.apache.logging.log4j.kotlin.logger
 import org.apache.logging.log4j.kotlin.loggerOf
 
+import org.ossreviewtoolkit.analyzer.PackageManager
 import org.ossreviewtoolkit.analyzer.PackageManager.Companion.processPackageVcs
+import org.ossreviewtoolkit.analyzer.PackageManager.Companion.processProjectVcs
 import org.ossreviewtoolkit.downloader.VcsHost
+import org.ossreviewtoolkit.downloader.VersionControlSystem
 import org.ossreviewtoolkit.model.Hash
 import org.ossreviewtoolkit.model.HashAlgorithm
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.Issue
 import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.PackageLinkage
+import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.RemoteArtifact
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
@@ -42,15 +50,14 @@ import org.ossreviewtoolkit.model.orEmpty
 import org.ossreviewtoolkit.model.orNone
 import org.ossreviewtoolkit.model.utils.DependencyHandler
 import org.ossreviewtoolkit.model.utils.parseRepoManifestPath
-import org.ossreviewtoolkit.plugins.packagemanagers.gradlemodel.getIdentifierType
-import org.ossreviewtoolkit.plugins.packagemanagers.gradlemodel.isProjectDependency
+import org.ossreviewtoolkit.model.utils.toPurl
 import org.ossreviewtoolkit.utils.common.collectMessages
 import org.ossreviewtoolkit.utils.common.splitOnWhitespace
 import org.ossreviewtoolkit.utils.common.withoutPrefix
 import org.ossreviewtoolkit.utils.ort.DeclaredLicenseProcessor
 import org.ossreviewtoolkit.utils.ort.downloadText
 import org.ossreviewtoolkit.utils.ort.okHttpClient
-import org.ossreviewtoolkit.utils.spdx.SpdxOperator
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxOperator
 
 /**
  * A specialized [DependencyHandler] implementation for Gradle's dependency model.
@@ -58,49 +65,97 @@ import org.ossreviewtoolkit.utils.spdx.SpdxOperator
 internal class GradleDependencyHandler(
     /** The type of projects to handle. */
     private val projectType: String
-) : DependencyHandler<OrtDependency> {
-    override fun identifierFor(dependency: OrtDependency): Identifier =
-        with(dependency) { Identifier(getIdentifierType(projectType), groupId, artifactId, version) }
+) : DependencyHandler<OrtComponentReference> {
+    private val componentForId = mutableMapOf<OrtComponentIdentifier, OrtComponent>()
 
-    override fun dependenciesFor(dependency: OrtDependency): List<OrtDependency> = dependency.dependencies
+    /**
+     * A map to keep track of [Project]s that have been injected by other package managers (e.g. via React
+     * Native's autolinking). As these projects do not correspond to a definition file processed by this package
+     * manager, they need to be added to the final result explicitly.
+     */
+    private val externalProjects = mutableMapOf<Identifier, Project>()
 
-    override fun linkageFor(dependency: OrtDependency): PackageLinkage =
+    private fun OrtComponentReference.component(): OrtComponent = componentForId.getValue(componentId)
+
+    fun setTreeModel(treeModel: OrtDependencyTreeModel) {
+        treeModel.components.associateByTo(componentForId) { it.componentId }
+    }
+
+    /**
+     * Return the [Project]s collected so far from external package managers, see [externalProjects].
+     */
+    fun externalProjects(): Collection<Project> = externalProjects.values
+
+    override fun identifierFor(dependency: OrtComponentReference): Identifier =
+        with(dependency.componentId) {
+            Identifier(
+                type = dependency.getIdentifierType(projectType),
+                namespace = groupId,
+                name = artifactId,
+                version = version
+            )
+        }
+
+    override fun dependenciesFor(dependency: OrtComponentReference): List<OrtComponentReference> =
+        dependency.dependencies
+
+    override fun linkageFor(dependency: OrtComponentReference): PackageLinkage =
         if (dependency.isProjectDependency) PackageLinkage.PROJECT_DYNAMIC else PackageLinkage.DYNAMIC
 
-    override fun createPackage(dependency: OrtDependency, issues: MutableCollection<Issue>): Package? {
-        // Only look for a package if there was no error resolving the dependency and it is no project dependency.
-        if (dependency.error != null || dependency.isProjectDependency) return null
+    override fun createPackage(dependency: OrtComponentReference, issues: MutableCollection<Issue>): Package? {
+        val component = dependency.component()
+
+        // Do not create a package for a project dependency. If the "project" actually refers to an artifact
+        // substituted from another package manager's directory, register an external project for it instead, so that
+        // the dependency graph stays consistent.
+        if (dependency.isProjectDependency) {
+            component.projectDir?.takeIf { it.isInsideIgnoredDirectory() }?.let { projectDir ->
+                dependency.registerExternalProject(projectDir)
+            }
+
+            return null
+        }
 
         val id = identifierFor(dependency)
-        val model = dependency.mavenModel ?: run {
+
+        component.error?.let { error ->
+            issues += createAndLogIssue(
+                source = GradleInspectorFactory.descriptor.displayName,
+                message = "Error resolving '${id.toCoordinates()}': $error"
+            )
+
+            return Package.EMPTY.copy(id = id, purl = id.toPurl())
+        }
+
+        val model = component.mavenModel ?: run {
             issues += createAndLogIssue(
                 source = GradleInspectorFactory.descriptor.displayName,
                 message = "No Maven model available for '${id.toCoordinates()}'."
             )
 
-            return null
+            return Package.EMPTY.copy(id = id, purl = id.toPurl())
         }
 
-        val hasNoArtifacts = dependency.pomFile == null
-        val isPomArtifact = dependency.extension == "pom"
+        val hasNoArtifacts = component.pomFile == null
+        val isPomArtifact = component.extension == "pom"
 
-        val isPlatformDependency = dependency.variants.keys.any {
+        val isPlatformDependency = component.variants.keys.any {
             it.startsWith("platform-") || it.startsWith("enforced-platform-")
         }
 
-        val isKotlinMultiPlatform = dependency.variants.values.any {
+        val isKotlinMultiPlatform = component.variants.values.any {
             "org.jetbrains.kotlin.platform.type" in it.keys
         }
 
         val binaryArtifact = when {
             hasNoArtifacts -> RemoteArtifact.EMPTY
 
-            isKotlinMultiPlatform -> with(dependency) {
+            isKotlinMultiPlatform -> with(component) {
                 // TODO: Support more than just "jvm" targets for KMP projects.
                 createRemoteArtifact(pomFile, classifier, "jar")
             }
 
-            else -> with(dependency) {
+            else -> with(component) {
                 createRemoteArtifact(pomFile, classifier, extension.takeUnless { it == "bundle" })
             }
         }
@@ -108,10 +163,10 @@ internal class GradleDependencyHandler(
         val sourceArtifact = when {
             hasNoArtifacts -> RemoteArtifact.EMPTY
             isPomArtifact && !isKotlinMultiPlatform -> binaryArtifact
-            else -> createRemoteArtifact(dependency.pomFile, "sources", "jar")
+            else -> createRemoteArtifact(component.pomFile, "sources", "jar")
         }
 
-        val vcs = dependency.toVcsInfo()
+        val vcs = component.toVcsInfo()
         val vcsFallbackUrls = listOfNotNull(model.vcs?.browsableUrl, model.homepageUrl).toTypedArray()
         val vcsProcessed = processPackageVcs(vcs, *vcsFallbackUrls)
 
@@ -136,7 +191,10 @@ internal class GradleDependencyHandler(
         )
     }
 
-    override fun areDependenciesEqual(dependenciesA: List<OrtDependency>, dependenciesB: List<OrtDependency>): Boolean {
+    override fun areDependenciesEqual(
+        dependenciesA: List<OrtComponentReference>,
+        dependenciesB: List<OrtComponentReference>
+    ): Boolean {
         if (dependenciesA === dependenciesB) return true
         if (dependenciesA.isEmpty() && dependenciesB.isEmpty()) return true
 
@@ -150,8 +208,8 @@ internal class GradleDependencyHandler(
 
         // Gradle guarantees dependencies to be same for Identifiers of the same variant, so exit early to skip deep
         // comparison of transitive dependencies in that case.
-        val idVariantPairsA = idToDepA.map { (id, dep) -> id to dep.variants }
-        val idVariantPairsB = idToDepB.map { (id, dep) -> id to dep.variants }
+        val idVariantPairsA = idToDepA.map { (id, dep) -> id to dep.component().variants }
+        val idVariantPairsB = idToDepB.map { (id, dep) -> id to dep.component().variants }
         if (idVariantPairsA == idVariantPairsB) return true
 
         return idToDepA.all { (id, depA) ->
@@ -159,7 +217,49 @@ internal class GradleDependencyHandler(
             areDependenciesEqual(dependenciesFor(depA), dependenciesFor(depB))
         }
     }
+
+    /**
+     * The type of this Gradle dependency. In case of a project, it is [projectType]. Otherwise it is "Maven" unless
+     * there is no POM, then it is "Unknown".
+     */
+    fun OrtComponentReference.getIdentifierType(projectType: String): String =
+        when {
+            isProjectDependency -> projectType
+            component().pomFile != null -> "Maven"
+            else -> "Unknown"
+        }
+
+    /**
+     * A flag to indicate whether this Gradle dependency refers to a project, or to a package.
+     */
+    val OrtComponentReference.isProjectDependency: Boolean
+        get() = component().localPath != null
+
+    /**
+     * Create and store an external [Project] for this dependency. This function is called for projects which Gradle
+     * resolved as a project dependency pointing to [projectDir], but which are not part of the Gradle build actually
+     * being analyzed (e.g. because it is an artifact substituted from another package manager's directory via
+     * autolinking). If a project with the same [Identifier] was already registered, it is not created again.
+     */
+    private fun OrtComponentReference.registerExternalProject(projectDir: File) {
+        val id = identifierFor(this)
+
+        externalProjects.getOrPut(id) {
+            Project.EMPTY.copy(
+                id = id,
+                definitionFilePath = VersionControlSystem.getPathInfo(projectDir).path,
+                vcsProcessed = processProjectVcs(projectDir)
+            )
+        }
+    }
 }
+
+/**
+ * Return whether this [File] points to a directory typically used by other package managers. This is used to
+ * detect whether a Gradle dependency is a regular project.
+ */
+private fun File.isInsideIgnoredDirectory(): Boolean =
+    generateSequence(toPath()) { it.parent }.any { PackageManager.isIgnoredPath(it) }
 
 // See http://maven.apache.org/pom.html#SCM.
 private val SCM_REGEX = Regex("scm:(?<type>[^:@]+):(?<url>.+)")
@@ -167,7 +267,7 @@ private val USER_HOST_REGEX = Regex("scm:(?<user>[^:@]+)@(?<host>[^:]+)[:/](?<pa
 
 private val logger = loggerOf(MethodHandles.lookup().lookupClass())
 
-private fun OrtDependency.toVcsInfo(): VcsInfo =
+private fun OrtComponent.toVcsInfo(): VcsInfo =
     mavenModel?.vcs?.run {
         @Suppress("UnsafeCallOnNullableType")
         SCM_REGEX.matchEntire(connection)?.let { match ->
@@ -178,7 +278,7 @@ private fun OrtDependency.toVcsInfo(): VcsInfo =
         } ?: handleInvalidScmInfo(connection, tag)
     }.orEmpty()
 
-private fun OrtDependency.handleValidScmInfo(type: String, url: String, tag: String): VcsInfo =
+private fun OrtComponent.handleValidScmInfo(type: String, url: String, tag: String): VcsInfo =
     when {
         // Maven does not officially support git-repo as an SCM, see http://maven.apache.org/scm/scms-overview.html, so
         // come up with the convention to use the "manifest" query parameter for the path to the manifest inside the
@@ -208,8 +308,10 @@ private fun OrtDependency.handleValidScmInfo(type: String, url: String, tag: Str
 
             // Try to detect the Maven SCM provider from the URL only, e.g. by looking at the host or special URL paths.
             VcsHost.parseUrl(fixedUrl).copy(revision = tag).also {
-                logger.info {
-                    "Fixed up invalid SCM connection without a provider in '$groupId:$artifactId:$version' to $it."
+                with(componentId) {
+                    logger.info {
+                        "Fixed up invalid SCM connection without a provider in '$groupId:$artifactId:$version' to $it."
+                    }
                 }
             }
         }
@@ -229,7 +331,7 @@ private fun OrtDependency.handleValidScmInfo(type: String, url: String, tag: Str
         }
     }
 
-private fun OrtDependency.handleInvalidScmInfo(connection: String, tag: String): VcsInfo =
+private fun OrtComponent.handleInvalidScmInfo(connection: String, tag: String): VcsInfo =
     @Suppress("UnsafeCallOnNullableType")
     USER_HOST_REGEX.matchEntire(connection)?.let { match ->
         // Some projects omit the provider and use the SCP-like Git URL syntax, for example
@@ -244,7 +346,7 @@ private fun OrtDependency.handleInvalidScmInfo(connection: String, tag: String):
             VcsInfo.EMPTY
         }
     } ?: run {
-        val dep = "$groupId:$artifactId:$version"
+        val dep = with(componentId) { "$groupId:$artifactId:$version" }
 
         if (connection.startsWith("git://") || connection.endsWith(".git")) {
             // It is a common mistake to omit the "scm:[provider]:" prefix. Add fall-backs for nevertheless clear

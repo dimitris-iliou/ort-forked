@@ -32,7 +32,7 @@ import org.ossreviewtoolkit.reporter.ReporterFactory
 import org.ossreviewtoolkit.reporter.ReporterInput
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
 import org.ossreviewtoolkit.utils.spdx.SpdxLicense
-import org.ossreviewtoolkit.utils.spdx.toSpdx
+import org.ossreviewtoolkit.utils.spdxexpression.toSpdx
 
 data class CtrlXAutomationReporterConfig(
     /**
@@ -46,7 +46,7 @@ data class CtrlXAutomationReporterConfig(
 
 @OrtPlugin(
     displayName = "CtrlX Automation",
-    description = "A reporter for the ctrlX Automation format.",
+    summary = "A reporter for the ctrlX Automation format.",
     factory = ReporterFactory::class
 )
 class CtrlXAutomationReporter(

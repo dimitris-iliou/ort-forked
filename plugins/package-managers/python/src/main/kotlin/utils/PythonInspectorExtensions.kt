@@ -22,6 +22,7 @@ package org.ossreviewtoolkit.plugins.packagemanagers.python.utils
 import java.io.File
 
 import org.ossreviewtoolkit.analyzer.PackageManager
+import org.ossreviewtoolkit.analyzer.ProjectResults
 import org.ossreviewtoolkit.downloader.VersionControlSystem
 import org.ossreviewtoolkit.model.Hash
 import org.ossreviewtoolkit.model.Identifier
@@ -33,6 +34,7 @@ import org.ossreviewtoolkit.model.Scope
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.utils.toPurl
+import org.ossreviewtoolkit.utils.common.getCommonParentFile
 
 private const val PACKAGE_TYPE = "PyPI"
 
@@ -59,6 +61,32 @@ internal fun PythonInspector.Result.toOrtProject(
         homepageUrl = homepageUrl,
         scopeDependencies = scopes
     )
+}
+
+/**
+ * Deduplicate any duplicate project identifiers by not only deriving the name from the direct parent directory
+ * (which is used by default), but prepend path components upwards to the analysis root until all names are unique.
+ */
+internal fun ProjectResults.deduplicate(): ProjectResults {
+    val identifierMap = entries.flatMap { (file, results) -> results.map { file to it } }
+        .groupBy { it.second.project.id }
+
+    val duplicateIds = identifierMap.filterValues { it.size > 1 }
+
+    return if (duplicateIds.isEmpty()) {
+        this
+    } else {
+        val deduplicatedProjects = duplicateIds.flatMap { (_, fileResults) ->
+            val commonParent = getCommonParentFile(fileResults.map { it.first })
+            fileResults.map { (file, result) ->
+                val projectName = PackageManager.getFallbackProjectName(commonParent, file)
+                val newId = result.project.id.copy(name = projectName)
+                file to listOf(result.copy(project = result.project.copy(id = newId)))
+            }
+        }
+
+        this + deduplicatedProjects.toMap()
+    }
 }
 
 private fun PythonInspector.Result.resolveIdentifier(
@@ -136,7 +164,13 @@ internal fun List<PythonInspector.Package>.toOrtPackages(): Set<Package> =
             } ?: RemoteArtifact.EMPTY
 
         val id = Identifier(type = PACKAGE_TYPE, namespace = "", name = pkg.name, version = pkg.version)
-        val declaredLicenses = pkg.declaredLicense?.getDeclaredLicenses().orEmpty()
+
+        // PEP 639 defines License-Expression as the machine-readable replacement for the legacy License field and
+        // license classifiers. Python Inspector exposes that value separately, so use it only as a fallback to keep
+        // the established handling of legacy package metadata unchanged.
+        val declaredLicenses = pkg.declaredLicense?.getDeclaredLicenses()?.takeUnless { it.isEmpty() }
+            ?: setOfNotNull(pkg.licenseExpression?.takeUnless { it.isBlank() })
+
         val declaredLicensesProcessed = processDeclaredLicenses(id, declaredLicenses)
 
         Package(

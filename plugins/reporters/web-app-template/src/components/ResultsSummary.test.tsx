@@ -1,0 +1,383 @@
+/*
+ * Copyright (C) 2026 The ORT Project Copyright Holders <https://github.com/oss-review-toolkit/ort/blob/main/NOTICE>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ * License-Filename: LICENSE
+ */
+
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+
+import { FINDING_TALLY_DEFINITIONS, ResultsSummary } from "@/components/ResultsSummary";
+import { LICENSE_TERM_DEFINITIONS } from "@/components/Shared";
+import type WebAppEvaluatedModel from "@/models/WebAppEvaluatedModel";
+import { buildResult, loadSampleEvaluatedModel } from "@/test/fixture";
+
+// Issues in one state; ResultsSummary reads only whether each one is excluded or resolved.
+const fakeIssues = (length: number, state: { isExcluded: boolean; isResolved: boolean }) =>
+    Array.from({ length }, () => state);
+
+interface SeverityCounts {
+    errors: number;
+    hints: number;
+    total: number;
+    warnings: number;
+}
+
+interface FakeOptions {
+    excludedIssues?: number;
+    openIssues?: SeverityCounts;
+    openVulnerabilities?: number;
+    resolvedConfiguration?: {
+        licenseChoices: number;
+        packageConfigurations: number;
+        packageCurations: number;
+        resolutions: number;
+    };
+    resolvedIssues?: number;
+    severeOpenIssuesCount?: number;
+    vulnerabilities?: { isResolved: boolean; package?: { isExcluded: boolean }; severityIndex: number }[];
+}
+
+const NO_SEVERITY: SeverityCounts = { errors: 0, hints: 0, total: 0, warnings: 0 };
+const NO_CONFIG = { licenseChoices: 0, packageConfigurations: 0, packageCurations: 0, resolutions: 0 };
+
+// A minimal stand-in for WebAppEvaluatedModel exposing only the fields ResultsSummary reads, so the
+// verdict, severity-badge and configuration branches can be exercised deterministically. The type is
+// satisfied by casting; at runtime the component only touches the properties provided here.
+function fakeModel(options: FakeOptions = {}): WebAppEvaluatedModel {
+    const openIssues = options.openIssues ?? NO_SEVERITY;
+    const model = {
+        declaredLicensesProcessed: [],
+        detectedLicensesProcessed: [],
+        effectiveLicenses: [],
+        hasExcludes: () => false,
+        hasRepositoryConfiguration: () => false,
+        issues: [
+            ...fakeIssues(openIssues.total, { isExcluded: false, isResolved: false }),
+            ...fakeIssues(options.resolvedIssues ?? 0, { isExcluded: false, isResolved: true }),
+            ...fakeIssues(options.excludedIssues ?? 0, { isExcluded: true, isResolved: false }),
+        ],
+        packages: [],
+        projects: [],
+        repository: { vcsProcessed: { revision: "abcdef1", type: "Git", url: "https://example.com/acme/repo.git" } },
+        ruleViolations: [],
+        scopes: [],
+        severeOpenIssuesCount: options.severeOpenIssuesCount ?? 0,
+        severeOpenRuleViolationsCount: 0,
+        statistics: {
+            openIssues,
+            openRuleViolations: NO_SEVERITY,
+            openVulnerabilities: options.openVulnerabilities ?? 0,
+            resolvedConfiguration: options.resolvedConfiguration ?? NO_CONFIG,
+        },
+        vulnerabilities: options.vulnerabilities ?? [],
+    };
+    return model as unknown as WebAppEvaluatedModel;
+}
+
+/** The number shown under a tally heading, e.g. "Resolved". */
+function tally(container: HTMLElement, term: string): string | undefined {
+    const heading = Array.from(container.querySelectorAll("dt")).find((dt) => dt.textContent?.trim() === term);
+    return heading?.parentElement?.querySelector("dd")?.textContent?.trim();
+}
+
+describe("ResultsSummary", () => {
+    describe("the unresolved and resolved tallies", () => {
+        it("counts neither open nor resolved vulnerabilities", () => {
+            // Whether a vulnerability has to be resolved is decided by policy, and a violation is raised
+            // for it, so counting it here too would count that decision twice.
+            const { container } = render(
+                <ResultsSummary
+                    webAppEvaluatedModel={fakeModel({
+                        openIssues: { errors: 1, hints: 0, total: 1, warnings: 0 },
+                        resolvedIssues: 3,
+                        severeOpenIssuesCount: 1,
+                        vulnerabilities: [
+                            { isResolved: true, severityIndex: 0 },
+                            { isResolved: true, severityIndex: 1 },
+                            { isResolved: false, severityIndex: 0 },
+                        ],
+                    })}
+                />,
+            );
+
+            expect(tally(container, "Unresolved")).toBe("1");
+            // Four issues, one still open, so three resolved - and not the two resolved vulnerabilities.
+            expect(tally(container, "Resolved")).toBe("3");
+        });
+
+        it("still counts resolved vulnerabilities on the Vulnerabilities card", () => {
+            const { container } = render(
+                <ResultsSummary
+                    webAppEvaluatedModel={fakeModel({
+                        vulnerabilities: [
+                            { isResolved: true, severityIndex: 0 },
+                            { isResolved: true, severityIndex: 1 },
+                        ],
+                    })}
+                />,
+            );
+
+            expect(tally(container, "Resolved")).toBe("0");
+            expect(container.textContent).toContain("2 resolved");
+        });
+
+        it("keeps a large open and total count on one line", () => {
+            // jsdom has no layout, so this guards the classes that keep "1234 / 5678" from wrapping after the
+            // slash: the count column must not have a fixed width and must not wrap.
+            render(
+                <ResultsSummary
+                    webAppEvaluatedModel={fakeModel({
+                        openIssues: { errors: 1234, hints: 0, total: 1234, warnings: 0 },
+                        resolvedIssues: 4444,
+                        severeOpenIssuesCount: 1234,
+                    })}
+                />,
+            );
+
+            const column = screen.getByText("/ 5678", { exact: false }).closest("span.text-right");
+            expect(column).toHaveClass("whitespace-nowrap", "min-w-16");
+            expect(column).not.toHaveClass("w-16");
+        });
+
+        it("does not count excluded issues as resolved", () => {
+            // ORT's statistics leave excluded issues out of the open ones, but they have no resolution.
+            const { container } = render(
+                <ResultsSummary
+                    webAppEvaluatedModel={fakeModel({
+                        excludedIssues: 3,
+                        openIssues: { errors: 1, hints: 0, total: 1, warnings: 0 },
+                        resolvedIssues: 1,
+                        severeOpenIssuesCount: 1,
+                    })}
+                />,
+            );
+
+            expect(tally(container, "Resolved")).toBe("1");
+            expect(container.textContent).toContain("1 resolved, 3 excluded");
+        });
+
+        it("counts vulnerabilities of excluded packages as excluded, not open", () => {
+            render(
+                <ResultsSummary
+                    webAppEvaluatedModel={fakeModel({
+                        openVulnerabilities: 1,
+                        vulnerabilities: [
+                            { isResolved: false, package: { isExcluded: true }, severityIndex: 0 },
+                            { isResolved: false, package: { isExcluded: false }, severityIndex: 1 },
+                        ],
+                    })}
+                />,
+            );
+
+            expect(screen.queryByTitle("1 open critical vulnerability")).not.toBeInTheDocument();
+            expect(screen.getByTitle("1 open high vulnerability")).toBeInTheDocument();
+            expect(screen.getByText("0 resolved, 1 excluded")).toBeInTheDocument();
+        });
+    });
+
+    describe("with the sample report", () => {
+        let model: WebAppEvaluatedModel;
+
+        beforeAll(async () => {
+            model = await buildResult(loadSampleEvaluatedModel());
+        });
+
+        it("renders a row for every finding detector and the licenses", () => {
+            render(<ResultsSummary webAppEvaluatedModel={model} />);
+            expect(screen.getByRole("button", { name: /^Technical issues/ })).toBeInTheDocument();
+            expect(screen.getByRole("button", { name: /^Policy violations/ })).toBeInTheDocument();
+            expect(screen.getByRole("button", { name: /^Vulnerabilities/ })).toBeInTheDocument();
+            expect(screen.getByRole("button", { name: /^Licenses/ })).toBeInTheDocument();
+        });
+
+        it("explains the license terms it shows rather than leaving them bare", () => {
+            render(<ResultsSummary webAppEvaluatedModel={model} />);
+
+            for (const definition of [
+                LICENSE_TERM_DEFINITIONS.declaredSpdx,
+                LICENSE_TERM_DEFINITIONS.detected,
+                LICENSE_TERM_DEFINITIONS.effective,
+            ]) {
+                expect(screen.getByTitle(definition)).toBeInTheDocument();
+            }
+        });
+
+        it("explains both verdict tallies rather than leaving them to be guessed at", () => {
+            render(<ResultsSummary webAppEvaluatedModel={model} />);
+
+            for (const definition of Object.values(FINDING_TALLY_DEFINITIONS)) {
+                expect(screen.getByTitle(definition)).toBeInTheDocument();
+            }
+        });
+
+        it("counts dependencies as the packages less the projects", () => {
+            render(<ResultsSummary webAppEvaluatedModel={model} />);
+
+            const dependencies = model.packages.filter((pkg) => !pkg.isProject).length;
+            const row = screen.getByRole("button", { name: /^Dependen/ });
+            expect(row.textContent).toContain(String(dependencies));
+            expect(dependencies).toBe(model.packages.length - model.projects.length);
+        });
+
+        it("renders the repository and composition sidebar sections", () => {
+            render(<ResultsSummary webAppEvaluatedModel={model} />);
+            expect(screen.getByRole("heading", { name: "Repository" })).toBeInTheDocument();
+            expect(screen.getByRole("heading", { name: "Composition" })).toBeInTheDocument();
+        });
+
+        it.each([
+            ["Technical issues", /^Technical issues/, "tech-issues"],
+            ["Policy violations", /^Policy violations/, "policy-violations"],
+            ["Vulnerabilities", /^Vulnerabilities/, "vulnerabilities"],
+            ["Licenses", /^Licenses/, "licenses"],
+        ])("opens the %s tab when its row is clicked", async (_label, name, tab) => {
+            const onSelectTab = vi.fn();
+            const user = userEvent.setup();
+            render(<ResultsSummary onSelectTab={onSelectTab} webAppEvaluatedModel={model} />);
+
+            await user.click(screen.getByRole("button", { name }));
+
+            expect(onSelectTab).toHaveBeenCalledWith(tab);
+        });
+
+        it("sends the license choices pill to the License Choices tab, not the .ort.yml", async () => {
+            const onSelectRunDetailsTab = vi.fn();
+            const user = userEvent.setup();
+            render(<ResultsSummary onSelectRunDetailsTab={onSelectRunDetailsTab} webAppEvaluatedModel={model} />);
+
+            await user.click(screen.getByRole("button", { name: /license choice/i }));
+
+            expect(onSelectRunDetailsTab).toHaveBeenCalledWith("license-choices");
+        });
+
+        it("counts every applicable choice on the pill, matching the tab's rows", () => {
+            render(<ResultsSummary webAppEvaluatedModel={model} />);
+
+            const pill = screen.getByRole("button", { name: /license choice/i });
+            expect(pill.textContent).toContain(String(model.licenseChoicesCount));
+        });
+
+        it.each([
+            // The button's accessible name glues the label to its value (e.g. "Projects4"), so match on the
+            // label prefix only.
+            ["Projects", /^Projects?/, ["project"]],
+            ["Dependencies", /^Dependenc/, ["direct", "transitive"]],
+            ["Direct / transitive dependencies", /^Direct/, ["direct", "transitive"]],
+            ["Scopes", /^Scopes?/, null],
+        ])("filters the table on %s when its composition stat is clicked", async (_label, name, expected) => {
+            const onFilterByLevel = vi.fn();
+            const user = userEvent.setup();
+            render(<ResultsSummary onFilterByLevel={onFilterByLevel} webAppEvaluatedModel={model} />);
+
+            await user.click(screen.getByRole("button", { name }));
+
+            expect(onFilterByLevel).toHaveBeenCalledWith(expected);
+        });
+    });
+
+    describe("run verdict", () => {
+        it("reports success when no findings are above the severe threshold", () => {
+            render(<ResultsSummary webAppEvaluatedModel={fakeModel()} />);
+            expect(screen.getByText("Run passed")).toBeInTheDocument();
+            expect(screen.queryByText("Attention required")).not.toBeInTheDocument();
+        });
+
+        it("requires attention and links to the unresolved findings when the run fails", async () => {
+            const onSelectTab = vi.fn();
+            const user = userEvent.setup();
+            render(
+                <ResultsSummary
+                    onSelectTab={onSelectTab}
+                    webAppEvaluatedModel={fakeModel({
+                        openIssues: { errors: 3, hints: 0, total: 3, warnings: 0 },
+                        resolvedIssues: 2,
+                        severeOpenIssuesCount: 3,
+                    })}
+                />,
+            );
+
+            expect(screen.getByText("Attention required")).toBeInTheDocument();
+            const cta = screen.getByRole("button", { name: /3 unresolved technical issues/i });
+            await user.click(cta);
+            expect(onSelectTab).toHaveBeenCalledWith("tech-issues");
+        });
+    });
+
+    describe("severity badges", () => {
+        it("shows one badge per open severity and hides those with a zero count", () => {
+            render(
+                <ResultsSummary
+                    webAppEvaluatedModel={fakeModel({
+                        openIssues: { errors: 3, hints: 0, total: 5, warnings: 2 },
+                        severeOpenIssuesCount: 3,
+                        vulnerabilities: [
+                            { isResolved: false, severityIndex: 0 },
+                            { isResolved: false, severityIndex: 1 },
+                        ],
+                        openVulnerabilities: 2,
+                    })}
+                />,
+            );
+
+            // The count and severity word render together (e.g. "3 Errors"), with the full explanation as
+            // the badge's title.
+            expect(screen.getByTitle("3 open technical issues with severity error")).toHaveTextContent("3 Errors");
+            expect(screen.getByTitle("2 open technical issues with severity warning")).toHaveTextContent("2 Warnings");
+            expect(screen.getByTitle("1 open critical vulnerability")).toHaveTextContent("1 Critical");
+            // Hints are zero, so their badge is omitted entirely.
+            expect(screen.queryByTitle(/with severity hint/)).not.toBeInTheDocument();
+        });
+
+        it("shows no severity badges for a clean detector", () => {
+            render(<ResultsSummary webAppEvaluatedModel={fakeModel()} />);
+            expect(screen.queryByTitle(/with severity/)).not.toBeInTheDocument();
+            // Anchored on the badge wording ("N open <rating> vulnerability"), so it does not also match
+            // the verdict tallies, whose definitions mention vulnerabilities too.
+            expect(screen.queryByTitle(/^\d+ open .* vulnerabilit/)).not.toBeInTheDocument();
+        });
+    });
+
+    describe("applied configuration", () => {
+        it("is omitted when nothing was applied to the run", () => {
+            render(<ResultsSummary webAppEvaluatedModel={fakeModel()} />);
+            expect(screen.queryByRole("heading", { name: "Applied configuration" })).not.toBeInTheDocument();
+        });
+
+        it("lists the applied configuration and opens its Run Details tab on click", async () => {
+            const onSelectRunDetailsTab = vi.fn();
+            const user = userEvent.setup();
+            render(
+                <ResultsSummary
+                    onSelectRunDetailsTab={onSelectRunDetailsTab}
+                    webAppEvaluatedModel={fakeModel({
+                        resolvedConfiguration: {
+                            licenseChoices: 0,
+                            packageConfigurations: 0,
+                            packageCurations: 5,
+                            resolutions: 0,
+                        },
+                    })}
+                />,
+            );
+
+            expect(screen.getByRole("heading", { name: "Applied configuration" })).toBeInTheDocument();
+            await user.click(screen.getByRole("button", { name: /package curations/ }));
+            expect(onSelectRunDetailsTab).toHaveBeenCalledWith("package-curations");
+        });
+    });
+});

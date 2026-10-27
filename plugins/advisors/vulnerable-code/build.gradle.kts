@@ -25,13 +25,15 @@ plugins {
 dependencies {
     api(projects.plugins.advisors.advisorApi)
 
-    ksp(projects.plugins.advisors.advisorApi)
-
     implementation(projects.clients.vulnerableCodeClient)
     implementation(projects.utils.commonUtils)
     implementation(projects.utils.ortUtils)
+    implementation(ktorLibs.client.contentNegotiation)
+    implementation(ktorLibs.client.okhttp)
+    implementation(ktorLibs.serialization.kotlinx.json)
 
     testImplementation(projects.utils.testUtils)
-
     testImplementation(libs.wiremock)
+
+    ksp(projects.plugins.advisors.advisorApi)
 }

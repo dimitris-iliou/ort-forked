@@ -22,12 +22,13 @@ plugins {
     id("ort-application-conventions")
 }
 
+// See https://docs.gradle.org/current/userguide/declaring_configurations.html#sec:configuration-flags-roles.
 configurations.dependencyScope("pluginClasspath")
 configurations["runtimeOnly"].extendsFrom(configurations["pluginClasspath"])
 
 application {
     applicationName = "orth"
-    mainClass = "org.ossreviewtoolkit.helper.HelperMainKt"
+    mainClass = "org.ossreviewtoolkit.clihelper.HelperMainKt"
 }
 
 dependencies {
@@ -39,21 +40,26 @@ dependencies {
     implementation(projects.plugins.packageCurationProviders.filePackageCurationProvider)
 
     implementation(projects.scanner)
+    implementation(projects.utils.commonUtils)
     implementation(projects.utils.configUtils)
     implementation(projects.utils.ortUtils)
-
+    implementation(projects.utils.spdxExpressionUtils)
+    implementation(projects.utils.spdxUtils)
     implementation(jacksonLibs.jacksonModuleKotlin)
     implementation(libs.clikt)
     implementation(libs.commonsCompress)
     implementation(libs.jslt)
-    implementation(libs.log4j.api)
+    implementation(libs.mordant)
     implementation(libs.slf4j)
-    implementation(libs.xz)
 
-    "pluginClasspath"(platform(projects.plugins.packageManagers))
-    "pluginClasspath"(platform(projects.plugins.versionControlSystems))
+    implementation(libs.xz) {
+        because("XZOutputStream is a supertype of XZCompressorOutputStream.")
+    }
 
     funTestImplementation(projects.utils.testUtils)
 
     testImplementation(projects.utils.testUtils)
+
+    "pluginClasspath"(platform(projects.plugins.packageManagers))
+    "pluginClasspath"(platform(projects.plugins.versionControlSystems))
 }

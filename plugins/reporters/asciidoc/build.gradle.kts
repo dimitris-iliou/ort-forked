@@ -24,19 +24,19 @@ plugins {
 
 dependencies {
     api(projects.reporter)
-
-    ksp(projects.reporter)
+    api(libs.asciidoctorj.api)
 
     implementation(projects.model)
     implementation(projects.plugins.reporters.freemarkerReporter)
     implementation(projects.utils.commonUtils)
     implementation(projects.utils.ortUtils)
 
-    implementation(libs.asciidoctorj)
-
-    runtimeOnly(libs.asciidoctorj.pdf)
-
+    funTestImplementation(testFixtures(projects.reporter))
     funTestImplementation(projects.plugins.licenseFactProviders.spdxLicenseFactProvider)
     funTestImplementation(projects.utils.testUtils)
-    funTestImplementation(testFixtures(projects.reporter))
+
+    runtimeOnly(libs.asciidoctorj)
+    runtimeOnly(libs.asciidoctorj.pdf)
+
+    ksp(projects.reporter)
 }

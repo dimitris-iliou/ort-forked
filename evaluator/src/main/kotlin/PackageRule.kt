@@ -38,8 +38,8 @@ import org.ossreviewtoolkit.model.vulnerabilities.Vulnerability
 import org.ossreviewtoolkit.model.vulnerabilities.VulnerabilityReference
 import org.ossreviewtoolkit.utils.common.enumSetOf
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
-import org.ossreviewtoolkit.utils.spdx.SpdxExpression
-import org.ossreviewtoolkit.utils.spdx.SpdxLicenseReferenceExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxLicenseReferenceExpression
 
 /**
  * A [Rule] to check a single [Package].
@@ -118,27 +118,35 @@ open class PackageRule(
                     .flatMap { it.references }
                     .filter { it.scoringSystem == scoringSystem }
 
-                val scores = matchingSystems.mapNotNull { it.score }
-                if (scores.any()) return scores.any { it >= scoreThreshold }
+                val scores = matchingSystems.mapNotNull {
+                    it.score ?: scoreFromSeverity(it)
+                }
 
-                // Fall back to a more coarse comparison of qualitative severity ratings if no scores are available.
-                val severityThreshold = VulnerabilityReference.getQualitativeRating(scoringSystem, scoreThreshold)
-                    ?: return false
+                return scores.any { it >= scoreThreshold }
+            }
 
-                val severities = matchingSystems
-                    .mapNotNull { it.severity }
-                    .mapNotNull { severity ->
-                        val system = scoringSystem.uppercase()
+            /**
+             * Map the qualitative severity of the given [reference] to a numeric score according to the ratings
+             * defined for the scoring systems. Return *null* if no severity is defined or the scoring system is not
+             * supported.
+             */
+            private fun scoreFromSeverity(reference: VulnerabilityReference): Float? =
+                reference.scoringSystem?.let { system ->
+                    reference.severity?.let { severity ->
                         when {
-                            Cvss2Rating.PREFIXES.any { system.startsWith(it) } -> enumValueOf<Cvss2Rating>(severity)
-                            Cvss3Rating.PREFIXES.any { system.startsWith(it) } -> enumValueOf<Cvss3Rating>(severity)
-                            Cvss4Rating.PREFIXES.any { system.startsWith(it) } -> enumValueOf<Cvss4Rating>(severity)
+                            Cvss2Rating.PREFIXES.any { system.startsWith(it) } ->
+                                enumValueOf<Cvss2Rating>(severity).upperBound
+
+                            Cvss3Rating.PREFIXES.any { system.startsWith(it) } ->
+                                enumValueOf<Cvss3Rating>(severity).upperBound
+
+                            Cvss4Rating.PREFIXES.any { system.startsWith(it) } ->
+                                enumValueOf<Cvss4Rating>(severity).upperBound
+
                             else -> null
                         }
                     }
-
-                return severities.any { it.ordinal >= severityThreshold.ordinal }
-            }
+                }
         }
 
     /**
@@ -221,10 +229,13 @@ open class PackageRule(
     fun licenseRule(
         name: String,
         licenseView: LicenseView,
+        filterExcluded: Boolean = true,
         separateEvaluationPerSource: Boolean = true,
         block: LicenseRule.() -> Unit
     ) {
-        val effectiveResolvedLicenseInfo = resolvedLicenseInfo.filter(licenseView, filterSources = true)
+        val effectiveResolvedLicenseInfo = resolvedLicenseInfo
+            .run { if (filterExcluded) filterExcluded() else this }
+            .filter(licenseView, filterSources = true)
             .applyChoices(ruleSet.ortResult.getPackageLicenseChoices(pkg.metadata.id), licenseView)
             .applyChoices(ruleSet.ortResult.getRepositoryLicenseChoices(), licenseView)
 

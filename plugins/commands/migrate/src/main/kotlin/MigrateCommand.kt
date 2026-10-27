@@ -37,7 +37,7 @@ import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
 import org.ossreviewtoolkit.plugins.commands.api.OrtCommand
 import org.ossreviewtoolkit.plugins.commands.api.OrtCommandFactory
-import org.ossreviewtoolkit.plugins.packagecurationproviders.ortconfig.toCurationPath
+import org.ossreviewtoolkit.plugins.packagecurationproviders.git.toCurationPath
 import org.ossreviewtoolkit.plugins.packagemanagers.nuget.utils.getIdentifierWithNamespace
 import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.expandTilde
@@ -46,7 +46,7 @@ import org.ossreviewtoolkit.utils.common.safeMkdirs
 
 @OrtPlugin(
     displayName = "Migrate",
-    description = "Assist with migrating ORT configuration to newer ORT versions.",
+    summary = "Assist with migrating ORT configuration to newer ORT versions.",
     factory = OrtCommandFactory::class
 )
 class MigrateCommand(descriptor: PluginDescriptor = MigrateCommandFactory.descriptor) : OrtCommand(descriptor) {

@@ -22,6 +22,7 @@ package org.ossreviewtoolkit.plugins.scanners.scanoss
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.matchers.collections.beEmpty
 import io.kotest.matchers.collections.shouldBeSingleton
+import io.kotest.matchers.nulls.beNull
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 
@@ -45,22 +46,17 @@ private const val PURL_1 = "pkg:github/fakeuser/fakepackage1@1.0.0"
 class ScanOssTest : WordSpec({
     "processSnippetChoices()" should {
         "create empty rules when no snippet choices exist" {
-            val scanoss = createScanOss(createScanOssConfig())
+            val scanoss = ScanOssFactory.create()
 
-            val emptySnippetChoices: List<SnippetChoices> = listOf()
+            val rules = scanoss.processSnippetChoices(emptyList())
 
-            val rules = scanoss.processSnippetChoices(emptySnippetChoices)
-
-            rules.ignoreRules should beEmpty()
-            rules.removeRules should beEmpty()
             rules.includeRules should beEmpty()
-            rules.replaceRules should beEmpty()
+            rules.removeRules should beEmpty()
         }
 
         "create an include rule for snippet choices with ORIGINAL finding" {
             val vcsInfo = createVcsInfo()
-            val scanoss = createScanOss(createScanOssConfig())
-
+            val scanoss = ScanOssFactory.create()
             val location = TextLocation(FILE_1, 10, 20)
             val snippetChoices = createSnippetChoices(
                 vcsInfo.url,
@@ -73,21 +69,17 @@ class ScanOssTest : WordSpec({
 
             val rules = scanoss.processSnippetChoices(snippetChoices)
 
-            rules.includeRules.shouldBeSingleton { rule ->
+            rules.includeRules shouldBeSingleton { rule ->
                 rule.purl shouldBe PURL_1
                 rule.path shouldBe FILE_1
             }
 
             rules.removeRules should beEmpty()
-            rules.ignoreRules should beEmpty()
-            rules.replaceRules should beEmpty()
         }
 
         "create a remove rule for snippet choices with NOT_FINDING reason" {
             val vcsInfo = createVcsInfo()
-
-            val scanoss = createScanOss(createScanOssConfig())
-
+            val scanoss = ScanOssFactory.create()
             val location = TextLocation(FILE_2, 15, 30)
             val snippetChoices = createSnippetChoices(
                 vcsInfo.url,
@@ -100,24 +92,20 @@ class ScanOssTest : WordSpec({
 
             val rules = scanoss.processSnippetChoices(snippetChoices)
 
-            rules.removeRules.shouldBeSingleton { rule ->
+            rules.removeRules shouldBeSingleton { rule ->
                 rule.path shouldBe FILE_2
                 rule.startLine shouldBe 15
                 rule.endLine shouldBe 30
             }
 
             rules.includeRules should beEmpty()
-            rules.ignoreRules should beEmpty()
-            rules.replaceRules should beEmpty()
         }
 
         "handle multiple snippet choices with different reasons correctly" {
             val vcsInfo = createVcsInfo()
-            val scanoss = createScanOss(createScanOssConfig())
-
+            val scanoss = ScanOssFactory.create()
             val location1 = TextLocation(FILE_1, 10, 20)
             val location2 = TextLocation(FILE_2, 15, 30)
-
             val snippetChoices = createSnippetChoices(
                 vcsInfo.url,
                 createSnippetChoice(
@@ -134,26 +122,21 @@ class ScanOssTest : WordSpec({
 
             val rules = scanoss.processSnippetChoices(snippetChoices)
 
-            rules.includeRules.shouldBeSingleton { rule ->
+            rules.includeRules shouldBeSingleton { rule ->
                 rule.purl shouldBe PURL_1
                 rule.path shouldBe FILE_1
             }
 
-            rules.removeRules.shouldBeSingleton { rule ->
+            rules.removeRules shouldBeSingleton { rule ->
                 rule.path shouldBe FILE_2
                 rule.startLine shouldBe 15
                 rule.endLine shouldBe 30
             }
-
-            rules.ignoreRules should beEmpty()
-            rules.replaceRules should beEmpty()
         }
 
         "create a remove rule without line ranges when snippet choice has UNKNOWN_LINE (-1) values" {
             val vcsInfo = createVcsInfo()
-            val scanoss = createScanOss(createScanOssConfig())
-
-            // Create a TextLocation with -1 for start and end lines.
+            val scanoss = ScanOssFactory.create()
             val location = TextLocation(FILE_2, TextLocation.UNKNOWN_LINE, TextLocation.UNKNOWN_LINE)
             val snippetChoices = createSnippetChoices(
                 vcsInfo.url,
@@ -166,21 +149,19 @@ class ScanOssTest : WordSpec({
 
             val rules = scanoss.processSnippetChoices(snippetChoices)
 
-            rules.removeRules.shouldBeSingleton { rule ->
+            rules.removeRules shouldBeSingleton { rule ->
                 rule.path shouldBe FILE_2
-                rule.startLine shouldBe null
-                rule.endLine shouldBe null
+                rule.startLine should beNull()
+                rule.endLine should beNull()
             }
 
             rules.includeRules should beEmpty()
-            rules.ignoreRules should beEmpty()
-            rules.replaceRules should beEmpty()
         }
     }
 
-    "buildSettingsFromORTContext()" should {
+    "buildSettings()" should {
         "forward snippet tuning config values to FileSnippet" {
-            val config = createScanOssConfig(
+            val scanoss = ScanOssFactory.create(
                 minSnippetHits = 8,
                 minSnippetLines = 4,
                 honourFileExts = false,
@@ -189,10 +170,9 @@ class ScanOssTest : WordSpec({
                 skipHeaders = true,
                 skipHeadersLimit = 100
             )
-            val scanoss = createScanOss(config)
             val context = ScanContext(labels = emptyMap(), packageType = PackageType.PACKAGE)
 
-            val fileSnippet = scanoss.buildSettingsFromORTContext(context).settings.fileSnippet
+            val fileSnippet = scanoss.buildSettings(context).settings.fileSnippet
 
             fileSnippet.minSnippetHits shouldBe 8
             fileSnippet.minSnippetLines shouldBe 4

@@ -39,6 +39,7 @@ Currently, the following package managers (grouped by the programming language t
     * Including the [Tycho](https://tycho.eclipseprojects.io/doc/main/index.html) extension for building OSGi bundles and Eclipse IDE plug-ins.
 * JavaScript / Node.js
   * [Bower](https://bower.io/)
+  * [Bun](https://bun.sh/)
   * [NPM](https://www.npmjs.com/)
   * [PNPM](https://pnpm.io/)
   * [Yarn 1](https://classic.yarnpkg.com/)
@@ -72,8 +73,8 @@ the generic fallbacks can be used:
 
 ### ORT Project package manager
 
-The [ORT Project package manager](../guides/ort-project-package-manager.md) can be used to manually define projects and
-their dependencies in an ORT Project definition file.
+The [ORT Project package manager](../plugins/package-managers/ORT%20Project%20File.md) can be used to manually define
+projects and their dependencies in an ORT Project definition file.
 
 ### SPDX
 

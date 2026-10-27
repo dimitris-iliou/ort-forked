@@ -22,6 +22,7 @@ package org.ossreviewtoolkit.plugins.reporters.evaluatedmodel
 import com.fasterxml.jackson.annotation.JsonIdentityReference
 import com.fasterxml.jackson.annotation.JsonInclude
 
+import java.time.Instant
 import java.util.SortedSet
 
 import org.ossreviewtoolkit.model.Identifier
@@ -32,7 +33,8 @@ import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.config.PackageConfiguration
 import org.ossreviewtoolkit.model.config.PathExclude
 import org.ossreviewtoolkit.model.config.ScopeExclude
-import org.ossreviewtoolkit.utils.spdx.SpdxExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxLicenseChoice
 
 /**
  * The evaluated form of a [Package] used by the [EvaluatedModel].
@@ -57,11 +59,15 @@ data class EvaluatedPackage(
     @JsonInclude(JsonInclude.Include.NON_NULL)
     val effectiveLicense: SpdxExpression? = null,
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    val appliedLicenseChoices: List<SpdxLicenseChoice> = emptyList(),
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
     val description: String,
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     val homepageUrl: String,
     val binaryArtifact: RemoteArtifact,
     val sourceArtifact: RemoteArtifact,
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    val publishedAt: Instant? = null,
     val vcs: VcsInfo,
     val vcsProcessed: VcsInfo = vcs.normalize(),
     @JsonInclude(JsonInclude.Include.NON_EMPTY)

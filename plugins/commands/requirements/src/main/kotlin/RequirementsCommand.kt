@@ -46,7 +46,7 @@ private val SUCCESS_PREFIX = "\t${Theme.Default.success("*")} "
 
 @OrtPlugin(
     displayName = "Requirements",
-    description = "Check for the command line tools required by ORT.",
+    summary = "Check for the command line tools required by ORT.",
     factory = OrtCommandFactory::class
 )
 class RequirementsCommand(
@@ -95,7 +95,7 @@ class RequirementsCommand(
 
             echo(Theme.Default.warning(summary))
 
-            throw ProgramResult(2)
+            throw ProgramResult(STATUS_CODE_FAILURE)
         }
     }
 
@@ -150,7 +150,7 @@ class RequirementsCommand(
                 }
             }.onFailure { e ->
                 echo(Theme.Default.danger("There was an error instantiating $cliClass: $e."))
-                throw ProgramResult(1)
+                throw ProgramResult(STATUS_CODE_FATAL_ERROR)
             }
         }
 

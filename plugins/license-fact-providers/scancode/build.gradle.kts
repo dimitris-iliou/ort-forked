@@ -20,12 +20,18 @@
 plugins {
     // Apply precompiled plugins.
     id("ort-plugin-conventions")
+
+    // Apply third-party plugins.
+    alias(libs.plugins.kotlinSerialization)
 }
 
 dependencies {
     api(projects.plugins.licenseFactProviders.licenseFactProviderApi)
 
-    ksp(projects.plugins.licenseFactProviders.licenseFactProviderApi)
-
+    implementation(projects.utils.commonUtils)
     implementation(projects.utils.ortUtils)
+    implementation(libs.kotlinx.serialization.core)
+    implementation(libs.kotlinx.serialization.yaml)
+
+    ksp(projects.plugins.licenseFactProviders.licenseFactProviderApi)
 }

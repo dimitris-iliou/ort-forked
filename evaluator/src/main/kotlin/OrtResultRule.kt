@@ -19,9 +19,12 @@
 
 package org.ossreviewtoolkit.evaluator
 
+import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.OrtResult
 import org.ossreviewtoolkit.model.Severity
+import org.ossreviewtoolkit.model.licenses.LicenseView
 import org.ossreviewtoolkit.utils.common.enumSetOf
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxLicenseChoice
 
 /**
  * A [Rule] to check an [OrtResult].
@@ -75,4 +78,44 @@ open class OrtResultRule(
             message = message,
             howToFix = howToFix
         )
+
+    /**
+     * Return the set of packages license choices which are contained in the repository configuration
+     * but that do not apply as map keyed by [Identifier].
+     */
+    fun getNonApplicablePackageLicenseChoices(licenseView: LicenseView): Map<Identifier, Set<SpdxLicenseChoice>> =
+        buildMap<Identifier, MutableSet<SpdxLicenseChoice>> {
+            val existingIds = ortResult.getIdentifiers()
+
+            ortResult.repository.config.licenseChoices.packageLicenseChoices.forEach { (id, choices) ->
+                if (id !in existingIds) {
+                    getOrPut(id) { mutableSetOf() } += choices
+                    return@forEach
+                }
+
+                val appliedChoices = ruleSet.licenseInfoResolver.resolveLicenseInfo(id).filterExcluded()
+                    .effectiveLicenseAndAppliedChoices(licenseView, choices).second.toSet()
+
+                getOrPut(id) { mutableSetOf() } += choices.toSet() - appliedChoices
+            }
+        }
+
+    /**
+     * Return the set of repository license choices which are contained in the repository configuration
+     * but that do not apply.
+     */
+    fun getNonApplicableRepositoryLicenseChoices(licenseView: LicenseView): Set<SpdxLicenseChoice> {
+        val repositoryLicenseChoices = ortResult.repository.config.licenseChoices.repositoryLicenseChoices
+        val appliedRepositoryLicenseChoices = mutableSetOf<SpdxLicenseChoice>()
+
+        ortResult.getIdentifiers().forEach { id ->
+            val appliedChoices = ruleSet.licenseInfoResolver.resolveLicenseInfo(id).filterExcluded()
+                .effectiveLicenseAndAppliedChoices(licenseView, repositoryLicenseChoices)
+                .second.toSet()
+
+            appliedRepositoryLicenseChoices += appliedChoices
+        }
+
+        return repositoryLicenseChoices.toSet() - appliedRepositoryLicenseChoices
+    }
 }

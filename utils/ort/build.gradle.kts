@@ -32,21 +32,23 @@ buildConfig {
 }
 
 dependencies {
-    api(projects.utils.commonUtils)
-    api(projects.utils.spdxUtils)
-
+    api(projects.utils.spdxExpressionUtils)
     api(libs.kotlinx.coroutines)
     api(libs.okhttp)
 
     implementation(projects.clients.foojayClient)
-
+    implementation(projects.utils.authenticationUtils)
+    implementation(projects.utils.commonUtils)
+    implementation(projects.utils.spdxUtils)
     implementation(libs.awsS3)
     implementation(libs.commonsCompress)
-    implementation(libs.xz)
+
+    implementation(libs.xz) {
+        because("XZOutputStream is a supertype of XZCompressorOutputStream.")
+    }
 
     funTestImplementation(libs.mockk)
 
     testImplementation(projects.utils.testUtils)
-
     testImplementation(libs.mockk)
 }

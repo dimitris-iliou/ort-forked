@@ -39,13 +39,13 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 
-import org.apache.logging.log4j.kotlin.logger
-
 import org.ossreviewtoolkit.model.config.CopyrightGarbage
+import org.ossreviewtoolkit.model.config.LicenseChoices
 import org.ossreviewtoolkit.model.config.LicenseFilePatterns
 import org.ossreviewtoolkit.model.config.RepositoryConfiguration
 import org.ossreviewtoolkit.model.config.createFileArchiver
 import org.ossreviewtoolkit.model.config.orEmpty
+import org.ossreviewtoolkit.model.config.plus
 import org.ossreviewtoolkit.model.licenses.DefaultLicenseInfoProvider
 import org.ossreviewtoolkit.model.licenses.LicenseClassifications
 import org.ossreviewtoolkit.model.licenses.LicenseInfoResolver
@@ -53,6 +53,7 @@ import org.ossreviewtoolkit.model.licenses.orEmpty
 import org.ossreviewtoolkit.model.readValue
 import org.ossreviewtoolkit.model.readValueOrDefault
 import org.ossreviewtoolkit.model.utils.DefaultResolutionProvider
+import org.ossreviewtoolkit.model.utils.filterApplicable
 import org.ossreviewtoolkit.plugins.api.OrtPlugin
 import org.ossreviewtoolkit.plugins.api.PluginConfig
 import org.ossreviewtoolkit.plugins.api.PluginDescriptor
@@ -64,11 +65,10 @@ import org.ossreviewtoolkit.plugins.commands.api.utils.inputGroup
 import org.ossreviewtoolkit.plugins.commands.api.utils.outputGroup
 import org.ossreviewtoolkit.plugins.commands.api.utils.readOrtResult
 import org.ossreviewtoolkit.plugins.licensefactproviders.api.CompositeLicenseFactProvider
-import org.ossreviewtoolkit.plugins.licensefactproviders.api.LicenseFactProvider
 import org.ossreviewtoolkit.plugins.licensefactproviders.api.LicenseFactProviderFactory
-import org.ossreviewtoolkit.plugins.licensefactproviders.dir.DirLicenseFactProviderFactory
+import org.ossreviewtoolkit.plugins.licensefactproviders.dir.CustomLicenseTextsProviderFactory
 import org.ossreviewtoolkit.plugins.packageconfigurationproviders.api.CompositePackageConfigurationProvider
-import org.ossreviewtoolkit.plugins.packageconfigurationproviders.api.SimplePackageConfigurationProvider
+import org.ossreviewtoolkit.plugins.packageconfigurationproviders.api.getEnabledPackageConfigurationProviders
 import org.ossreviewtoolkit.plugins.packageconfigurationproviders.dir.DirPackageConfigurationProvider
 import org.ossreviewtoolkit.reporter.HowToFixTextProvider
 import org.ossreviewtoolkit.reporter.ReporterFactory
@@ -77,10 +77,12 @@ import org.ossreviewtoolkit.utils.common.collectMessages
 import org.ossreviewtoolkit.utils.common.div
 import org.ossreviewtoolkit.utils.common.expandTilde
 import org.ossreviewtoolkit.utils.common.safeMkdirs
+import org.ossreviewtoolkit.utils.config.setLicenseChoices
 import org.ossreviewtoolkit.utils.config.setPackageConfigurations
 import org.ossreviewtoolkit.utils.config.setResolutions
 import org.ossreviewtoolkit.utils.ort.ORT_COPYRIGHT_GARBAGE_FILENAME
 import org.ossreviewtoolkit.utils.ort.ORT_HOW_TO_FIX_TEXT_PROVIDER_FILENAME
+import org.ossreviewtoolkit.utils.ort.ORT_LICENSE_CHOICES_FILENAME
 import org.ossreviewtoolkit.utils.ort.ORT_LICENSE_CLASSIFICATIONS_FILENAME
 import org.ossreviewtoolkit.utils.ort.ORT_RESOLUTIONS_FILENAME
 import org.ossreviewtoolkit.utils.ort.ortConfigDirectory
@@ -88,7 +90,7 @@ import org.ossreviewtoolkit.utils.ort.showStackTrace
 
 @OrtPlugin(
     displayName = "Report",
-    description = "Present Analyzer, Scanner and Evaluator results in various formats.",
+    summary = "Present Analyzer, Scanner and Evaluator results in various formats.",
     factory = OrtCommandFactory::class
 )
 class ReportCommand(descriptor: PluginDescriptor = ReportCommandFactory.descriptor) : OrtCommand(descriptor) {
@@ -146,6 +148,15 @@ class ReportCommand(descriptor: PluginDescriptor = ReportCommandFactory.descript
         .file(mustExist = true, canBeFile = true, canBeDir = false, mustBeWritable = false, mustBeReadable = true)
         .convert { it.absoluteFile.normalize() }
         .default(ortConfigDirectory.resolve(ORT_HOW_TO_FIX_TEXT_PROVIDER_FILENAME))
+        .configurationGroup()
+
+    private val licenseChoicesFile by option(
+        "--license-choices-file",
+        help = "A file containing license choices."
+    ).convert { it.expandTilde() }
+        .file(mustExist = true, canBeFile = true, canBeDir = false, mustBeWritable = false, mustBeReadable = true)
+        .convert { it.absoluteFile.normalize() }
+        .default(ortConfigDirectory / ORT_LICENSE_CHOICES_FILENAME)
         .configurationGroup()
 
     private val licenseClassificationsFile by option(
@@ -220,31 +231,23 @@ class ReportCommand(descriptor: PluginDescriptor = ReportCommandFactory.descript
             ortResult = ortResult.setResolutions(resolutionProvider)
         }
 
-        val resolvedPackageConfigurations = ortResult.resolvedConfiguration.packageConfigurations
-        val packageConfigurationProvider = when {
-            resolvedPackageConfigurations != null && packageConfigurationsDir == null -> {
-                SimplePackageConfigurationProvider(configurations = resolvedPackageConfigurations)
+        val packageConfigurationProvider = CompositePackageConfigurationProvider(
+            getEnabledPackageConfigurationProviders(ortConfig, ortResult) {
+                packageConfigurationsDir?.let { DirPackageConfigurationProvider(it) }
             }
-
-            ortConfig.enableRepositoryPackageConfigurations -> {
-                CompositePackageConfigurationProvider(
-                    SimplePackageConfigurationProvider(
-                        configurations = ortResult.repository.config.packageConfigurations
-                    ),
-                    DirPackageConfigurationProvider(packageConfigurationsDir)
-                )
-            }
-
-            else -> {
-                if (ortResult.repository.config.packageConfigurations.isNotEmpty()) {
-                    logger.info { "Local package configurations were not applied because the feature is not enabled." }
-                }
-
-                DirPackageConfigurationProvider(packageConfigurationsDir)
-            }
-        }
+        )
 
         ortResult = ortResult.setPackageConfigurations(packageConfigurationProvider)
+
+        val applicableGlobalLicenseChoices = licenseChoicesFile
+            .takeIf { it.isFile }
+            ?.readValue<LicenseChoices>()
+            .orEmpty()
+            .filterApplicable(ortResult)
+
+        ortResult = ortResult.setLicenseChoices(
+            ortResult.repository.config.licenseChoices + applicableGlobalLicenseChoices
+        )
 
         val copyrightGarbage = copyrightGarbageFile.takeIf { it.isFile }?.readValue<CopyrightGarbage>().orEmpty()
 
@@ -263,16 +266,12 @@ class ReportCommand(descriptor: PluginDescriptor = ReportCommandFactory.descript
             HowToFixTextProvider.fromKotlinScript(it.readText(), ortResult)
         } ?: HowToFixTextProvider.NONE
 
-        val licenseFactProviders = mutableListOf<LicenseFactProvider>()
+        val licenseFactProviders = buildList {
+            customLicenseTextsDir?.also {
+                add(CustomLicenseTextsProviderFactory.create(it.absolutePath))
+            }
 
-        customLicenseTextsDir?.let {
-            licenseFactProviders += DirLicenseFactProviderFactory.create(it.absolutePath)
-        }
-
-        ortConfig.licenseFactProviders.mapTo(licenseFactProviders) { (id, config) ->
-            requireNotNull(LicenseFactProviderFactory.ALL[id]) {
-                "License fact provider '$id' is not available in the classpath."
-            }.create(config)
+            addAll(LicenseFactProviderFactory.create(ortConfig.licenseFactProviders).map { it.second })
         }
 
         val licenseFactProvider = CompositeLicenseFactProvider(licenseFactProviders)
@@ -342,6 +341,6 @@ class ReportCommand(descriptor: PluginDescriptor = ReportCommandFactory.descript
         val successCount = reportFormats.size - failureCount
         echo("Created $successCount of ${reportFormats.size} report(s) in ${reportDurationMap.duration}.")
 
-        if (failureCount > 0) throw ProgramResult(2)
+        if (failureCount > 0) throw ProgramResult(STATUS_CODE_FAILURE)
     }
 }

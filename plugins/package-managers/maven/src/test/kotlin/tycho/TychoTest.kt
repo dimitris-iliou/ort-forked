@@ -27,7 +27,10 @@ import io.kotest.engine.spec.tempfile
 import io.kotest.inspectors.forAll
 import io.kotest.matchers.collections.beEmpty
 import io.kotest.matchers.collections.containExactlyInAnyOrder
+import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.nulls.beNull
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
@@ -70,7 +73,7 @@ import org.ossreviewtoolkit.plugins.packagemanagers.maven.PACKAGE_TYPE
 import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.PackageResolverFun
 import org.ossreviewtoolkit.plugins.packagemanagers.maven.utils.identifier
 import org.ossreviewtoolkit.utils.ort.ProcessedDeclaredLicense
-import org.ossreviewtoolkit.utils.spdx.SpdxExpression
+import org.ossreviewtoolkit.utils.spdxexpression.SpdxExpression
 
 class TychoTest : WordSpec({
     afterEach {
@@ -101,7 +104,7 @@ class TychoTest : WordSpec({
                 tychoSubModule
             )
 
-            val tycho = Tycho()
+            val tycho = createTycho()
             val mappedDefinitionFiles = tycho.mapDefinitionFiles(tempdir(), definitionFiles, AnalyzerConfiguration())
 
             mappedDefinitionFiles should containExactlyInAnyOrder(tychoDefinitionFile1, tychoDefinitionFile2)
@@ -115,7 +118,7 @@ class TychoTest : WordSpec({
             val subProject = createMavenProject("sub")
             val projectsList = listOf(rootProject, subProject)
 
-            val tycho = spyk(Tycho())
+            val tycho = spyk(createTycho())
             injectCliMock(tycho, projectsList.toJson(), projectsList)
 
             val pkg1 = mockk<Package>(relaxed = true)
@@ -159,7 +162,7 @@ class TychoTest : WordSpec({
 
             val buildOutput = listOf(subProject2, rootProject, subProject1).toJson()
 
-            val tycho = spyk(Tycho())
+            val tycho = spyk(createTycho())
             injectCliMock(tycho, buildOutput, listOf(subProject1, subProject2))
 
             val exception = shouldThrow<TychoBuildException> {
@@ -182,7 +185,7 @@ class TychoTest : WordSpec({
             val subProject = createMavenProject("sub")
             val projectsList = listOf(rootProject, subProject)
 
-            val tycho = spyk(Tycho())
+            val tycho = spyk(createTycho())
             injectCliMock(tycho, projectsList.toJson(), projectsList, exitCode = 1)
 
             val results = tycho.resolveDependencies(
@@ -210,7 +213,7 @@ class TychoTest : WordSpec({
             val subProject3 = createMavenProject("sub3")
             val projectsList = listOf(rootProject, subProject1, subProject2, subProject3)
 
-            val tycho = spyk(Tycho())
+            val tycho = spyk(createTycho())
             injectCliMock(tycho, projectsList.take(2).toJson(), projectsList, exitCode = 1)
 
             val results = tycho.resolveDependencies(
@@ -249,7 +252,7 @@ class TychoTest : WordSpec({
             val targetHandler = mockk<TargetHandler>()
             every { TargetHandler.create(definitionFile.parentFile) } returns targetHandler
 
-            val tycho = spyk(Tycho())
+            val tycho = spyk(createTycho())
             injectCliMock(tycho, projectsList.toJson(), projectsList)
 
             tycho.resolveDependencies(
@@ -284,7 +287,7 @@ class TychoTest : WordSpec({
                 every { isFeature(any()) } returns false
             }
 
-            val tycho = spyk(Tycho())
+            val tycho = spyk(createTycho())
             injectCliMock(tycho, projectsList.toJson(), projectsList, resolver = resolver)
 
             val results = tycho.resolveDependencies(
@@ -303,6 +306,72 @@ class TychoTest : WordSpec({
                 // Make sure that the resolver is used for the feature check function.
                 resolver.isFeature(any())
             }
+        }
+
+        "pass correct default options to the CLI" {
+            val definitionFile = tempfile()
+            val rootProject = createMavenProject("root", definitionFile)
+            val projectsList = listOf(rootProject)
+
+            val tycho = spyk(createTycho())
+            val cli = injectCliMock(tycho, projectsList.toJson(), projectsList)
+
+            tycho.resolveDependencies(
+                tempdir(),
+                definitionFile,
+                Excludes.EMPTY,
+                Includes.EMPTY,
+                AnalyzerConfiguration(),
+                emptyMap()
+            )
+
+            val args = cli.args()
+            args shouldContainAll listOf("package", "-Dmaven.test.skip=true")
+            args shouldNotContain "-X"
+        }
+
+        "support a configuration option to enable tests" {
+            val definitionFile = tempfile()
+            val rootProject = createMavenProject("root", definitionFile)
+            val projectsList = listOf(rootProject)
+
+            val config = createTychoConfig(skipTests = false)
+            val tycho = spyk(createTycho(config))
+            val cli = injectCliMock(tycho, projectsList.toJson(), projectsList)
+
+            tycho.resolveDependencies(
+                tempdir(),
+                definitionFile,
+                Excludes.EMPTY,
+                Includes.EMPTY,
+                AnalyzerConfiguration(),
+                emptyMap()
+            )
+
+            val args = cli.args()
+            args shouldNotContain "-Dmaven.test.skip=true"
+        }
+
+        "support a configuration option to enable debug logs" {
+            val definitionFile = tempfile()
+            val rootProject = createMavenProject("root", definitionFile)
+            val projectsList = listOf(rootProject)
+
+            val config = createTychoConfig(enableDebugLogs = true)
+            val tycho = spyk(createTycho(config))
+            val cli = injectCliMock(tycho, projectsList.toJson(), projectsList)
+
+            tycho.resolveDependencies(
+                tempdir(),
+                definitionFile,
+                Excludes.EMPTY,
+                Includes.EMPTY,
+                AnalyzerConfiguration(),
+                emptyMap()
+            )
+
+            val args = cli.args()
+            args shouldContain "-X"
         }
     }
 
@@ -384,15 +453,17 @@ class TychoTest : WordSpec({
         }
 
         "handle Tycho identifiers that need to be mapped to Maven dependencies" {
-            val originalArtifact = mockk<Artifact>()
-            val mappedArtifact = mockk<Artifact>()
+            val wrappedId = Identifier(PACKAGE_TYPE, "wrapped", "test", "23")
+            val originalArtifact = createArtifactMock(wrappedId)
+            val mappedArtifact = createArtifactMock(testArtifactIdentifier)
             val repo1 = mockk<RemoteRepository>()
             val repo2 = mockk<RemoteRepository>()
             val dependency = DefaultDependencyNode(originalArtifact).apply {
                 repositories = listOf(repo1, repo2)
             }
 
-            val pkg = mockk<Package>()
+            val pkg = Package.EMPTY.copy(id = testArtifactIdentifier, homepageUrl = "https://example.com/package")
+            val expectedPkg = pkg.copy(id = wrappedId)
             val delegate: PackageResolverFun = { node ->
                 if (node == dependency) {
                     throw IOException("Test exception: Unresolvable dependency.")
@@ -410,11 +481,12 @@ class TychoTest : WordSpec({
 
             val resolver = tychoPackageResolverFun(delegate, mockk(), mockk(), targetHandler, mockk(relaxed = true))
 
-            resolver(dependency) shouldBe pkg
+            resolver(dependency) shouldBe expectedPkg
         }
 
         "test all candidates for a wrapped artifact" {
-            val originalArtifact = mockk<Artifact>()
+            val wrappedId = Identifier(PACKAGE_TYPE, "wrapped", "multitest", "11")
+            val originalArtifact = createArtifactMock(wrappedId)
             val mappedArtifact1 = mockk<Artifact>()
             val mappedArtifact2 = mockk<Artifact>()
             val mappedArtifact3 = mockk<Artifact>()
@@ -422,7 +494,8 @@ class TychoTest : WordSpec({
             val dependency = DefaultDependencyNode(originalArtifact)
 
             var delegateCount = 0
-            val pkg = mockk<Package>()
+            val pkg = Package.EMPTY.copy(id = testArtifactIdentifier, homepageUrl = "https://example.com/org-package")
+            val expectedPkg = pkg.copy(id = wrappedId)
             val delegate: PackageResolverFun = { node ->
                 delegateCount++
                 if (node.artifact != mappedArtifact3) {
@@ -443,7 +516,7 @@ class TychoTest : WordSpec({
 
             val resolver = tychoPackageResolverFun(delegate, mockk(), mockk(), targetHandler, mockk(relaxed = true))
 
-            resolver(dependency) shouldBe pkg
+            resolver(dependency) shouldBe expectedPkg
             delegateCount shouldBe 4
         }
 
@@ -694,6 +767,14 @@ private fun injectCliMock(
     return cli
 }
 
+/**
+ * Return the command line arguments that were passed to this [MavenCli] mock.
+ */
+private fun MavenCli.args(): Array<String> =
+    slot<Array<String>>().also { slot ->
+        verify { doMain(capture(slot), any(), any(), any()) }
+    }.captured
+
 /** The test artifact used by many tests. */
 private val testArtifact = DefaultArtifact(TEST_GROUP_ID, TEST_ARTIFACT_ID, "jar", TEST_VERSION)
 
@@ -748,3 +829,27 @@ private fun createResolverMock(
         every { isBinary(any()) } returns false
     }
 }
+
+/**
+ * Create a mock for an [Artifact] that returns coordinates from the given [id].
+ */
+private fun createArtifactMock(id: Identifier): Artifact =
+    mockk {
+        every { groupId } returns id.namespace
+        every { artifactId } returns id.name
+        every { version } returns id.version
+    }
+
+/**
+ * Create a [Tycho] instance for testing with the specified [config].
+ */
+private fun createTycho(config: TychoConfig = createTychoConfig()): Tycho = Tycho(config = config)
+
+/**
+ * Create a [TychoConfig] instance with the provided parameters.
+ */
+private fun createTychoConfig(skipTests: Boolean = true, enableDebugLogs: Boolean = false): TychoConfig =
+    TychoConfig(
+        skipTests = skipTests,
+        enableDebugLogs = enableDebugLogs
+    )

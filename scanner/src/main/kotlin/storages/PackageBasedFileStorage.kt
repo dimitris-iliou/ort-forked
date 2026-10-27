@@ -25,6 +25,8 @@ import java.io.ByteArrayInputStream
 import java.io.FileNotFoundException
 import java.io.IOException
 
+import kotlin.coroutines.cancellation.CancellationException
+
 import org.apache.logging.log4j.kotlin.logger
 
 import org.ossreviewtoolkit.model.Identifier
@@ -51,13 +53,15 @@ class PackageBasedFileStorage(
 ) : AbstractPackageBasedScanStorage() {
     override val name = "${javaClass.simpleName} with ${backend.javaClass.simpleName} backend"
 
-    fun readForId(id: Identifier): Result<List<ScanResult>> {
+    suspend fun readForId(id: Identifier): Result<List<ScanResult>> {
         val path = storagePath(id)
 
         return runCatching {
             backend.read(path).use { input ->
                 yamlMapper.readValue<ScanResultContainer>(input).results
             }
+        }.onFailure {
+            if (it is CancellationException) throw it
         }.recoverCatching {
             // If the file cannot be found it means no scan results have been stored, yet.
             if (it is FileNotFoundException) return Result.success(emptyList())
@@ -67,14 +71,14 @@ class PackageBasedFileStorage(
 
             logger.info { message }
 
-            throw ScanStorageException(message)
+            throw ScanStorageException(message, it)
         }
     }
 
-    override fun readInternal(pkg: Package, scannerMatcher: ScannerMatcher?): Result<List<ScanResult>> =
+    override suspend fun readInternal(pkg: Package, scannerMatcher: ScannerMatcher?): Result<List<ScanResult>> =
         readForId(pkg.id).map { results -> results.filter { it.provenance.matches(pkg) } }
 
-    override fun addInternal(id: Identifier, scanResult: ScanResult): Result<Unit> {
+    override suspend fun addInternal(id: Identifier, scanResult: ScanResult): Result<Unit> {
         val existingScanResults = readForId(id).getOrDefault(emptyList())
 
         if (existingScanResults.any { it.scanner == scanResult.scanner && it.provenance == scanResult.provenance }) {
@@ -96,6 +100,8 @@ class PackageBasedFileStorage(
             backend.write(path, input)
             logger.debug { "Stored scan result for '${id.toCoordinates()}' at path '$path'." }
         }.onFailure {
+            if (it is CancellationException) throw it
+
             if (it is IllegalArgumentException || it is IOException) {
                 it.showStackTrace()
 
@@ -104,7 +110,7 @@ class PackageBasedFileStorage(
 
                 logger.warn { message }
 
-                return Result.failure(ScanStorageException(message))
+                return Result.failure(ScanStorageException(message, it))
             }
         }
     }

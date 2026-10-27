@@ -83,8 +83,6 @@ style:
     active: false
   MagicNumber:
     active: false
-  MaxLineLength:
-    excludes: ["**/clients/github-graphql/build/generated/**"]
   ReturnCount:
     active: false
   SpacingAfterPackageAndImports:
@@ -93,7 +91,7 @@ style:
     max: 5
   WildcardImport:
     excludeImports:
-      - org.ossreviewtoolkit.helper.commands.*
+      - org.ossreviewtoolkit.clihelper.commands.*
       - org.ossreviewtoolkit.utils.spdx.SpdxLicense.*
       - org.ossreviewtoolkit.utils.spdx.SpdxLicenseException.*
       - kotlinx.html.*
@@ -102,7 +100,7 @@ style:
 potential-bugs:
   MissingPackageDeclaration:
     active: true
-    excludes: ["**/GradleModel.kt", "**/build.gradle.kts"]
+    excludes: ["**/GradleModel.kt", "**/*.gradle.kts", "**/buildSrc/src/main/kotlin/*.kt"]
 
 ORT:
   OrtEmptyLineAfterBlock:
@@ -110,6 +108,5 @@ ORT:
   OrtImportOrder:
     active: true
     autoCorrect: true
-    excludes: ["**/clients/github-graphql/build/generated/**"]
   OrtPackageNaming:
     active: true

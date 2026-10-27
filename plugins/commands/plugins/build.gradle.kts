@@ -23,20 +23,19 @@ plugins {
 }
 
 dependencies {
+    api(projects.plugins.api)
     api(projects.plugins.commands.commandApi)
 
-    ksp(projects.plugins.commands.commandApi)
-
-    implementation(projects.advisor)
     implementation(projects.analyzer)
     implementation(projects.downloader)
     implementation(projects.plugins.advisors.advisorApi)
-    implementation(projects.plugins.api)
+    implementation(projects.plugins.licenseFactProviders.licenseFactProviderApi)
     implementation(projects.plugins.packageConfigurationProviders.packageConfigurationProviderApi)
     implementation(projects.plugins.packageCurationProviders.packageCurationProviderApi)
     implementation(projects.reporter)
     implementation(projects.scanner)
-
     implementation(libs.clikt)
     implementation(libs.mordant)
+
+    ksp(projects.plugins.commands.commandApi)
 }

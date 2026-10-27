@@ -17,7 +17,7 @@
  * License-Filename: LICENSE
  */
 
-package org.ossreviewtoolkit.plugins.packagemanagers.ortproject
+package org.ossreviewtoolkit.plugins.packagemanagers.ortprojectfile
 
 import java.io.File
 
@@ -27,6 +27,7 @@ import org.ossreviewtoolkit.downloader.VersionControlSystem
 import org.ossreviewtoolkit.model.Hash
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.Package
+import org.ossreviewtoolkit.model.PackageLinkage
 import org.ossreviewtoolkit.model.PackageReference
 import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.RemoteArtifact
@@ -38,9 +39,9 @@ import org.ossreviewtoolkit.model.orNone
 import org.ossreviewtoolkit.model.utils.toIdentifier
 import org.ossreviewtoolkit.model.utils.toPackageUrl
 import org.ossreviewtoolkit.model.utils.toPurl
-import org.ossreviewtoolkit.plugins.packagemanagers.ortproject.OrtProject.Dependency
-import org.ossreviewtoolkit.plugins.packagemanagers.ortproject.OrtProject.SourceArtifact
-import org.ossreviewtoolkit.plugins.packagemanagers.ortproject.OrtProject.Vcs
+import org.ossreviewtoolkit.plugins.packagemanagers.ortprojectfile.OrtProject.Dependency
+import org.ossreviewtoolkit.plugins.packagemanagers.ortprojectfile.OrtProject.SourceArtifact
+import org.ossreviewtoolkit.plugins.packagemanagers.ortprojectfile.OrtProject.Vcs
 
 private const val DEFAULT_SCOPE_NAME = "unnamed"
 private const val PROJECT_TYPE = "OrtProjectFile"
@@ -102,6 +103,8 @@ private fun Dependency.toId(): Identifier = id ?: checkNotNull(purl?.toPackageUr
 private fun Dependency.toPurl(): String = purl ?: checkNotNull(id).toPurl()
 
 private fun Collection<Dependency>.toScopes(): Set<Scope> {
+    val dependencyForId = associateBy { it.toId() }
+
     val idsForScopeName = buildMap {
         this@toScopes.forEach { dependency ->
             val scopeNames = dependency.scopes?.takeUnless { it.isEmpty() }
@@ -116,7 +119,12 @@ private fun Collection<Dependency>.toScopes(): Set<Scope> {
     return idsForScopeName.mapTo(mutableSetOf()) { (scopeName, ids) ->
         Scope(
             name = scopeName,
-            dependencies = ids.mapTo(mutableSetOf()) { id -> PackageReference(id = id) }
+            dependencies = ids.mapTo(mutableSetOf()) { id ->
+                PackageReference(
+                    id = id,
+                    linkage = dependencyForId.getValue(id).linkage ?: PackageLinkage.DYNAMIC
+                )
+            }
         )
     }
 }

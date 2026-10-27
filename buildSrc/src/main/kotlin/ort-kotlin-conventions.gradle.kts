@@ -33,7 +33,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
-val javaLanguageVersion: String by project
+val javaLanguageVersion = project.property("javaLanguageVersion") as String
+val libsCatalog = extensions.getByType<VersionCatalogsExtension>().named("libs")
 
 plugins {
     // Apply core plugins.
@@ -43,7 +44,6 @@ plugins {
     id("ort-base-conventions")
 
     // Apply third-party plugins.
-    id("com.autonomousapps.dependency-analysis")
     id("com.gradleup.tapmoc")
     id("dev.detekt")
     id("org.jetbrains.dokka")
@@ -67,10 +67,10 @@ testing {
 
             dependencies {
                 // See https://kotest.io/docs/framework/project-setup.html.
-                implementation(libs.kotest.runner.junit5)
+                implementation(libsCatalog.findLibrary("kotest-runner-junit5").get())
 
-                implementation(libs.kotest.assertions.core)
-                implementation(libs.kotest.property)
+                implementation(libsCatalog.findLibrary("kotest-assertions-core").get())
+                implementation(libsCatalog.findLibrary("kotest-property").get())
             }
         }
 
@@ -87,12 +87,12 @@ kotlin.target.compilations.apply {
 dependencies {
     detektPlugins(project(":detekt-rules"))
 
-    detektPlugins(libs.plugin.detekt.formatting)
+    detektPlugins(libsCatalog.findLibrary("plugin-detekt-formatting").get())
 
-    implementation(libs.log4j.api.kotlin)
+    implementation(libsCatalog.findLibrary("log4j-api-kotlin").get())
 
     constraints {
-        implementation(libs.jruby) {
+        implementation(libsCatalog.findLibrary("jruby").get()) {
             because("JRuby used by Bundler directly and by AsciidoctorJ transitively must match.")
         }
     }
@@ -101,9 +101,16 @@ dependencies {
 detekt {
     // Only configure differences to the default.
     buildUponDefaultConfig = true
-    config.from(files("$rootDir/.detekt.yml"))
+    config = files("$rootDir/.detekt.yml")
 
-    source.from(fileTree(".") { include("*.gradle.kts") }, "src/funTest/kotlin", "src/testFixtures/kotlin")
+    source = fileTree(rootDir) {
+        include("*.gradle.kts")
+        include("buildSrc/src/**/kotlin/**")
+    } + fileTree(projectDir) {
+        include("*.gradle.kts")
+        include("src/**/kotlin/**")
+        exclude("**/funTest/assets/**")
+    }
 
     basePath = rootDir
 }
@@ -113,6 +120,7 @@ java {
     // https://docs.gradle.org/current/userguide/how_to_create_feature_variants_of_a_library.html.
     registerFeature("funTest") {
         usingSourceSet(sourceSets["funTest"])
+        disablePublication()
     }
 
     toolchain {
@@ -122,29 +130,27 @@ java {
     }
 }
 
-val globalJvmArgs by extra {
+val globalJvmArgs = buildList {
     val javaVersion = JavaVersion.toVersion(javaLanguageVersion.toInt())
 
-    buildList {
-        // See https://kotest.io/docs/next/extensions/system_extensions.html#system-environment.
-        if (javaVersion.isCompatibleWith(JavaVersion.VERSION_17)) {
-            add("--add-opens")
-            add("java.base/java.io=ALL-UNNAMED")
+    // See https://kotest.io/docs/next/extensions/system_extensions.html#system-environment.
+    if (javaVersion.isCompatibleWith(JavaVersion.VERSION_17)) {
+        add("--add-opens")
+        add("java.base/java.io=ALL-UNNAMED")
 
-            add("--add-opens")
-            add("java.base/java.lang=ALL-UNNAMED")
+        add("--add-opens")
+        add("java.base/java.lang=ALL-UNNAMED")
 
-            add("--add-opens")
-            add("java.base/java.util=ALL-UNNAMED")
+        add("--add-opens")
+        add("java.base/java.util=ALL-UNNAMED")
 
-            add("--add-opens")
-            add("java.base/sun.nio.ch=ALL-UNNAMED")
-        }
+        add("--add-opens")
+        add("java.base/sun.nio.ch=ALL-UNNAMED")
+    }
 
-        // See https://openjdk.org/jeps/424.
-        if (javaVersion.isCompatibleWith(JavaVersion.VERSION_19)) {
-            add("--enable-native-access=ALL-UNNAMED")
-        }
+    // See https://openjdk.org/jeps/424.
+    if (javaVersion.isCompatibleWith(JavaVersion.VERSION_19)) {
+        add("--enable-native-access=ALL-UNNAMED")
     }
 }
 
@@ -199,7 +205,7 @@ tasks.withType<Detekt>().configureEach detekt@{
 }
 
 tasks.withType<KotlinCompile>().configureEach {
-    val hasSerializationPlugin = plugins.hasPlugin(libs.plugins.kotlinSerialization.get().pluginId)
+    val hasSerializationPlugin = plugins.hasPlugin("org.jetbrains.kotlin.plugin.serialization")
 
     val optInRequirements = listOfNotNull(
         "kotlin.ExperimentalStdlibApi",
@@ -212,7 +218,7 @@ tasks.withType<KotlinCompile>().configureEach {
 
     compilerOptions {
         allWarningsAsErrors = true
-        freeCompilerArgs.addAll("-Xannotation-default-target=param-property", "-Xconsistent-data-class-copy-visibility")
+        freeCompilerArgs.addAll("-Xconsistent-data-class-copy-visibility")
         optIn = optInRequirements
     }
 }
@@ -221,29 +227,27 @@ tasks.withType<Test>().configureEach {
     jvmArgs = globalJvmArgs
 
     // Work-around for "--tests" only being able to include tests, see https://github.com/gradle/gradle/issues/6505.
-    properties["tests.exclude"]?.also { excludes ->
+    providers.gradleProperty("tests.exclude").orNull?.also { excludes ->
         filter {
-            excludes.toString().split(',').map { excludeTestsMatching(it) }
+            excludes.split(',').forEach { excludeTestsMatching(it) }
             isFailOnNoMatchingTests = false
         }
     }
 
     // Convenience alternative to "--tests" that can take multiple patterns at once as Gradle is not planning to
     // implement this, see https://github.com/gradle/gradle/issues/5719.
-    properties["tests.include"]?.also { includes ->
+    providers.gradleProperty("tests.include").orNull?.also { includes ->
         filter {
-            includes.toString().split(',').map { includeTestsMatching(it) }
+            includes.split(',').forEach { includeTestsMatching(it) }
             isFailOnNoMatchingTests = false
         }
     }
 
-    val testSystemProperties = mutableListOf("gradle.build.dir" to project.layout.buildDirectory.get().asFile.path)
-
-    listOf(
+    val testSystemProperties = listOf(
         "java.io.tmpdir",
         "kotest.assertions.multi-line-diff",
         "kotest.tags"
-    ).mapNotNullTo(testSystemProperties) { key ->
+    ).mapNotNull { key ->
         System.getProperty(key)?.let { key to it }
     }
 

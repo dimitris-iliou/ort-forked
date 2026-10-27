@@ -17,15 +17,15 @@
  * License-Filename: LICENSE
  */
 
-// As it is not possible to declare a package in "init.gradle" also no package is declared here.
+import java.io.File
 
-// The following interfaces have to match those in "plugins/package-managers/gradle/src/main/resources/init.gradle"
-// because they are used to deserialize the model produced there.
+// As it is not possible to declare a package in "init.gradle" also no package is declared here.
 
 interface OrtDependencyTreeModel {
     val group: String
     val name: String
     val version: String
+    val components: List<OrtComponent>
     val configurations: List<OrtConfiguration>
     val repositories: List<OrtRepository>
     val errors: List<String>
@@ -34,22 +34,37 @@ interface OrtDependencyTreeModel {
 
 interface OrtConfiguration {
     val name: String
-    val dependencies: List<OrtDependency>
+    val dependencies: List<OrtComponentReference>
 }
 
-interface OrtDependency {
+interface OrtComponentIdentifier {
     val groupId: String
     val artifactId: String
     val version: String
+}
+
+interface OrtComponentReference {
+    val componentId: OrtComponentIdentifier
+    val dependencies: List<OrtComponentReference>
+}
+
+interface OrtComponent {
+    val componentId: OrtComponentIdentifier
     val classifier: String
     val extension: String
     val variants: Map<String, Map<String, String>>
-    val dependencies: List<OrtDependency>
     val error: String?
     val warning: String?
     val pomFile: String?
     val mavenModel: OrtMavenModel?
     val localPath: String?
+
+    /**
+     * The absolute path of the project directory if [localPath] refers to a Gradle project that is part of the
+     * currently analyzed build, or null otherwise (e.g. for projects belonging to a different, included build, or
+     * for regular, non-project dependencies). This is used to handle autolinked dependencies correctly.
+     */
+    val projectDir: File?
 }
 
 interface OrtMavenModel {
@@ -70,4 +85,6 @@ interface OrtRepository {
     val url: String
     val username: String?
     val password: String?
+    val headerName: String?
+    val headerValue: String?
 }

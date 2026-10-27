@@ -43,7 +43,7 @@ import org.ossreviewtoolkit.utils.ort.ORT_REFERENCE_CONFIG_FILENAME
 
 @OrtPlugin(
     displayName = "Config",
-    description = "Show different ORT configurations.",
+    summary = "Show different ORT configurations.",
     factory = OrtCommandFactory::class
 )
 class ConfigCommand(descriptor: PluginDescriptor = ConfigCommandFactory.descriptor) : OrtCommand(descriptor) {
@@ -114,7 +114,7 @@ class ConfigCommand(descriptor: PluginDescriptor = ConfigCommandFactory.descript
             }.onFailure {
                 val message = "The file '$canonicalPath' neither contains valid global nor repository ORT configuration"
                 echo(Theme.Default.danger("$message: ${it.collectMessages()}"))
-                throw ProgramResult(2)
+                throw ProgramResult(STATUS_CODE_FAILURE)
             }
         }
     }

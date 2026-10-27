@@ -35,7 +35,7 @@ object CopyrightableFiles {
         "plugins/reporters/fossid/src/main/resources/templates/freemarker_implicit.ftl",
         "plugins/reporters/freemarker/src/main/resources/templates/freemarker_implicit.ftl",
         "plugins/reporters/static-html/src/main/resources/prismjs/",
-        "plugins/reporters/web-app-template/yarn.lock",
+        "plugins/reporters/web-app-template/src/components/ui/",
         "resources/META-INF/",
         "resources/exceptions/",
         "resources/licenses/",
@@ -68,18 +68,20 @@ object CopyrightableFiles {
         "json",
         "md",
         "png",
+        "proto",
         "svg",
         "ttf",
         "woff2"
     )
 
-    fun filter(filesProvider: Provider<List<File>>): List<File> = filesProvider.get().filter { file ->
-        val isHidden = file.toPath().any { it.toString().startsWith(".") }
+    fun filter(filesProvider: Provider<List<File>>): List<File> =
+        filesProvider.get().filter { file ->
+            val isHidden = file.toPath().any { it.toString().startsWith(".") }
 
-        !isHidden
+            !isHidden
                 && excludedPaths.none { it in file.invariantSeparatorsPath }
                 && file.extension !in excludedExtensions
-    }
+        }
 }
 
 object CopyrightUtils {
